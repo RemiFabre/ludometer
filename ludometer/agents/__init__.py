@@ -54,9 +54,16 @@ def make_agent(spec: AgentSpec) -> Agent:
         try:
             factory = AGENT_REGISTRY[spec]
         except KeyError:
-            raise KeyError(
-                f"unknown agent {spec!r}; known: {sorted(AGENT_REGISTRY)}"
-            ) from None
+            # richer spec strings ("mcts:<ckpt>?sims=n", "best") live in the registry
+            from ludometer.agents.registry import load_agent
+
+            try:
+                return load_agent(spec)
+            except ValueError:
+                raise KeyError(
+                    f"unknown agent {spec!r}; known: {sorted(AGENT_REGISTRY)} "
+                    "or a registry spec (mcts:<ckpt>?sims=n, best)"
+                ) from None
         return factory()
     if isinstance(spec, tuple):
         name, kwargs = spec
