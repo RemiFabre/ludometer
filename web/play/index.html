@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azul — play the Ludometer agents</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-name">Azul</span>
+    <span class="brand-sub" id="matchup">a tile game for two</span>
+  </div>
+
+  <form class="setup" id="setup" autocomplete="off">
+    <label class="field">
+      <span class="field-label">Opponent</span>
+      <select id="opponent">
+        <option value="heuristic">Heuristic</option>
+        <option value="greedy">Greedy</option>
+        <option value="random">Random</option>
+        <option value="custom">Trained checkpoint…</option>
+      </select>
+    </label>
+    <label class="field field-wide hidden" id="spec-field">
+      <span class="field-label">Agent spec</span>
+      <input type="text" id="spec" spellcheck="false"
+             placeholder="mcts:runs/&lt;run&gt;/checkpoints/&lt;name&gt;.pt?sims=400">
+    </label>
+    <label class="field field-narrow">
+      <span class="field-label">Seed</span>
+      <input type="text" id="seed" inputmode="numeric" placeholder="random">
+    </label>
+    <label class="check">
+      <input type="checkbox" id="first" checked>
+      <span>You go first</span>
+    </label>
+    <button type="submit" class="btn btn-primary" id="deal">Deal tiles</button>
+  </form>
+</header>
+
+<main id="table" class="table">
+
+  <section class="panel middle" aria-labelledby="middle-title">
+    <h2 class="panel-title" id="middle-title">The middle of the table</h2>
+    <div class="factories" id="factories"></div>
+    <div class="center-dish" id="center"></div>
+    <p class="turn-line" id="turn"></p>
+  </section>
+
+  <aside class="side">
+    <section class="panel scoreline" aria-label="Scores">
+      <div class="score" id="score-human">
+        <span class="score-who">You</span>
+        <span class="score-value">0</span>
+        <span class="score-note"></span>
+      </div>
+      <div class="score" id="score-ai">
+        <span class="score-who">AI</span>
+        <span class="score-value">0</span>
+        <span class="score-note"></span>
+      </div>
+    </section>
+
+    <section class="panel board-panel small" aria-labelledby="ai-board-title">
+      <h2 class="panel-title" id="ai-board-title">Opponent’s board</h2>
+      <div class="board" id="board-ai"></div>
+    </section>
+
+    <section class="panel narration" aria-labelledby="log-title">
+      <h2 class="panel-title" id="log-title">Table talk</h2>
+      <p class="last-move" id="last-move" aria-live="polite">Deal the tiles to begin.</p>
+      <ol class="log" id="log"></ol>
+    </section>
+
+    <section class="panel supply" aria-labelledby="supply-title">
+      <h2 class="panel-title" id="supply-title">Supply</h2>
+      <div class="supply-rows" id="supply"></div>
+    </section>
+  </aside>
+
+  <section class="panel board-panel mine" aria-labelledby="my-board-title">
+    <div class="mine-head">
+      <h2 class="panel-title" id="my-board-title">Your board</h2>
+      <div class="mine-actions">
+        <span class="prompt" id="prompt">Pick a colour from a factory or the middle.</span>
+        <button type="button" class="btn btn-ghost" id="hint">Suggest a move</button>
+        <button type="button" class="btn btn-ghost hidden" id="cancel">Clear selection</button>
+      </div>
+    </div>
+    <div class="board" id="board-human"></div>
+  </section>
+
+</main>
+
+<div class="overlay hidden" id="overlay" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+  <div class="sheet">
+    <h2 class="sheet-title" id="overlay-title"></h2>
+    <div class="sheet-body" id="overlay-body"></div>
+    <div class="sheet-foot">
+      <button type="button" class="btn btn-primary" id="overlay-ok">Carry on</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
