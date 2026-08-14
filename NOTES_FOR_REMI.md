@@ -4,6 +4,22 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-14 — run1 finished (+2014 Elo), run2 launched for the night
+
+- **run1 final**: 25,000 games in 3 h 08 min. Final Elo **+2001**, best checkpoint
+  **ckpt-024064 at +2014 ± 56** — that's ~640 Elo above our strongest scripted baseline,
+  i.e. it should beat the heuristic ~9 games in 10. Curve: overall slope 61 Elo/1k games,
+  **R² = 0.909** against a straight line. Shape: fast start (~+300/1k to 4k games), long
+  steady ~+50/1k grind after — mildly concave, still rising at the cap. Azul, by your
+  hypothesis' lens, reads as "easy to pick up, keeps rewarding study", which honestly
+  matches the real game.
+- **run2 is now training overnight**: ~3× bigger net (5×768), deeper search (256 sims/move
+  vs 160), 60k-game budget. Crucially, run1's best checkpoint is **pinned in the anchor pool
+  at +2014**, so run2's Elo axis is directly comparable — if run2 ends above +2014 you're
+  looking at a genuinely stronger agent, same ruler.
+- Play tip: "Strongest trained (auto)" in the GUI will silently switch to run2 checkpoints
+  the moment one out-rates run1's best.
+
 ## 2026-08-14 — You can now play the strongest model in two commands
 
 - **How to play it** (this is the whole thing):
