@@ -1,0 +1,30 @@
+{
+  "run": "sample-run",
+  "started": "2026-08-13T21:04:00",
+  "seed": 20260813,
+  "device": "mps",
+  "workers": 10,
+  "net": "resnet-4x64",
+  "mcts_sims": 160,
+  "c_puct": 1.4,
+  "dirichlet_alpha": 0.3,
+  "dirichlet_frac": 0.25,
+  "temp_moves": 12,
+  "games_per_iter": 100,
+  "batch_size": 512,
+  "lr": 0.002,
+  "lr_decay": {
+    "type": "step",
+    "gamma": 0.5,
+    "every_steps": 8000
+  },
+  "replay_capacity": 200000,
+  "eval_games": 120,
+  "eval_every_games": 1000,
+  "anchors": [
+    "random",
+    "greedy",
+    "heuristic"
+  ],
+  "note": "synthetic sample data \u2014 schema reference for web/make_dashboard.py"
+}

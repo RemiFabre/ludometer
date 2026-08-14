@@ -95,15 +95,24 @@ maximum likelihood (Bradley-Terry) with anchors held fixed. Results appended as 
 
 Everything observable lives in `runs/<run_name>/`. Exact schemas (one JSON object per line):
 
+Conventions: all timestamps are UTC ISO-8601 with explicit offset (e.g. `2026-08-14T15:04:05Z`).
+Where fields are duplicated, `status.json` is authoritative over `config.json` and over the last
+`train.jsonl` line. Draws count as half-wins in every win rate. `loss` = `loss_p + loss_v`
+(any regularization lives in the optimizer, not the reported loss).
+
 - `config.json` — run hyperparameters, free-form dict, plus `"run"`, `"started"` (ISO time).
 - `status.json` — heartbeat, rewritten atomically by the trainer:
-  `{"run", "state": "running"|"done"|"failed", "started", "updated", "games", "steps", "note"}`
+  `{"run", "state": "running"|"done"|"failed", "started", "updated", "ended": <iso|null>,
+    "error": <str|null>, "games", "steps", "note"}`
 - `train.jsonl` — appended every logging interval:
   `{"t": <sec since run start>, "games": <total self-play games>, "steps": <optimizer steps>,
     "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "buffer": <replay size>, "lr": <lr>}`
 - `elo.jsonl` — appended after each checkpoint evaluation:
   `{"t": <sec>, "games": <self-play games at ckpt>, "ckpt": "<name>", "elo": <float>,
-    "elo_err": <float>, "vs": {"<opponent>": <winrate 0..1>, ...}, "n_games": <eval games>}`
+    "elo_err": <float>, "vs": {"<opponent>": <winrate 0..1>, ...}, "n_games": <eval games>,
+    "pool": [<anchor/opponent names with their fixed Elos where anchored>]}`
+  Frozen checkpoints joining the pool DO appear in `vs` (the dashboard caps drawn lines at 8
+  and folds the rest into a table).
 - `checkpoints/<name>.pt` — model weights (gitignored).
 
 Dashboard: `web/make_dashboard.py` reads ALL runs under `runs/` and regenerates

@@ -1,0 +1,9 @@
+{
+  "run": "sample-run",
+  "state": "done",
+  "started": "2026-08-13T21:04:00",
+  "updated": "2026-08-14T05:30:11",
+  "games": 14000,
+  "steps": 28000,
+  "note": "Synthetic sample run: 14k self-play games, 15 rated checkpoints. Kept in the repo so the dashboard renders without a trainer and doubles as schema documentation."
+}

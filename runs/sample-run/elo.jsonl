@@ -1,0 +1,15 @@
+{"t": 0.0, "games": 0, "ckpt": "ckpt-00000", "elo": 55.1, "elo_err": 18.9, "vs": {"random": 0.606, "greedy": 0.349, "heuristic": 0.156}, "n_games": 120}
+{"t": 2169.4, "games": 1000, "ckpt": "ckpt-01000", "elo": 123.3, "elo_err": 26.0, "vs": {"random": 0.729, "greedy": 0.416, "heuristic": 0.246}, "n_games": 120}
+{"t": 4338.7, "games": 2000, "ckpt": "ckpt-02000", "elo": 182.7, "elo_err": 20.1, "vs": {"random": 0.785, "greedy": 0.519, "heuristic": 0.315}, "n_games": 120}
+{"t": 6508.1, "games": 3000, "ckpt": "ckpt-03000", "elo": 242.9, "elo_err": 25.0, "vs": {"random": 0.853, "greedy": 0.575, "heuristic": 0.34}, "n_games": 120}
+{"t": 8677.4, "games": 4000, "ckpt": "ckpt-04000", "elo": 284.9, "elo_err": 20.4, "vs": {"random": 0.887, "greedy": 0.629, "heuristic": 0.419}, "n_games": 120}
+{"t": 10846.8, "games": 5000, "ckpt": "ckpt-05000", "elo": 364.7, "elo_err": 18.1, "vs": {"random": 0.942, "greedy": 0.653, "heuristic": 0.456}, "n_games": 120}
+{"t": 13016.1, "games": 6000, "ckpt": "ckpt-06000", "elo": 451.9, "elo_err": 19.4, "vs": {"random": 0.928, "greedy": 0.722, "heuristic": 0.518, "ckpt-05000": 0.479}, "n_games": 160}
+{"t": 15185.5, "games": 7000, "ckpt": "ckpt-07000", "elo": 526.4, "elo_err": 24.6, "vs": {"random": 0.953, "greedy": 0.753, "heuristic": 0.565, "ckpt-05000": 0.576}, "n_games": 160}
+{"t": 17354.9, "games": 8000, "ckpt": "ckpt-08000", "elo": 593.5, "elo_err": 22.3, "vs": {"random": 0.955, "greedy": 0.805, "heuristic": 0.562, "ckpt-05000": 0.647}, "n_games": 160}
+{"t": 19524.2, "games": 9000, "ckpt": "ckpt-09000", "elo": 617.6, "elo_err": 24.7, "vs": {"random": 0.982, "greedy": 0.807, "heuristic": 0.599, "ckpt-05000": 0.666}, "n_games": 160}
+{"t": 21693.6, "games": 10000, "ckpt": "ckpt-10000", "elo": 667.0, "elo_err": 25.5, "vs": {"random": 0.978, "greedy": 0.825, "heuristic": 0.582, "ckpt-05000": 0.705}, "n_games": 160}
+{"t": 23862.9, "games": 11000, "ckpt": "ckpt-11000", "elo": 742.1, "elo_err": 22.0, "vs": {"random": 0.998, "greedy": 0.856, "heuristic": 0.64, "ckpt-05000": 0.792}, "n_games": 160}
+{"t": 26032.3, "games": 12000, "ckpt": "ckpt-12000", "elo": 821.5, "elo_err": 18.2, "vs": {"random": 0.981, "greedy": 0.862, "heuristic": 0.685, "ckpt-05000": 0.788}, "n_games": 160}
+{"t": 28201.6, "games": 13000, "ckpt": "ckpt-13000", "elo": 888.4, "elo_err": 17.6, "vs": {"random": 0.976, "greedy": 0.87, "heuristic": 0.658, "ckpt-05000": 0.845}, "n_games": 160}
+{"t": 30371.0, "games": 14000, "ckpt": "ckpt-14000", "elo": 962.2, "elo_err": 19.7, "vs": {"random": 0.993, "greedy": 0.836, "heuristic": 0.699, "ckpt-05000": 0.854}, "n_games": 160}
