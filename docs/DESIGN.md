@@ -93,5 +93,22 @@ maximum likelihood (Bradley-Terry) with anchors held fixed. Results appended as 
 
 ## Logging & dashboard
 
-Everything observable lives in `runs/<run_name>/`: `config.json`, `train.jsonl` (losses,
-buffer size, games played), `elo.jsonl`, `checkpoints/`. The dashboard (`web/`) renders these.
+Everything observable lives in `runs/<run_name>/`. Exact schemas (one JSON object per line):
+
+- `config.json` — run hyperparameters, free-form dict, plus `"run"`, `"started"` (ISO time).
+- `status.json` — heartbeat, rewritten atomically by the trainer:
+  `{"run", "state": "running"|"done"|"failed", "started", "updated", "games", "steps", "note"}`
+- `train.jsonl` — appended every logging interval:
+  `{"t": <sec since run start>, "games": <total self-play games>, "steps": <optimizer steps>,
+    "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "buffer": <replay size>, "lr": <lr>}`
+- `elo.jsonl` — appended after each checkpoint evaluation:
+  `{"t": <sec>, "games": <self-play games at ckpt>, "ckpt": "<name>", "elo": <float>,
+    "elo_err": <float>, "vs": {"<opponent>": <winrate 0..1>, ...}, "n_games": <eval games>}`
+- `checkpoints/<name>.pt` — model weights (gitignored).
+
+Dashboard: `web/make_dashboard.py` reads ALL runs under `runs/` and regenerates
+`web/dashboard.html` — a fully static, self-contained page (inline CSS/JS, no external
+requests) with `<meta http-equiv="refresh" content="30">` so an open tab live-updates as the
+file is rewritten in place. Shows: current run status/heartbeat, Elo-vs-games curve per run
+(the money plot, with a linear fit + R² to test the linearity hypothesis), loss curves,
+win rates vs anchors, and a project journal section read from `NOTES_FOR_REMI.md`.
