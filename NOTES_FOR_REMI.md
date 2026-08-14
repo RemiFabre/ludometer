@@ -4,6 +4,22 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-14 — run1 is training (evening)
+
+- **The full stack is built**: engine (57 tests), baselines + Bradley-Terry Elo
+  (heuristic ≈ +1378 vs random), AlphaZero-style trainer (MCTS + 1M-param net, 8 self-play
+  workers ≈ 135 games/min), and a **playable GUI**: `uv run ludometer-gui` → azulejo-styled
+  board at 127.0.0.1:8737, opponents: random/greedy/heuristic or any checkpoint
+  (`mcts:runs/run1/checkpoints/<name>.pt?sims=400`).
+- **run1 launched**: 25,000 self-play games (~4-5 h), Elo eval every 512 games against the
+  fixed anchor ladder. Watch it live on the dashboard — the sample run is gone as soon as
+  real points arrive; the Elo plot's linear fit + R² is your hypothesis readout.
+- Interesting Azul-specific findings from the build: turn order does NOT strictly alternate
+  (marker holder can move twice across a round boundary); two deterministic arg-max players
+  can loop Azul *forever* (nobody completes a line → tiles cycle bag→floor→lid); and MCTS had
+  to reshuffle cloned bags so the search can't peek at the exact next deal. All handled + tested.
+- Sanity: after just 512 games the net was already ≈ +253 Elo vs random.
+
 ## 2026-08-14 — Engine + dashboard done (afternoon)
 
 - **Azul engine finished**: 57 tests green, ~6,000 random games/sec single-core (3× my target),

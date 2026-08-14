@@ -1,0 +1,1 @@
+{"t": 22.2, "games": 0, "ckpt": "ckpt-000000", "elo": 125.3, "elo_err": 58.2, "vs": {"random": 0.675, "greedy": 0.0, "heuristic": 0.0}, "n_games": 120, "pool": ["random=0.0", "greedy", "heuristic"]}
