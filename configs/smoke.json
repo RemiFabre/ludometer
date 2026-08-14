@@ -1,0 +1,51 @@
+{
+  "run": "smoke",
+  "note": "tiny end-to-end smoke run: 2x64 net, 16 sims, 2 workers, 24 games",
+  "seed": 7,
+  "device": "cpu",
+  "workers": 2,
+
+  "hidden": 64,
+  "blocks": 2,
+  "value_hidden": 32,
+
+  "sims": 16,
+  "c_puct": 1.4,
+  "dirichlet_alpha_scale": 10.0,
+  "dirichlet_eps": 0.25,
+  "chance_children": 2,
+  "temp_moves": 6,
+  "temperature": 1.0,
+  "stall_rounds": 16,
+  "max_game_moves": 400,
+  "value_score_weight": 0.15,
+
+  "games_per_iter": 8,
+  "total_games": 24,
+  "min_buffer": 64,
+  "batch_size": 32,
+  "steps_per_position": 1.0,
+  "chunk_steps": 10,
+
+  "lr": 0.001,
+  "lr_min": 0.0005,
+  "lr_schedule": "cosine",
+  "lr_total_steps": 500,
+  "weight_decay": 0.0001,
+  "value_weight": 1.0,
+  "grad_clip": 1.0,
+
+  "replay_capacity": 20000,
+  "save_buffer": true,
+
+  "eval_every_games": 8,
+  "eval_games": 6,
+  "eval_sims": 8,
+  "eval_workers": 2,
+  "eval_anchors": ["random", "greedy", "heuristic"],
+  "eval_frozen": 1,
+  "anchor_elos": {"random": 0.0},
+  "eval_at_start": true,
+
+  "heartbeat": 5.0
+}

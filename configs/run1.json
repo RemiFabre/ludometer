@@ -1,0 +1,51 @@
+{
+  "run": "run1",
+  "note": "first real run: 3x512 residual MLP, 160 sims/move, 8 self-play workers",
+  "seed": 20260814,
+  "device": "auto",
+  "workers": 8,
+
+  "hidden": 512,
+  "blocks": 3,
+  "value_hidden": 64,
+
+  "sims": 160,
+  "c_puct": 1.4,
+  "dirichlet_alpha_scale": 10.0,
+  "dirichlet_eps": 0.25,
+  "chance_children": 4,
+  "temp_moves": 12,
+  "temperature": 1.0,
+  "stall_rounds": 16,
+  "max_game_moves": 400,
+  "value_score_weight": 0.15,
+
+  "games_per_iter": 64,
+  "total_games": 100000,
+  "min_buffer": 5000,
+  "batch_size": 256,
+  "steps_per_position": 1.5,
+  "chunk_steps": 25,
+
+  "lr": 0.001,
+  "lr_min": 0.0001,
+  "lr_schedule": "cosine",
+  "lr_total_steps": 32000,
+  "weight_decay": 0.0001,
+  "value_weight": 1.0,
+  "grad_clip": 1.0,
+
+  "replay_capacity": 300000,
+  "save_buffer": true,
+
+  "eval_every_games": 512,
+  "eval_games": 40,
+  "eval_sims": 100,
+  "eval_workers": 8,
+  "eval_anchors": ["random", "greedy", "heuristic"],
+  "eval_frozen": 2,
+  "anchor_elos": {"random": 0.0},
+  "eval_at_start": true,
+
+  "heartbeat": 20.0
+}
