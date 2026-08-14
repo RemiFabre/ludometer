@@ -8,6 +8,9 @@ the engine's own scoring.
 
 from __future__ import annotations
 
+import re
+import time
+
 import pytest
 
 from ludometer.agents.registry import load_agent
@@ -15,6 +18,7 @@ from ludometer.azul.engine import CENTER, FLOOR, AzulState, encode_action
 from ludometer.gui.moves import describe_action, final_report, round_report
 from ludometer.gui.server import PLAY_DIR, create_app
 from ludometer.gui.session import GameSession
+from ludometer.train.mcts import MCTS, TIME_CHECK_EVERY, MCTSConfig, UniformEvaluator
 
 MAX_PLIES = 400  # a 2-player game is ~40 moves; this is only a runaway guard
 
@@ -165,6 +169,8 @@ def test_agents_endpoint_lists_the_dropdown(client):
     best = data["best"]
     assert best["spec"] == "best" and best["label"]
     assert best["sims_choices"] and best["default_sims"] in best["sims_choices"]
+    assert best["think_choices"] and best["default_think_s"] in best["think_choices"]
+    assert 0.0 in best["think_choices"]  # "instant reply" must stay on offer
     if best["available"]:
         assert data["default"] == "best"
         assert best["checkpoint"] and best["run"] and "Elo" in best["detail"]
@@ -459,3 +465,152 @@ def test_registry_rejects_bad_specs():
             load_agent(spec)
     with pytest.raises(TypeError):
         load_agent(7)  # type: ignore[arg-type]
+
+
+def test_registry_rejects_a_bad_think_option():
+    for spec in ("mcts:x?think=soon", "mcts:x?think=-1", "best?think=abc"):
+        with pytest.raises(ValueError):
+            load_agent(spec)
+
+
+# --------------------------------------------------------------- time budget
+# The GUI's "AI thinks for N seconds" mode. Budgets here are tiny (0.05-0.2 s):
+# these tests assert the loop is clock-driven, not that it is fast.
+def test_search_runs_exactly_sims_without_a_budget():
+    """Training must be untouched: no budget means the configured sim count."""
+    state = AzulState.new_game(seed=3)
+    mcts = MCTS(UniformEvaluator(), MCTSConfig(sims=48), seed=1)
+    result = mcts.search(state)
+    assert result.sims == 48
+    assert result.elapsed_s > 0.0
+
+
+def test_search_stops_when_the_time_budget_runs_out():
+    state = AzulState.new_game(seed=4)
+    cap = 500_000  # far more than 0.1 s buys: the clock must be what stops us
+    mcts = MCTS(UniformEvaluator(), MCTSConfig(sims=cap), seed=1)
+    started = time.perf_counter()
+    result = mcts.search(state, time_limit_s=0.1)
+    wall = time.perf_counter() - started
+    assert 0 < result.sims < cap, "the budget, not the cap, should have stopped it"
+    assert result.sims % TIME_CHECK_EVERY == 0  # checked every few sims
+    assert result.elapsed_s >= 0.1
+    assert wall < 2.0, "a 0.1 s budget must not run for seconds"
+
+
+def test_a_bigger_budget_searches_more():
+    state = AzulState.new_game(seed=5)
+    cfg = MCTSConfig(sims=500_000)
+    small = MCTS(UniformEvaluator(), cfg, seed=2).search(state, time_limit_s=0.05)
+    big = MCTS(UniformEvaluator(), cfg, seed=2).search(state, time_limit_s=0.2)
+    assert big.sims > small.sims
+
+
+def test_agent_time_budget_raises_the_cap_and_reports_what_it_searched():
+    from ludometer.train.mcts_agent import TIMED_SIMS_CAP, MCTSAgent
+
+    agent = MCTSAgent(evaluator=UniformEvaluator(), sims=16, seed=1)
+    assert agent.time_limit_s is None
+    agent.set_time_budget(0.1)
+    assert agent.time_limit_s == 0.1
+    assert agent.mcts.config.sims == TIMED_SIMS_CAP  # sims is only a ceiling now
+
+    state = AzulState.new_game(seed=6)
+    action = agent.act(state)
+    assert state.is_legal(action)
+    stats = agent.last_search
+    assert stats["sims"] > 16, "the budget should buy more than the configured sims"
+    assert stats["elapsed_s"] >= 0.1 and stats["budget_s"] == 0.1
+
+    agent.set_time_budget(None)  # back to a fixed sim count
+    assert agent.time_limit_s is None
+    agent.act(state)
+    assert agent.last_search["budget_s"] is None
+
+
+def test_session_reports_the_search_behind_an_ai_move():
+    """The AI's move carries "searched N positions in Xs" for the table talk."""
+    from ludometer.train.mcts_agent import MCTSAgent
+
+    session = GameSession("heuristic", human_plays_first=True, seed=11)
+    session.agent = MCTSAgent(evaluator=UniformEvaluator(), sims=8, seed=2)
+    session.agent.set_time_budget(0.1)
+    session.think_time_s = 0.1
+    payload = session.play_human(session.legal_for_human()[0])
+    move = payload["ai_moves"][0]
+    assert move["search"]["sims"] > 8
+    assert re.fullmatch(r"searched [\d,]+ positions in \d+\.\ds", move["search_text"])
+    thinking = [e for e in payload["log"] if e["kind"] == "think"]
+    assert thinking and "searched" in thinking[-1]["text"]
+
+
+def test_a_budget_is_ignored_by_agents_that_do_not_search(client):
+    session = GameSession("heuristic", think_time_s=5.0)
+    assert session.think_time_s == 0.0  # nothing to spend the time on
+    data = start(client, think_time_s=5.0)
+    assert data["think_time_s"] == 0.0
+    assert "think_time_s" in data and "ai_pending" in data
+
+
+def test_new_game_validates_the_think_time(client):
+    for bad in (-1, 10_000, "soon"):
+        response = client.post(
+            "/api/new", json={"opponent_spec": "heuristic", "think_time_s": bad}
+        )
+        assert response.status_code == 400, bad
+        assert "think_time_s" in response.get_json()["error"]
+
+
+# ------------------------------------------------------- deferred AI reply
+def test_deferred_ai_reply_splits_the_turn(client):
+    """The page plays the human move, then asks for the AI's move separately."""
+    data = start(client, opponent_spec="greedy", seed=21)
+    mine = client.post(
+        "/api/act", json={"action_id": data["human_legal_actions"][0], "defer_ai": True}
+    ).get_json()
+    assert mine["ai_moves"] == []
+    assert mine["ai_pending"] is True
+    assert mine["your_turn"] is False
+    assert mine["human_legal_actions"] == []
+    # the state already shows the human's move
+    assert mine["human_move"]["side"] == "human"
+
+    theirs = client.post("/api/ai").get_json()
+    assert theirs["ai_moves"] and theirs["ai_moves"][0]["side"] == "ai"
+    assert theirs["ai_pending"] is False
+    assert theirs["your_turn"] is True
+    # asking again is a clean 400, not a second move out of turn
+    again = client.post("/api/ai")
+    assert again.status_code == 400 and "not the AI" in again.get_json()["error"]
+
+
+def test_a_full_game_over_the_deferred_path(client):
+    data = start(client, opponent_spec="heuristic", seed=22)
+    plies = 0
+    while not data["state"]["is_terminal"]:
+        assert data["your_turn"] is True
+        data = client.post(
+            "/api/act",
+            json={"action_id": data["human_legal_actions"][0], "defer_ai": True},
+        ).get_json()
+        if data["ai_pending"]:
+            response = client.post("/api/ai")
+            assert response.status_code == 200, response.get_json()
+            data = response.get_json()
+        plies += 1
+        assert plies < MAX_PLIES
+    assert data["final"] is not None
+    assert client.post("/api/ai").status_code == 400
+
+
+def test_defer_ai_must_be_a_boolean(client):
+    data = start(client)
+    response = client.post(
+        "/api/act",
+        json={"action_id": data["human_legal_actions"][0], "defer_ai": "yes"},
+    )
+    assert response.status_code == 400 and "defer_ai" in response.get_json()["error"]
+
+
+def test_ai_reply_needs_a_game(client):
+    assert client.post("/api/ai").status_code == 409

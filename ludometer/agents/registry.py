@@ -5,6 +5,10 @@ Spec strings:
     "mcts:<checkpoint_path>?sims=<n>"   (neural agent; requires ludometer.train)
     "best?sims=<n>"                     (highest-Elo checkpoint on disk)
 
+Both neural specs also take ``&think=<seconds>``: a per-move wall-clock budget
+for the search, which the GUI uses to give the AI real thinking time. It is
+off by default, so the trainer and the arena keep searching a fixed sim count.
+
 ``best`` resolves at load time by scanning ``runs/*/elo.jsonl`` for the
 highest-rated checkpoint whose ``.pt`` file still exists, so "play the strongest
 model" keeps working while a run is training: every new game picks up the newest
@@ -114,22 +118,42 @@ def find_best_checkpoint(root: str | os.PathLike[str] | None = None) -> BestChec
     return best
 
 
-def _parse_sims(query: str, default: int) -> int:
-    """Read ``sims=<n>`` out of a spec query string."""
-    sims = default
+def _parse_options(query: str, default_sims: int) -> tuple[int, float | None]:
+    """Read ``sims=<n>`` and the optional ``think=<seconds>`` out of a spec query.
+
+    ``think`` is the GUI's per-move time budget: with it set the search runs
+    until the clock is spent and ``sims`` is only an upper bound.
+    """
+    sims = default_sims
+    think: float | None = None
     for part in query.split("&"):
         if not part:
             continue
         key, _, value = part.partition("=")
-        if key != "sims":
-            raise ValueError(f"unknown option {key!r} (only sims= is supported)")
-        try:
-            sims = int(value)
-        except ValueError:
-            raise ValueError(f"sims must be an integer, got {value!r}") from None
-        if sims < 1:
-            raise ValueError(f"sims must be >= 1, got {sims}")
-    return sims
+        if key == "sims":
+            try:
+                sims = int(value)
+            except ValueError:
+                raise ValueError(f"sims must be an integer, got {value!r}") from None
+            if sims < 1:
+                raise ValueError(f"sims must be >= 1, got {sims}")
+        elif key == "think":
+            try:
+                think = float(value)
+            except ValueError:
+                raise ValueError(f"think must be a number, got {value!r}") from None
+            if think < 0:
+                raise ValueError(f"think must be >= 0, got {think}")
+        else:
+            raise ValueError(
+                f"unknown option {key!r} (only sims= and think= are supported)"
+            )
+    return sims, think
+
+
+def _parse_sims(query: str, default: int) -> int:
+    """Back-compat shim: just the ``sims=`` value."""
+    return _parse_options(query, default)[0]
 
 
 def load_agent(spec: str, seed: int | None = None):
@@ -146,13 +170,14 @@ def load_agent(spec: str, seed: int | None = None):
     if spec == "heuristic":
         return HeuristicAgent(**kwargs)
     if spec == BEST_SPEC or spec.startswith(BEST_SPEC + "?"):
-        sims = _parse_sims(spec.partition("?")[2], BEST_SIMS)
+        sims, think = _parse_options(spec.partition("?")[2], BEST_SIMS)
         best = find_best_checkpoint()
         from ludometer.train.mcts_agent import MCTSAgent  # lazy: needs torch
 
         agent = MCTSAgent.from_checkpoint(
             best.path, sims=sims, seed=seed, name=f"best:{best.ckpt}"
         )
+        agent.set_time_budget(think)
         agent.spec_info = {
             "kind": "best",
             "spec": spec,
@@ -162,6 +187,7 @@ def load_agent(spec: str, seed: int | None = None):
             "checkpoint": best.ckpt,
             "elo": best.elo,
             "sims": sims,
+            "think_s": think,
         }
         return agent
     if spec.startswith("mcts:"):
@@ -169,10 +195,11 @@ def load_agent(spec: str, seed: int | None = None):
         path, _, query = rest.partition("?")
         if not path:
             raise ValueError("mcts spec needs a checkpoint path: mcts:<path>?sims=<n>")
-        sims = _parse_sims(query, DEFAULT_SIMS)
+        sims, think = _parse_options(query, DEFAULT_SIMS)
         from ludometer.train.mcts_agent import MCTSAgent  # lazy: needs torch
 
         agent = MCTSAgent.from_checkpoint(path, sims=sims, seed=seed)
+        agent.set_time_budget(think)
         agent.spec_info = {
             "kind": "mcts",
             "spec": spec,
@@ -180,6 +207,7 @@ def load_agent(spec: str, seed: int | None = None):
             "path": path,
             "checkpoint": Path(path).stem,
             "sims": sims,
+            "think_s": think,
         }
         return agent
     raise ValueError(

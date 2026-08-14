@@ -5,6 +5,13 @@
  * (`sel`, the colour the player has picked up), and redraws from those. Legality
  * always comes from the server's action-id list: a destination lights up because
  * `source*30 + colour*6 + dest` is in it, never because we re-derived the rules.
+ *
+ * A turn plays out in two requests, so the table moves at a human pace:
+ * `/api/act` puts the player's own move on the board at once, then `/api/ai`
+ * spends the AI's whole thinking budget. While that request is out the page
+ * shows the clock running; when it lands, the tiles travel from the factory to
+ * the opponent's board before the new snapshot is adopted. Input stays locked
+ * from the moment a move is sent until the last tile has landed.
  */
 "use strict";
 
@@ -14,14 +21,22 @@ const CUM_PENALTY = [0, -1, -2, -4, -6, -8, -11, -14];
 const CENTER = 5;
 const FLOOR = 5;
 const FLASH_MS = 1400;
+/* move animation: pick up, fly, settle — about 1.7 s all told */
+const PICKUP_MS = 420;
+const FLIGHT_MS = 780;
+const STAGGER_MS = 55;
+const SETTLE_MS = 220;
+const TILING_STEP_MS = 150;   // one wall tile lands every ...
+const TILING_LAST_MS = 520;   // ... plus the last tile's own animation
 
 const el = (id) => document.getElementById(id);
 const ui = {
   matchup: el("matchup"), setup: el("setup"), opponent: el("opponent"),
   specField: el("spec-field"), spec: el("spec"), seed: el("seed"), first: el("first"),
-  opponentNote: el("opponent-note"), simsField: el("sims-field"), sims: el("sims"),
+  opponentNote: el("opponent-note"), thinkField: el("think-field"), think: el("think"),
   facing: el("facing"),
   deal: el("deal"), factories: el("factories"), center: el("center"), turn: el("turn"),
+  thinking: el("thinking"), thinkingText: el("thinking-text"), fly: el("fly"),
   scoreHuman: el("score-human"), scoreAi: el("score-ai"), boardAi: el("board-ai"),
   boardHuman: el("board-human"), lastMove: el("last-move"), log: el("log"),
   supply: el("supply"), prompt: el("prompt"), hint: el("hint"), cancel: el("cancel"),
@@ -32,9 +47,16 @@ const ui = {
 let S = null;          // last server snapshot
 let sel = null;        // {source, color} — tiles the player is holding
 let suggestion = null; // {source, color, dest} from /api/hint
-let busy = false;      // a request is in flight
+let busy = false;      // a request is in flight, or a move is playing out
 let sheets = [];       // queued round-end / game-end overlays
 let bestInfo = null;   // /api/agents "best" entry: which checkpoint is strongest
+let thinkSeconds = 0;  // per-move budget the AI is playing with
+let sheetWaiters = []; // resolvers waiting for the overlay queue to drain
+
+const reducedMotion = window.matchMedia
+  && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const sleep = (ms) => new Promise((done) => setTimeout(done, reducedMotion ? 0 : ms));
 
 /* ------------------------------------------------------------------ plumbing */
 function node(tag, cls, text) {
@@ -71,6 +93,7 @@ const postJSON = (path, body) => api(path, {
 
 function setBusy(on) {
   busy = on;
+  document.body.classList.toggle("locked", on);
   ui.deal.disabled = on;
   ui.hint.disabled = on || !S || !S.your_turn;
 }
@@ -80,16 +103,30 @@ function currentSpec() {
   const choice = ui.opponent.value;
   // "best" is resolved server-side at deal time, so an overnight run's newest
   // strongest checkpoint is picked up without touching the page.
-  if (choice === "best") return "best?sims=" + (ui.sims.value || "400");
+  if (choice === "best") {
+    // sims is only the ceiling once a time budget is set; the server raises it
+    return "best?sims=" + ((bestInfo && bestInfo.default_sims) || 400);
+  }
   if (choice !== "custom") return choice;
   return ui.spec.value.trim();
+}
+
+/** Seconds the AI may think per move — 0 for the baselines, which don't search. */
+function currentThinkTime() {
+  if (ui.opponent.value !== "best") return 0;
+  const seconds = Number(ui.think.value);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
 }
 
 async function newGame(event) {
   if (event) event.preventDefault();
   const spec = currentSpec();
   if (!spec) { toast("Type an agent spec, or pick one from the list."); return; }
-  const body = { opponent_spec: spec, human_plays_first: ui.first.checked };
+  const body = {
+    opponent_spec: spec,
+    human_plays_first: ui.first.checked,
+    think_time_s: currentThinkTime(),
+  };
   const seed = ui.seed.value.trim();
   if (seed) {
     if (!/^-?\d+$/.test(seed)) { toast("The seed must be a whole number."); return; }
@@ -106,22 +143,69 @@ async function newGame(event) {
   }
 }
 
+/** One turn: your move lands, the AI thinks, then its move plays out. */
 async function play(actionId) {
   if (busy) return;
   setBusy(true);
   try {
-    const data = await postJSON("/api/act", { action_id: actionId });
-    adopt(data);
-    (data.round_reports || []).forEach(queueRoundSheet);
-    if (data.state.is_terminal && data.final) queueFinalSheet(data.final);
-    showNextSheet();
-    flashAiMoves(data.ai_moves || []);
+    // 1. your own move, on the board straight away
+    const mine = await postJSON("/api/act", { action_id: actionId, defer_ai: true });
+    adopt(mine);
+    const myReports = mine.round_reports || [];
+    myReports.forEach(queueRoundSheet);
+    if (mine.state.is_terminal && mine.final) queueFinalSheet(mine.final);
+    await animateTiling(myReports);
+
+    // 2. the AI thinks (while you read the position) and its move plays out
+    if (!mine.ai_pending) { showNextSheet(); return; }
+    await runAiTurn(showNextSheet);
   } catch (err) {
+    stopThinking();
     toast(err.message);
-    refresh();
+    await refresh();
+  } finally {
+    setBusy(false);
+    resumeIfPending(); // a failed /api/ai leaves the AI owing a move
+  }
+}
+
+/** If the snapshot says the AI still has to move, let it move. */
+async function resumeIfPending() {
+  if (busy || !S || !S.ai_pending) return;
+  setBusy(true);
+  try {
+    await runAiTurn();
+  } catch (err) {
+    stopThinking();
+    toast(err.message);
   } finally {
     setBusy(false);
   }
+}
+
+/**
+ * Ask for the AI's move, show the clock running, then play the move out.
+ * `whileThinking` runs once the request is in flight, so a round-end sheet can
+ * be read during the search instead of delaying it.
+ */
+async function runAiTurn(whileThinking) {
+  const pending = postJSON("/api/ai", {});
+  startThinking();
+  if (whileThinking) whileThinking();
+  let theirs;
+  try {
+    theirs = await pending;
+  } finally {
+    stopThinking();
+  }
+  await waitForSheets();
+  await animateAiMoves(theirs.ai_moves || []);
+  adopt(theirs);
+  const reports = theirs.round_reports || [];
+  reports.forEach(queueRoundSheet);
+  if (theirs.state.is_terminal && theirs.final) queueFinalSheet(theirs.final);
+  await animateTiling(reports);
+  showNextSheet();
 }
 
 async function askHint() {
@@ -275,14 +359,14 @@ function renderMiddle() {
 }
 
 /* -------------------------------------------------------------------- boards */
+/** Pattern line `r` and wall row `r` are one grid row, as on the cardboard. */
 function renderBoard(host, seat, interactive) {
   const st = S.state;
   const me = st.players[seat];
   host.innerHTML = "";
   host.dataset.seat = seat;
 
-  const main = node("div", "board-main");
-  const lines = node("div", "lines");
+  const grid = node("div", "board-grid");
   const open = interactive && sel ? destsFor(sel.source, sel.color) : [];
 
   for (let r = 0; r < 5; r++) {
@@ -315,15 +399,16 @@ function renderBoard(host, seat, interactive) {
     }
     row.appendChild(note);
 
+    // the line fills from the wall end backwards, so empty slots sit on the left
     for (let k = 0; k < line.capacity - line.count; k++) row.appendChild(node("div", "slot"));
     for (let k = 0; k < line.count; k++) row.appendChild(tile(line.color));
     if (suggestion && interactive && suggestion.dest === r) row.classList.add("flash");
-    lines.appendChild(row);
-  }
-  main.appendChild(lines);
+    grid.appendChild(row);
 
-  const wall = node("div", "wall");
-  for (let r = 0; r < 5; r++) {
+    const wallRow = node("div", "wall-row");
+    wallRow.dataset.wallRow = r;
+    if (r === 0) wallRow.classList.add("top");
+    if (r === 4) wallRow.classList.add("bottom");
     for (let col = 0; col < 5; col++) {
       const colour = (col - r + 5) % 5;
       if (me.wall[r][col]) {
@@ -331,17 +416,19 @@ function renderBoard(host, seat, interactive) {
         t.dataset.row = r;
         t.dataset.col = col;
         t.title = COLORS[colour] + " — row " + (r + 1) + ", column " + (col + 1);
-        wall.appendChild(t);
+        wallRow.appendChild(t);
       } else {
         const cell = node("div", "cell bisque");
         cell.dataset.color = colour;
+        cell.dataset.row = r;
+        cell.dataset.col = col;
         cell.title = COLORS[colour] + " goes here";
-        wall.appendChild(cell);
+        wallRow.appendChild(cell);
       }
     }
+    grid.appendChild(wallRow);
   }
-  main.appendChild(wall);
-  host.appendChild(main);
+  host.appendChild(grid);
 
   const wrap = node("div", "floor-wrap");
   const floorOpen = interactive && sel && open.indexOf(FLOOR) !== -1;
@@ -424,9 +511,18 @@ function renderSupply() {
 
 function renderNarration() {
   const last = S.last_ai_move;
-  if (S.state.is_terminal && S.final) ui.lastMove.textContent = S.final.headline;
-  else if (last) ui.lastMove.textContent = "AI " + last.text + ".";
-  else ui.lastMove.textContent = "You open. Pick a colour from a factory or the middle.";
+  ui.lastMove.innerHTML = "";
+  if (S.state.is_terminal && S.final) {
+    ui.lastMove.textContent = S.final.headline;
+  } else if (last) {
+    ui.lastMove.append("AI " + last.text + ".");
+    // how much search went into that move — the point of the time budget
+    if (last.search_text) {
+      ui.lastMove.appendChild(node("span", "search-note", last.search_text));
+    }
+  } else {
+    ui.lastMove.textContent = "You open. Pick a colour from a factory or the middle.";
+  }
 
   // who the human is actually facing, for a "best"/checkpoint opponent
   ui.facing.textContent = S.opponent_blurb || "";
@@ -458,7 +554,10 @@ function renderStatus() {
       ? "Now pick a row (or the floor line) for your " + COLORS[sel.color] + " tiles."
       : "Pick a colour from a factory or the middle.";
   } else {
-    ui.turn.textContent = "The AI is taking its turn…";
+    ui.turn.innerHTML = "";
+    ui.turn.appendChild(node("strong", null, "The AI's turn"));
+    ui.turn.append(S.think_time_s ? " — it thinks for " + S.think_time_s + "s per move."
+                                  : " — it is choosing a move.");
     ui.prompt.textContent = "";
   }
   ui.cancel.classList.toggle("hidden", !sel);
@@ -489,7 +588,7 @@ function render() {
   }
 }
 
-/* ------------------------------------------------------------------ flashing */
+/* ----------------------------------------------------------------- animation */
 function flash(element) {
   if (!element) return;
   element.classList.remove("flash");
@@ -498,15 +597,143 @@ function flash(element) {
   setTimeout(() => element.classList.remove("flash"), FLASH_MS);
 }
 
-function flashAiMoves(moves) {
-  moves.forEach((move) => {
-    const source = move.source === CENTER
-      ? ui.center
-      : ui.factories.querySelector('.factory[data-source="' + move.source + '"]');
-    flash(source);
-    const row = ui.boardAi.querySelector('[data-row="' + move.dest + '"]');
-    flash(row);
+function sourceElement(source) {
+  return source === CENTER
+    ? ui.center
+    : ui.factories.querySelector('.factory[data-source="' + source + '"]');
+}
+
+/** Where the AI's tiles are coming from: the drawn tiles of that colour. */
+function sourceTiles(source, color, count) {
+  const host = sourceElement(source);
+  if (!host) return [];
+  const all = host.querySelectorAll('.tile[data-color="' + color + '"]');
+  return [].slice.call(all, 0, count);
+}
+
+/**
+ * Where they are going: the pattern line's rightmost free slots first (a line
+ * fills towards the wall), then the floor line's free slots. Tiles beyond both
+ * go straight to the lid, and are aimed at the floor's edge to fade out there.
+ */
+function travelTargets(host, move) {
+  const targets = [];
+  if (move.dest !== FLOOR && move.placed) {
+    const row = host.querySelector('.line[data-row="' + move.dest + '"]');
+    const slots = row ? [].slice.call(row.querySelectorAll(".slot")) : [];
+    targets.push.apply(targets, slots.slice(Math.max(0, slots.length - move.placed)));
+  }
+  const floor = host.querySelector('.floor');
+  const floorSlots = floor ? [].slice.call(floor.querySelectorAll(".slot")) : [];
+  let taken = 0;
+  while (targets.length < move.count && taken < floorSlots.length) {
+    targets.push(floorSlots[taken++]);
+  }
+  const last = targets[targets.length - 1] || floor;
+  while (targets.length < move.count) targets.push(last); // overflow to the lid
+  return targets;
+}
+
+/** Fly clones of `tiles` to `targets`, staggered, and resolve when they land. */
+function flyTiles(tiles, targets) {
+  if (reducedMotion || !tiles.length) return Promise.resolve();
+  const layer = ui.fly;
+  const flights = [];
+  tiles.forEach((from, i) => {
+    const to = targets[i];
+    if (!to) return;
+    const a = from.getBoundingClientRect();
+    const b = to.getBoundingClientRect();
+    const ghost = node("div", "fly-tile tile");
+    ghost.dataset.color = from.dataset.color;
+    ghost.style.left = a.left + "px";
+    ghost.style.top = a.top + "px";
+    ghost.style.width = a.width + "px";
+    ghost.style.height = a.height + "px";
+    ghost.style.transitionDelay = (i * STAGGER_MS) + "ms";
+    layer.appendChild(ghost);
+    from.style.visibility = "hidden";
+    flights.push([ghost, b.left - a.left, b.top - a.top, b.width / (a.width || 1)]);
   });
+  if (!flights.length) return Promise.resolve();
+  return new Promise((done) => {
+    requestAnimationFrame(() => {
+      flights.forEach(([ghost, dx, dy, scale]) => {
+        ghost.style.transform =
+          "translate(" + dx + "px, " + dy + "px) scale(" + scale.toFixed(3) + ")";
+      });
+      const total = FLIGHT_MS + flights.length * STAGGER_MS;
+      setTimeout(() => {
+        flights.forEach(([ghost]) => ghost.remove());
+        done();
+      }, total);
+    });
+  });
+}
+
+/** Highlight the source, then walk the tiles over to the AI's board. */
+async function animateAiMove(move) {
+  const source = sourceElement(move.source);
+  if (source) source.classList.add("picked");
+  const row = ui.boardAi.querySelector('.line[data-row="' + move.dest + '"]');
+  if (row) row.classList.add("incoming");
+  await sleep(PICKUP_MS);
+  const tiles = sourceTiles(move.source, move.color, move.count);
+  await flyTiles(tiles, travelTargets(ui.boardAi, move));
+  await sleep(SETTLE_MS);
+  if (source) source.classList.remove("picked");
+  if (row) row.classList.remove("incoming");
+}
+
+async function animateAiMoves(moves) {
+  for (const move of moves) await animateAiMove(move);
+}
+
+/** Round end: wall tiles light up one after another, in placement order. */
+async function animateTiling(reports) {
+  if (reducedMotion || !reports || !reports.length) return;
+  let steps = 0;
+  reports.forEach((report) => {
+    [[S.human_seat, ui.boardHuman], [S.ai_seat, ui.boardAi]].forEach(([seat, host]) => {
+      const player = report.players[seat];
+      if (!player) return;
+      player.tiles.forEach((t, i) => {
+        const cell = host.querySelector(
+          '.tile.placed[data-row="' + t.row + '"][data-col="' + t.col + '"]');
+        if (!cell) return;
+        cell.style.animationDelay = (i * TILING_STEP_MS) + "ms";
+        cell.classList.add("landing");
+        steps = Math.max(steps, i + 1);
+      });
+    });
+  });
+  if (steps) await sleep((steps - 1) * TILING_STEP_MS + TILING_LAST_MS);
+}
+
+/* ------------------------------------------------------------- thinking state */
+let thinkTimer = null;
+
+function startThinking() {
+  if (!S || S.your_turn || S.state.is_terminal) return;
+  const started = Date.now();
+  const budget = S.think_time_s || thinkSeconds;
+  const label = () => {
+    const spent = (Date.now() - started) / 1000;
+    ui.thinkingText.textContent = budget
+      ? "The AI is thinking — " + spent.toFixed(1) + "s of " + budget + "s"
+      : "The AI is thinking";
+  };
+  label();
+  ui.thinking.classList.remove("hidden");
+  ui.scoreAi.classList.add("thinking-now");
+  if (thinkTimer) clearInterval(thinkTimer);
+  thinkTimer = setInterval(label, 100);
+}
+
+function stopThinking() {
+  if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
+  ui.thinking.classList.add("hidden");
+  ui.scoreAi.classList.remove("thinking-now");
 }
 
 /* ------------------------------------------------------------------ overlays */
@@ -604,9 +831,21 @@ function queueFinalSheet(final) {
   sheets.push({ title: final.headline, body: body, cta: "Deal another" });
 }
 
+/** Resolves once no overlay is up — tiles should never fly behind a sheet. */
+function waitForSheets() {
+  if (ui.overlay.classList.contains("hidden") && !sheets.length) return Promise.resolve();
+  return new Promise((done) => sheetWaiters.push(done));
+}
+
 function showNextSheet() {
   const sheet = sheets.shift();
-  if (!sheet) { ui.overlay.classList.add("hidden"); return; }
+  if (!sheet) {
+    ui.overlay.classList.add("hidden");
+    const waiting = sheetWaiters;
+    sheetWaiters = [];
+    waiting.forEach((done) => done());
+    return;
+  }
   ui.overlayTitle.textContent = sheet.title;
   ui.overlayBody.innerHTML = "";
   ui.overlayBody.appendChild(sheet.body);
@@ -616,11 +855,11 @@ function showNextSheet() {
 }
 
 /* --------------------------------------------------------------------- wiring */
-/** Show/hide the spec + sims fields and the note under the opponent dropdown. */
+/** Show/hide the spec + think fields and the note under the opponent dropdown. */
 function syncOpponentFields(focusSpec) {
   const choice = ui.opponent.value;
   ui.specField.classList.toggle("hidden", choice !== "custom");
-  ui.simsField.classList.toggle("hidden", choice !== "best");
+  ui.thinkField.classList.toggle("hidden", choice !== "best");
   if (choice === "best" && bestInfo && bestInfo.available) {
     ui.opponentNote.textContent = bestInfo.detail;
   } else if (choice === "best" && bestInfo) {
@@ -644,18 +883,18 @@ async function loadAgentList() {
       option.value = "best";
       option.textContent = bestInfo.label || "Strongest trained (auto)";
       ui.opponent.appendChild(option);
-      const choices = bestInfo.sims_choices || [];
+      const choices = bestInfo.think_choices || [];
       if (choices.length) {
-        ui.sims.innerHTML = "";
-        const labels = { 100: " · quick", 400: " · strong", 1200: " · slow" };
+        ui.think.innerHTML = "";
         choices.forEach((n) => {
           const opt = document.createElement("option");
           opt.value = String(n);
-          opt.textContent = n + (labels[n] || "");
-          ui.sims.appendChild(opt);
+          opt.textContent = n > 0 ? n + " seconds" : "Instant reply";
+          ui.think.appendChild(opt);
         });
       }
-      ui.sims.value = String(bestInfo.default_sims || 400);
+      thinkSeconds = bestInfo.default_think_s || 0;
+      ui.think.value = String(thinkSeconds);
     }
     data.baselines.forEach((spec) => {
       const option = document.createElement("option");
@@ -674,6 +913,7 @@ async function loadAgentList() {
 
 ui.setup.addEventListener("submit", newGame);
 ui.opponent.addEventListener("change", () => syncOpponentFields(true));
+ui.think.addEventListener("change", () => { thinkSeconds = Number(ui.think.value) || 0; });
 ui.hint.addEventListener("click", askHint);
 ui.cancel.addEventListener("click", () => { sel = null; suggestion = null; render(); });
 ui.overlayOk.addEventListener("click", () => {
@@ -688,4 +928,4 @@ document.addEventListener("keydown", (event) => {
 });
 
 loadAgentList();
-refresh();
+refresh().then(resumeIfPending);

@@ -26,12 +26,13 @@
       </select>
       <span class="field-note" id="opponent-note"></span>
     </label>
-    <label class="field field-narrow hidden" id="sims-field">
-      <span class="field-label">Sims</span>
-      <select id="sims">
-        <option value="100">100 · quick</option>
-        <option value="400" selected>400 · strong</option>
-        <option value="1200">1200 · slow</option>
+    <label class="field field-narrow hidden" id="think-field">
+      <span class="field-label">AI thinks for</span>
+      <select id="think">
+        <option value="0">Instant reply</option>
+        <option value="3">3 seconds</option>
+        <option value="5" selected>5 seconds</option>
+        <option value="10">10 seconds</option>
       </select>
     </label>
     <label class="field field-wide hidden" id="spec-field">
@@ -58,6 +59,10 @@
     <div class="factories" id="factories"></div>
     <div class="center-dish" id="center"></div>
     <p class="turn-line" id="turn"></p>
+    <div class="thinking hidden" id="thinking" aria-live="polite">
+      <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="thinking-text" id="thinking-text">The AI is thinking</span>
+    </div>
   </section>
 
   <aside class="side">
@@ -115,6 +120,8 @@
     </div>
   </div>
 </div>
+
+<div class="fly-layer" id="fly" aria-hidden="true"></div>
 
 <div class="toasts" id="toasts" aria-live="assertive"></div>
 

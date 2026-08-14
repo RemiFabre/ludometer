@@ -9,6 +9,16 @@ Players alternate *within* a round, but a round boundary is resolved inside
 ``apply``, and the next round is started by whoever holds the first-player marker
 — which can be the AI twice in a row. Hence the AI reply is a loop, not a single
 move.
+
+``play_human(action_id, defer_ai=True)`` stops after the human's move and leaves
+``ai_pending`` set; the caller then asks for :meth:`ai_reply` separately. The
+page uses that split so the human's own move appears immediately, then the AI
+visibly thinks for its time budget instead of the board jumping two moves at
+once.
+
+``think_time_s`` is that budget: a neural opponent searches by the clock rather
+than by a sim count, and each AI move carries a ``search`` block saying how many
+positions it actually visited.
 """
 
 from __future__ import annotations
@@ -38,6 +48,7 @@ class GameSession:
         opponent_spec: str = "heuristic",
         human_plays_first: bool = True,
         seed: int | None = None,
+        think_time_s: float | None = None,
     ) -> None:
         if seed is None:
             seed = random.randrange(1 << 30)
@@ -46,6 +57,13 @@ class GameSession:
         # built first: a bad spec must not leave a half-initialised session
         self.agent = load_agent(opponent_spec, seed=self.seed ^ 0x5EED)
         self.agent_name = getattr(self.agent, "name", opponent_spec)
+        # a search budget only means something to a searching agent
+        self.think_time_s = float(think_time_s or 0.0)
+        budget = getattr(self.agent, "set_time_budget", None)
+        if callable(budget):
+            budget(self.think_time_s or None)
+        elif self.think_time_s:
+            self.think_time_s = 0.0
         # for "best"/"mcts:" specs: which checkpoint the spec resolved to
         self.opponent_info: dict[str, Any] = dict(
             getattr(self.agent, "spec_info", None) or {}
@@ -87,7 +105,12 @@ class GameSession:
         elo = info.get("elo")
         rated = f", rated {elo:+.0f} on our internal ladder" if elo is not None else ""
         sims = info.get("sims")
-        thinking = f" It searches {sims} positions per move." if sims else ""
+        if self.think_time_s:
+            thinking = f" It thinks for {self.think_time_s:g}s per move."
+        elif sims:
+            thinking = f" It searches {sims} positions per move."
+        else:
+            thinking = ""
         return f"You're facing {ckpt}{rated}.{thinking}"
 
     def side_of(self, player: int) -> str:
@@ -101,6 +124,10 @@ class GameSession:
         return (
             not self.state.is_terminal and self.state.current_player == self.human_seat
         )
+
+    @property
+    def ai_turn(self) -> bool:
+        return not self.state.is_terminal and self.state.current_player == self.ai_seat
 
     def legal_for_human(self) -> list[int]:
         return self.state.legal_actions() if self.human_turn else []
@@ -161,19 +188,48 @@ class GameSession:
                 )
         return move
 
+    def _ai_move(self) -> dict[str, Any]:
+        """One AI move, with what the search cost attached."""
+        action_id = int(self.agent.act(self.state))
+        move = self._apply(action_id)
+        stats = dict(getattr(self.agent, "last_search", None) or {})
+        if stats.get("sims"):
+            move["search"] = stats
+            move["search_text"] = (
+                f"searched {stats['sims']:,} positions "
+                f"in {stats.get('elapsed_s', 0.0):.1f}s"
+            )
+            self._log("think", f"AI {move['search_text']}.", ply=move["ply"])
+        return move
+
     def _ai_replies(self) -> list[dict[str, Any]]:
         """Let the AI move until it is the human's turn again (or the game ends)."""
         moves: list[dict[str, Any]] = []
-        state = self.state
         for _ in range(MAX_AI_REPLIES):
-            if state.is_terminal or state.current_player != self.ai_seat:
+            if not self.ai_turn:
                 break
-            action_id = int(self.agent.act(state))
-            moves.append(self._apply(action_id))
+            moves.append(self._ai_move())
         return moves
 
-    def play_human(self, action_id: int) -> dict[str, Any]:
-        """Apply the human's action, then the AI's reply (possibly a couple)."""
+    def ai_reply(self) -> dict[str, Any]:
+        """Compute the AI's pending reply (the page asks for this separately)."""
+        if self.state.is_terminal:
+            raise IllegalMove("the game is over — start a new one")
+        if not self.ai_turn:
+            raise IllegalMove("it is not the AI's turn")
+        first_report = len(self.round_reports)
+        self.last_ai_moves = self._ai_replies()
+        payload = self.snapshot()
+        payload["ai_moves"] = self.last_ai_moves
+        payload["round_reports"] = self.round_reports[first_report:]
+        return payload
+
+    def play_human(self, action_id: int, defer_ai: bool = False) -> dict[str, Any]:
+        """Apply the human's action, then the AI's reply (possibly a couple).
+
+        With ``defer_ai`` the AI is left to move: the payload's ``ai_pending``
+        tells the caller to ask for :meth:`ai_reply` next.
+        """
         if self.state.is_terminal:
             raise IllegalMove("the game is over — start a new one")
         if self.state.current_player != self.human_seat:
@@ -187,7 +243,7 @@ class GameSession:
             )
         first_report = len(self.round_reports)
         human_move = self._apply(action_id)
-        self.last_ai_moves = self._ai_replies()
+        self.last_ai_moves = [] if defer_ai else self._ai_replies()
         payload = self.snapshot()
         payload["human_move"] = human_move
         payload["ai_moves"] = self.last_ai_moves
@@ -223,6 +279,8 @@ class GameSession:
             "ai_seat": self.ai_seat,
             "human_plays_first": self.human_plays_first,
             "your_turn": self.human_turn,
+            "ai_pending": self.ai_turn,
+            "think_time_s": self.think_time_s,
             "legal_actions": state.legal_actions(),
             "human_legal_actions": self.legal_for_human(),
             "ply": self.ply,

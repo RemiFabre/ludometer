@@ -4,6 +4,36 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-14 — GUI: board aligned like the real one, real tile colours, the AI now thinks
+
+All four things you flagged after your first game, all in `web/play/` plus a small additive
+change to the search:
+
+- **Board alignment.** Pattern line *r* and wall row *r* are now one grid row (`.board-grid`,
+  fixed row height, right-aligned lines), for both boards — exactly the cardboard layout, so
+  you can see which wall square a line feeds. Verified in a headless browser: every pattern
+  line's top edge is within 1 px of its wall row's.
+- **Real base-game colours.** Cobalt `#17509e`, ochre `#d99a12`, terracotta `#b23a26`,
+  charcoal `#23272d`, ice cyan `#31b8d1`. The ghosted empty wall squares now carry a diamond
+  in the true glaze on a pale ground, so the wall's colour pattern reads at a glance.
+- **The AI thinks on a clock.** New selector "AI thinks for": instant / 3 / 5 / 10 seconds,
+  **default 5 s**. `MCTS.search(state, time_limit_s=...)` keeps simulating until the budget
+  is spent (wall clock checked every 8 sims) with `sims` demoted to a ceiling that the GUI
+  raises to 20,000. Additive and default-off: the trainer never passes it, so **training
+  behaviour is unchanged** — I only ran `tests/test_gui.py` while run2 is training.
+- **Why this matters for strength**: the Elo ladder rates checkpoints at **100 sims/move**.
+  At a 5 s budget run1's best searches **~7,700 positions per move** (measured with run2
+  hogging most of the cores), i.e. **50–100× more search than its rating was measured at**.
+  It plays meaningfully above its listed +2014 — treat the number as a floor. The page tells
+  you the truth every move: *"searched 7,712 positions in 5.0s"* in the table talk.
+- **The move is now animated.** A turn is three beats: your move lands at once, the AI
+  thinks (a kiln-dot indicator with the clock running), then the source dish lights up and
+  its tiles fly to its board over ~1.7 s before the position updates. Your input is locked
+  throughout; completed lines glaze into the wall one tile at a time at round end.
+- Mechanically that needed the turn split in two requests: `POST /api/act` with
+  `defer_ai: true` returns as soon as your move is on the board, then `POST /api/ai` spends
+  the budget. The old single-request `/api/act` still works exactly as before.
+
 ## 2026-08-14 — run1 finished (+2014 Elo), run2 launched for the night
 
 - **run1 final**: 25,000 games in 3 h 08 min. Final Elo **+2001**, best checkpoint

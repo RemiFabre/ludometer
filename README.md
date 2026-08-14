@@ -50,22 +50,44 @@ Resolution happens **when you press “Deal tiles”**, not when the page loads:
 training the model keeps improving, so every new game automatically faces the newest
 strongest checkpoint. Nothing to edit, no path to copy.
 
-**Sims** is how many positions the MCTS search visits per move — the strength/speed dial:
+**AI thinks for** is the per-move time budget — the strength/pace dial. The search keeps
+running simulations until the clock runs out instead of stopping at a fixed count:
 
-| Sims | Feel |
-|------|------|
-| 100  | replies in a blink, noticeably weaker |
-| 400  | default: strong, roughly a second per move |
-| 1200 | strongest, a few seconds per move |
+| Budget | Positions searched per move | Feel |
+|--------|-----------------------------|------|
+| Instant reply | ~400 | replies as fast as it can, weakest setting |
+| 3 seconds | ~4,000–5,000 | quick game, still well above its rating |
+| **5 seconds** (default) | **~7,500–9,000** | you get time to read the position |
+| 10 seconds | ~15,000–18,000 | strongest; it will punish sloppy floor lines |
 
-Elo ratings are measured at the trainer's own eval sims, so a checkpoint played at 100 sims
-is weaker than its rating suggests and at 1200 sims somewhat stronger.
+(The 5 s row is measured on this Mac against run1's best checkpoint — ~7,700 positions with
+a training run eating most of the cores — and the others scale from it. Whatever the
+machine, the page reports the true count in the table talk: *“searched 7,712 positions in
+5.0s”*.)
+
+Elo ratings are measured at the trainer's own eval sims (100 per move), so at a 5 s budget
+the checkpoint searches **50–100× more positions than its listed rating was measured at**
+and plays meaningfully above it. The listed Elo is a floor, not a ceiling.
+
+A turn now plays out in three beats: your move lands immediately, the AI visibly thinks for
+its budget (with the clock running under the table), then its move is animated — the source
+factory lights up and the tiles travel to its board before the position updates. Your input
+is locked while that happens, and completed pattern lines slide into the wall at round end.
+
+The board is laid out like the cardboard one: pattern line row *r* sits level with wall row
+*r*, right-aligned, so you can see at a glance which wall square a line is feeding. Tile
+colours match the base game (cobalt, ochre, terracotta, charcoal, ice), including the
+ghosted diamonds on the empty wall squares.
 
 Same thing without the browser (the GUI, the arena and the trainer share one registry):
 
 ```bash
 uv run python -c "from ludometer.agents.registry import find_best_checkpoint; print(find_best_checkpoint())"
 ```
+
+A time budget is available on any neural spec as `&think=<seconds>`, e.g.
+`mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=400&think=5`. It is off by default, so
+training and the Elo ladder keep searching a fixed number of simulations per move.
 
 ## Status
 

@@ -14,7 +14,7 @@ checkpoint once instead of once per game.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,11 @@ from ludometer.azul.engine import AzulState
 from ludometer.train.mcts import MCTS, STALL_ROUNDS, MCTSConfig, select_action
 from ludometer.train.net import NetEvaluator, PolicyValueNet, load_net
 
-__all__ = ["MCTSAgent", "MCTSAgentSpec"]
+__all__ = ["TIMED_SIMS_CAP", "MCTSAgent", "MCTSAgentSpec"]
+
+# With a time budget the sim count is whatever fits, so the configured `sims`
+# becomes a mere ceiling: generous enough never to bind before the clock does.
+TIMED_SIMS_CAP = 20_000
 
 # (path, device) -> net, so repeated games in one worker share the weights.
 _NET_CACHE: dict[tuple[str, str], PolicyValueNet] = {}
@@ -56,6 +60,7 @@ class MCTSAgent(Agent):
         evaluator: Any = None,
         config: MCTSConfig | None = None,
         stall_rounds: int = STALL_ROUNDS,
+        time_limit_s: float | None = None,
     ) -> None:
         if net is None and evaluator is None:
             raise ValueError("MCTSAgent needs either a net or an evaluator")
@@ -69,6 +74,11 @@ class MCTSAgent(Agent):
             self.evaluator, cfg, seed=0 if seed is None else seed, add_noise=add_noise
         )
         self._rng_seed = 0 if seed is None else seed
+        # None = run exactly `sims` simulations (training, arena, eval)
+        self.time_limit_s: float | None = None
+        # what the last `act` search actually cost, for the GUI's table talk
+        self.last_search: dict[str, Any] = {}
+        self.set_time_budget(time_limit_s)
 
     # ------------------------------------------------------------------ build
     @classmethod
@@ -97,13 +107,36 @@ class MCTSAgent(Agent):
         self._rng_seed = int(n)
         self.mcts.seed(n)
 
-    def act(self, state: AzulState) -> int:
+    def set_time_budget(
+        self, seconds: float | None, sims_cap: int = TIMED_SIMS_CAP
+    ) -> None:
+        """Search by the clock instead of by a sim count (``None``/0 = off).
+
+        Raising the sim cap is what makes the budget the binding constraint;
+        it never lowers a cap the caller asked for.
+        """
+        if not seconds or float(seconds) <= 0.0:
+            self.time_limit_s = None
+            return
+        self.time_limit_s = float(seconds)
+        if self.mcts.config.sims < sims_cap:
+            self.mcts.config = replace(self.mcts.config, sims=int(sims_cap))
+
+    def act(self, state: AzulState, time_limit_s: float | None = None) -> int:
         legal = state.legal_actions()
         if not legal:
             raise ValueError("no legal actions (terminal state?)")
         if len(legal) == 1:
+            self.last_search = {"sims": 0, "elapsed_s": 0.0, "forced": True}
             return legal[0]
-        result = self.mcts.search(state)
+        budget = self.time_limit_s if time_limit_s is None else time_limit_s
+        result = self.mcts.search(state, time_limit_s=budget)
+        self.last_search = {
+            "sims": int(result.sims),
+            "elapsed_s": float(result.elapsed_s),
+            "budget_s": None if not budget else float(budget),
+            "forced": False,
+        }
         temperature = self.temperature
         if state.round_index >= self.stall_rounds:
             # Two arg-max players can loop forever (see mcts.STALL_ROUNDS):

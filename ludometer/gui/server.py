@@ -6,7 +6,8 @@ service). The page in ``web/play/`` is served from disk and talks to:
 ======================  ===========================================================
 ``POST /api/new``       ``{opponent_spec, human_plays_first, seed?}`` -> full state
 ``GET  /api/state``     full state, legal actions, AI's last move, game log
-``POST /api/act``       ``{action_id}`` -> human move + AI reply + new state
+``POST /api/act``       ``{action_id, defer_ai?}`` -> human move (+ AI reply)
+``POST /api/ai``        the AI's deferred reply, computed with its time budget
 ``GET  /api/hint``      the heuristic agent's suggestion for the human's turn
 ``GET  /api/agents``    the agent specs the dropdown offers
 ======================  ===========================================================
@@ -14,6 +15,11 @@ service). The page in ``web/play/`` is served from disk and talks to:
 Every error is a JSON ``{"error": "..."}`` with a 400/404/500 status — the page
 turns those into a toast, so a broken ``mcts:`` checkpoint spec never kills the
 running game.
+
+``POST /api/act`` with ``defer_ai`` returns as soon as the human's move is on the
+board and sets ``ai_pending``; the page then calls ``POST /api/ai``, which spends
+the whole per-move time budget and reports how many positions the search visited.
+That split is what lets the page show the AI thinking and animate its move.
 
 ``/api/agents`` resolves the ``best`` spec (strongest rated checkpoint on disk)
 on every call and offers it as the default opponent when one exists, so the page
@@ -38,7 +44,10 @@ from ludometer.gui.session import GameSession, IllegalMove
 __all__ = [
     "BASELINE_SPECS",
     "BEST_LABEL",
+    "DEFAULT_THINK_S",
+    "MAX_THINK_S",
     "SIMS_CHOICES",
+    "THINK_CHOICES",
     "best_entry",
     "create_app",
     "main",
@@ -50,6 +59,10 @@ DEFAULT_SPEC = "heuristic"
 BASELINE_SPECS = ("heuristic", "greedy", "random")
 BEST_LABEL = "Strongest trained (auto)"
 SIMS_CHOICES = (100, 400, 1200)
+# per-move thinking time the dropdown offers; 0 means "reply as fast as you can"
+THINK_CHOICES = (0.0, 3.0, 5.0, 10.0)
+DEFAULT_THINK_S = 5.0
+MAX_THINK_S = 120.0  # a local toy, but an unbounded budget hangs the request
 
 # repo layout: <root>/ludometer/gui/server.py and <root>/web/play/
 PLAY_DIR = Path(__file__).resolve().parents[2] / "web" / "play"
@@ -66,6 +79,8 @@ def best_entry() -> dict[str, Any]:
         "label": BEST_LABEL,
         "sims_choices": list(SIMS_CHOICES),
         "default_sims": BEST_SIMS,
+        "think_choices": list(THINK_CHOICES),
+        "default_think_s": DEFAULT_THINK_S,
     }
     try:
         best = find_best_checkpoint()
@@ -157,8 +172,19 @@ def create_app(play_dir: Path | None = None) -> Flask:
                 seed = int(seed)
             except (TypeError, ValueError):
                 return fail("seed must be an integer")
+        think = payload.get("think_time_s", 0.0)
+        if isinstance(think, bool) or think is None:
+            think = 0.0
         try:
-            session = GameSession(spec, human_plays_first=human_first, seed=seed)
+            think = float(think)
+        except (TypeError, ValueError):
+            return fail("think_time_s must be a number of seconds")
+        if think < 0 or think > MAX_THINK_S:
+            return fail(f"think_time_s must be between 0 and {MAX_THINK_S:g} seconds")
+        try:
+            session = GameSession(
+                spec, human_plays_first=human_first, seed=seed, think_time_s=think
+            )
         except Exception as exc:  # noqa: BLE001 - bad spec / missing ckpt / no torch
             return fail(
                 f"could not load opponent {spec!r}: {type(exc).__name__}: {exc}"
@@ -186,12 +212,28 @@ def create_app(play_dir: Path | None = None) -> Flask:
                 raw = int(raw)  # accept "42" from a form-ish client
             except (TypeError, ValueError):
                 return fail(f"action_id must be an integer, got {raw!r}")
+        defer = payload.get("defer_ai", False)
+        if not isinstance(defer, bool):
+            return fail("defer_ai must be true or false")
         with lock:
             session = current()
             if session is None:
                 return fail("no game in progress — POST /api/new first", 409)
             try:
-                return jsonify(session.play_human(int(raw)))
+                return jsonify(session.play_human(int(raw), defer_ai=defer))
+            except IllegalMove as exc:
+                return fail(str(exc))
+            except ValueError as exc:  # engine-level rejection
+                return fail(str(exc))
+
+    @app.post("/api/ai")
+    def ai_reply():
+        with lock:
+            session = current()
+            if session is None:
+                return fail("no game in progress — POST /api/new first", 409)
+            try:
+                return jsonify(session.ai_reply())
             except IllegalMove as exc:
                 return fail(str(exc))
             except ValueError as exc:  # engine-level rejection

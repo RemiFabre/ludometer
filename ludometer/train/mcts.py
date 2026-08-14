@@ -36,12 +36,21 @@ determinizations**:
 
 Tree reuse between moves is not implemented (optional per the design): every
 ``search`` call starts from a fresh root.
+
+Time budget (opt-in, GUI only)
+------------------------------
+``search(state, time_limit_s=...)`` keeps simulating until the wall clock runs
+out, checking it every :data:`TIME_CHECK_EVERY` simulations, with
+``config.sims`` acting as the upper bound. The default is ``None``: training and
+the arena keep running exactly ``config.sims`` simulations, so results stay
+reproducible.
 """
 
 from __future__ import annotations
 
 import math
 import random
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -54,6 +63,7 @@ __all__ = [
     "MAX_GAME_MOVES",
     "MCTS",
     "STALL_ROUNDS",
+    "TIME_CHECK_EVERY",
     "MCTSConfig",
     "Node",
     "RolloutEvaluator",
@@ -69,6 +79,11 @@ __all__ = [
 # is the hard backstop (a truncated self-play game is scored as a draw).
 STALL_ROUNDS = 16
 MAX_GAME_MOVES = 400
+
+# Simulations between two wall-clock checks when a time budget is in force. A
+# handful of sims is a fraction of a millisecond of over-run, and the check
+# itself never shows up in a profile at this granularity.
+TIME_CHECK_EVERY = 8
 
 # An evaluator maps (state, legal actions) to (priors aligned with `legal`,
 # value in [-1, 1] for the player to move).
@@ -160,6 +175,7 @@ class SearchResult:
     value: float  # root value estimate for the player to move
     visits: dict[int, int]  # action -> visit count
     sims: int
+    elapsed_s: float = 0.0  # wall clock spent in the simulation loop
 
 
 # --------------------------------------------------------------- evaluators
@@ -241,21 +257,46 @@ class MCTS:
         return self._rng
 
     # ------------------------------------------------------------------ public
-    def search(self, state: AzulState, add_noise: bool | None = None) -> SearchResult:
-        """Run ``sims`` simulations from ``state`` (never mutated)."""
+    def search(
+        self,
+        state: AzulState,
+        add_noise: bool | None = None,
+        time_limit_s: float | None = None,
+    ) -> SearchResult:
+        """Run simulations from ``state`` (never mutated).
+
+        ``time_limit_s`` (seconds, ``None`` = off) turns ``config.sims`` into an
+        upper bound and keeps simulating until the budget is spent. Training
+        never passes it, so training behaviour is unchanged.
+        """
         noise = self.add_noise if add_noise is None else add_noise
         root = self._new_node(state.clone())
         if root.is_terminal:
             raise ValueError("cannot search a terminal state")
+        started = time.perf_counter()
         value = self._expand(root)
         if len(root.legal) == 1:
             policy = np.zeros(ACTION_SPACE, dtype=np.float32)
             policy[root.legal[0]] = 1.0
-            return SearchResult(policy, value, {root.legal[0]: 1}, 0)
+            return SearchResult(policy, value, {root.legal[0]: 1}, 0, 0.0)
         if noise:
             self._apply_noise(root)
-        for _ in range(self.config.sims):
-            self._simulate(root)
+        cap = self.config.sims
+        budget = None if time_limit_s is None else float(time_limit_s)
+        if budget is None or budget <= 0.0:
+            for _ in range(cap):
+                self._simulate(root)
+        else:
+            deadline = started + budget
+            done = 0
+            while done < cap:
+                chunk = min(TIME_CHECK_EVERY, cap - done)
+                for _ in range(chunk):
+                    self._simulate(root)
+                done += chunk
+                if time.perf_counter() >= deadline:
+                    break
+        elapsed = time.perf_counter() - started
 
         total = root.n_visits
         policy = np.zeros(ACTION_SPACE, dtype=np.float32)
@@ -266,7 +307,7 @@ class MCTS:
             if n and total:
                 policy[action] = n / total
         root_value = (sum(root.wins) / total) if total else value
-        return SearchResult(policy, float(root_value), visits, total)
+        return SearchResult(policy, float(root_value), visits, total, float(elapsed))
 
     # ------------------------------------------------------------------ guts
     def _new_node(self, state: AzulState) -> Node:
