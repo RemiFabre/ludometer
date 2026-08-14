@@ -4,6 +4,17 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-14 — run1 halfway report
+
+- 12,288 / 25,000 games. Current Elo **+1467 ± 55** — it has passed every scripted baseline
+  (greedy +1220 at ~5k games, heuristic +1378 at ~9k) and now beats the heuristic 75%.
+- **First linearity readout: slope ≈ 101 Elo per 1k games, R² = 0.924 over 25 evals.**
+  Early curve was steeper (~+300/1k up to 4k games) and it eased to ~+50/1k after 8k —
+  so on raw game count the curve is concave rather than strictly linear. Worth discussing:
+  Elo-vs-log(games) or Elo-vs-wall-clock may be the fairer x-axis for your hypothesis; the
+  dashboard shows the raw-games fit.
+- No crashes, heartbeat steady, ~135 self-play games/min sustained.
+
 ## 2026-08-14 — run1 is training (evening)
 
 - **The full stack is built**: engine (57 tests), baselines + Bradley-Terry Elo

@@ -2,10 +2,10 @@
   "run": "run1",
   "state": "running",
   "started": "2026-08-14T18:03:37Z",
-  "updated": "2026-08-14T18:04:20Z",
+  "updated": "2026-08-14T19:34:33Z",
   "ended": null,
   "error": null,
-  "games": 0,
-  "steps": 0,
-  "note": "iter 1: self-play 34/64 games"
+  "games": 12352,
+  "steps": 3783,
+  "note": "iter 194: self-play 40/64 games"
 }
