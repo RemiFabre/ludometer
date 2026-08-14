@@ -4,6 +4,30 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-14 — You can now play the strongest model in two commands
+
+- **How to play it** (this is the whole thing):
+  ```bash
+  uv run ludometer-gui      # http://127.0.0.1:8737/ — then press "Deal tiles"
+  ```
+  The Opponent dropdown already sits on **“Strongest trained (auto)”**, and next to it you
+  see which checkpoint that is (e.g. `ckpt-023040 · +1920 Elo · run run1`). The table-talk
+  panel says it again once you start: *“You're facing ckpt-023040, rated +1920 on our
+  internal ladder.”* Nothing to copy-paste any more.
+- **It resolves at deal time, not page load.** The new `best` agent spec scans
+  `runs/*/elo.jsonl` and picks the highest-Elo checkpoint whose `.pt` still exists. run1 is
+  training as I write this, so every new game you deal faces the newest strongest
+  checkpoint — leave the tab open overnight, hit "Deal tiles" in the morning and you are
+  playing a stronger opponent than tonight, with no config change.
+- **Sims selector** next to the dropdown: 100 (blink-fast, weaker) / **400** (default,
+  ~1 s per move) / 1200 (strongest, a few seconds per move). Elo is measured at the
+  trainer's eval sims, so 100 plays below its rating and 1200 a bit above.
+- Fair warning: at +1920 Elo it beats the heuristic baseline ~83% of the time, so expect to
+  lose. The "Suggest a move" button is still the heuristic, not this net.
+- Baselines (heuristic / greedy / random) and hand-typed
+  `mcts:runs/run1/checkpoints/<name>.pt?sims=N` specs are still in the dropdown if you want
+  to feel the difference between rungs of the ladder.
+
 ## 2026-08-14 — run1 halfway report
 
 - 12,288 / 25,000 games. Current Elo **+1467 ± 55** — it has passed every scripted baseline

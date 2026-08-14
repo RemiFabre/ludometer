@@ -18,10 +18,20 @@
     <label class="field">
       <span class="field-label">Opponent</span>
       <select id="opponent">
+        <option value="best">Strongest trained (auto)</option>
         <option value="heuristic">Heuristic</option>
         <option value="greedy">Greedy</option>
         <option value="random">Random</option>
         <option value="custom">Trained checkpoint…</option>
+      </select>
+      <span class="field-note" id="opponent-note"></span>
+    </label>
+    <label class="field field-narrow hidden" id="sims-field">
+      <span class="field-label">Sims</span>
+      <select id="sims">
+        <option value="100">100 · quick</option>
+        <option value="400" selected>400 · strong</option>
+        <option value="1200">1200 · slow</option>
       </select>
     </label>
     <label class="field field-wide hidden" id="spec-field">
@@ -72,6 +82,7 @@
     <section class="panel narration" aria-labelledby="log-title">
       <h2 class="panel-title" id="log-title">Table talk</h2>
       <p class="last-move" id="last-move" aria-live="polite">Deal the tiles to begin.</p>
+      <p class="facing hidden" id="facing"></p>
       <ol class="log" id="log"></ol>
     </section>
 

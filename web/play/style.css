@@ -101,6 +101,14 @@ button, input, select { font: inherit; color: inherit; }
 }
 .field-wide input { min-width: 340px; }
 .field-narrow input { min-width: 78px; width: 88px; }
+.field-narrow select { min-width: 108px; }
+.field-note {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+  min-height: 13px;
+}
 .check { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; font-size: 14px; }
 
 .btn {
@@ -377,6 +385,14 @@ button.floor.open:hover { background: rgba(194, 58, 49, .18); }
 
 /* ---------------------------------------------------------------- narration */
 .last-move { margin: 0 0 10px; font-family: var(--font-display); font-size: 18px; line-height: 1.35; }
+.facing {
+  margin: -4px 0 10px;
+  padding: 6px 9px;
+  border-left: 2px solid var(--c1);
+  background: rgba(214, 176, 74, .12);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
 .log { margin: 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; font-size: 13.5px; }
 .log li { padding: 4px 0 4px 10px; border-left: 2px solid var(--grout); color: var(--ink-soft); }
 .log li.human { border-left-color: var(--c4); }

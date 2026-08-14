@@ -82,6 +82,8 @@ def test_new_game_state_shape(client):
         "seed",
         "opponent_spec",
         "agent_name",
+        "opponent_info",
+        "opponent_blurb",
         "human_seat",
         "ai_seat",
         "your_turn",
@@ -120,6 +122,7 @@ def test_new_game_state_shape(client):
     assert data["your_turn"] is True
     assert data["seed"] == 12
     assert data["agent_name"] == "heuristic"
+    assert data["opponent_info"] is None and data["opponent_blurb"] is None
     assert data["final"] is None
     assert data["last_ai_move"] is None
     assert data["human_legal_actions"] == data["legal_actions"]
@@ -148,10 +151,25 @@ def test_seed_is_optional_and_reproducible(client):
 
 
 def test_agents_endpoint_lists_the_dropdown(client):
+    """The dropdown offers the baselines plus the auto-resolved best checkpoint.
+
+    ``default`` is "best" on a machine that has trained something and
+    "heuristic" on a fresh clone — see tests/test_registry_best.py for both paths
+    against a fake runs/ tree.
+    """
     data = client.get("/api/agents").get_json()
-    assert data["default"] == "heuristic"
+    assert data["default"] in ("best", "heuristic")
+    assert data["fallback_default"] == "heuristic"
     assert set(data["baselines"]) == {"heuristic", "greedy", "random"}
     assert "mcts:" in data["custom_example"]
+    best = data["best"]
+    assert best["spec"] == "best" and best["label"]
+    assert best["sims_choices"] and best["default_sims"] in best["sims_choices"]
+    if best["available"]:
+        assert data["default"] == "best"
+        assert best["checkpoint"] and best["run"] and "Elo" in best["detail"]
+    else:
+        assert data["default"] == "heuristic" and best["error"]
 
 
 # ------------------------------------------------------------------ full games

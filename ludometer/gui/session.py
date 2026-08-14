@@ -46,6 +46,10 @@ class GameSession:
         # built first: a bad spec must not leave a half-initialised session
         self.agent = load_agent(opponent_spec, seed=self.seed ^ 0x5EED)
         self.agent_name = getattr(self.agent, "name", opponent_spec)
+        # for "best"/"mcts:" specs: which checkpoint the spec resolved to
+        self.opponent_info: dict[str, Any] = dict(
+            getattr(self.agent, "spec_info", None) or {}
+        )
         self.human_plays_first = bool(human_plays_first)
         self.human_seat = 0 if self.human_plays_first else 1
         self.ai_seat = 1 - self.human_seat
@@ -62,6 +66,8 @@ class GameSession:
             f"{'You' if self.human_plays_first else 'The AI'} start"
             f"{'' if self.human_plays_first else 's'}.",
         )
+        if self.opponent_blurb:
+            self._log("start", self.opponent_blurb)
         # the AI opens when the human took the second seat
         self.last_ai_moves = self._ai_replies()
 
@@ -70,6 +76,19 @@ class GameSession:
         entry = {"n": len(self.log), "kind": kind, "text": text, **extra}
         self.log.append(entry)
         return entry
+
+    @property
+    def opponent_blurb(self) -> str:
+        """One line naming the checkpoint behind a ``best``/``mcts:`` opponent."""
+        info = self.opponent_info
+        ckpt = info.get("checkpoint")
+        if not ckpt:
+            return ""
+        elo = info.get("elo")
+        rated = f", rated {elo:+.0f} on our internal ladder" if elo is not None else ""
+        sims = info.get("sims")
+        thinking = f" It searches {sims} positions per move." if sims else ""
+        return f"You're facing {ckpt}{rated}.{thinking}"
 
     def side_of(self, player: int) -> str:
         return "human" if player == self.human_seat else "ai"
@@ -198,6 +217,8 @@ class GameSession:
             "seed": self.seed,
             "opponent_spec": self.opponent_spec,
             "agent_name": self.agent_name,
+            "opponent_info": self.opponent_info or None,
+            "opponent_blurb": self.opponent_blurb or None,
             "human_seat": self.human_seat,
             "ai_seat": self.ai_seat,
             "human_plays_first": self.human_plays_first,

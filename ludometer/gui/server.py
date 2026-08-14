@@ -14,6 +14,11 @@ service). The page in ``web/play/`` is served from disk and talks to:
 Every error is a JSON ``{"error": "..."}`` with a 400/404/500 status — the page
 turns those into a toast, so a broken ``mcts:`` checkpoint spec never kills the
 running game.
+
+``/api/agents`` resolves the ``best`` spec (strongest rated checkpoint on disk)
+on every call and offers it as the default opponent when one exists, so the page
+always shows which checkpoint the human is about to face — and picks up a newer,
+stronger one as an overnight run keeps writing checkpoints.
 """
 
 from __future__ import annotations
@@ -27,17 +32,56 @@ from typing import Any
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
+from ludometer.agents.registry import BEST_SIMS, BEST_SPEC, find_best_checkpoint
 from ludometer.gui.session import GameSession, IllegalMove
 
-__all__ = ["BASELINE_SPECS", "create_app", "main"]
+__all__ = [
+    "BASELINE_SPECS",
+    "BEST_LABEL",
+    "SIMS_CHOICES",
+    "best_entry",
+    "create_app",
+    "main",
+]
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8737
 DEFAULT_SPEC = "heuristic"
 BASELINE_SPECS = ("heuristic", "greedy", "random")
+BEST_LABEL = "Strongest trained (auto)"
+SIMS_CHOICES = (100, 400, 1200)
 
 # repo layout: <root>/ludometer/gui/server.py and <root>/web/play/
 PLAY_DIR = Path(__file__).resolve().parents[2] / "web" / "play"
+
+
+def best_entry() -> dict[str, Any]:
+    """Describe the ``best`` opponent for the dropdown, resolved right now.
+
+    ``available`` is False (with a human-readable ``error``) when no rated
+    checkpoint is on disk yet; the page then falls back to the heuristic.
+    """
+    entry: dict[str, Any] = {
+        "spec": BEST_SPEC,
+        "label": BEST_LABEL,
+        "sims_choices": list(SIMS_CHOICES),
+        "default_sims": BEST_SIMS,
+    }
+    try:
+        best = find_best_checkpoint()
+    except Exception as exc:  # noqa: BLE001 - missing runs dir, no ratings yet
+        entry["available"] = False
+        entry["error"] = str(exc)
+        return entry
+    entry.update(
+        available=True,
+        run=best.run,
+        checkpoint=best.ckpt,
+        elo=round(best.elo, 1),
+        path=str(best.path),
+        detail=f"{best.ckpt} · {best.elo:+.0f} Elo · run {best.run}",
+    )
+    return entry
 
 
 def create_app(play_dir: Path | None = None) -> Flask:
@@ -83,10 +127,14 @@ def create_app(play_dir: Path | None = None) -> Flask:
     # --------------------------------------------------------------------- api
     @app.get("/api/agents")
     def agents():
+        best = best_entry()
         return jsonify(
             {
                 "baselines": list(BASELINE_SPECS),
-                "default": DEFAULT_SPEC,
+                # "best" wins by default: playing the strongest model is the point
+                "default": BEST_SPEC if best["available"] else DEFAULT_SPEC,
+                "fallback_default": DEFAULT_SPEC,
+                "best": best,
                 "custom_example": "mcts:runs/<run>/checkpoints/<name>.pt?sims=400",
             }
         )

@@ -19,6 +19,8 @@ const el = (id) => document.getElementById(id);
 const ui = {
   matchup: el("matchup"), setup: el("setup"), opponent: el("opponent"),
   specField: el("spec-field"), spec: el("spec"), seed: el("seed"), first: el("first"),
+  opponentNote: el("opponent-note"), simsField: el("sims-field"), sims: el("sims"),
+  facing: el("facing"),
   deal: el("deal"), factories: el("factories"), center: el("center"), turn: el("turn"),
   scoreHuman: el("score-human"), scoreAi: el("score-ai"), boardAi: el("board-ai"),
   boardHuman: el("board-human"), lastMove: el("last-move"), log: el("log"),
@@ -32,6 +34,7 @@ let sel = null;        // {source, color} — tiles the player is holding
 let suggestion = null; // {source, color, dest} from /api/hint
 let busy = false;      // a request is in flight
 let sheets = [];       // queued round-end / game-end overlays
+let bestInfo = null;   // /api/agents "best" entry: which checkpoint is strongest
 
 /* ------------------------------------------------------------------ plumbing */
 function node(tag, cls, text) {
@@ -75,6 +78,9 @@ function setBusy(on) {
 /* -------------------------------------------------------------- game control */
 function currentSpec() {
   const choice = ui.opponent.value;
+  // "best" is resolved server-side at deal time, so an overnight run's newest
+  // strongest checkpoint is picked up without touching the page.
+  if (choice === "best") return "best?sims=" + (ui.sims.value || "400");
   if (choice !== "custom") return choice;
   return ui.spec.value.trim();
 }
@@ -422,6 +428,10 @@ function renderNarration() {
   else if (last) ui.lastMove.textContent = "AI " + last.text + ".";
   else ui.lastMove.textContent = "You open. Pick a colour from a factory or the middle.";
 
+  // who the human is actually facing, for a "best"/checkpoint opponent
+  ui.facing.textContent = S.opponent_blurb || "";
+  ui.facing.classList.toggle("hidden", !S.opponent_blurb);
+
   ui.log.innerHTML = "";
   (S.log || []).forEach((entry) => {
     const li = node("li", entry.kind === "move" ? entry.side : entry.kind, entry.text);
@@ -432,7 +442,9 @@ function renderNarration() {
 
 function renderStatus() {
   const st = S.state;
-  ui.matchup.textContent = "you versus " + S.agent_name + " · seed " + S.seed;
+  const info = S.opponent_info || {};
+  const rating = typeof info.elo === "number" ? " (" + Math.round(info.elo) + " Elo)" : "";
+  ui.matchup.textContent = "you versus " + S.agent_name + rating + " · seed " + S.seed;
   if (st.is_terminal) {
     ui.turn.innerHTML = "";
     ui.turn.appendChild(node("strong", null, "Game over."));
@@ -604,13 +616,47 @@ function showNextSheet() {
 }
 
 /* --------------------------------------------------------------------- wiring */
+/** Show/hide the spec + sims fields and the note under the opponent dropdown. */
+function syncOpponentFields(focusSpec) {
+  const choice = ui.opponent.value;
+  ui.specField.classList.toggle("hidden", choice !== "custom");
+  ui.simsField.classList.toggle("hidden", choice !== "best");
+  if (choice === "best" && bestInfo && bestInfo.available) {
+    ui.opponentNote.textContent = bestInfo.detail;
+  } else if (choice === "best" && bestInfo) {
+    ui.opponentNote.textContent = "no rated checkpoint on disk yet";
+  } else {
+    ui.opponentNote.textContent = "";
+  }
+  if (focusSpec && choice === "custom") ui.spec.focus();
+}
+
 /** Fill the dropdown from the server, so the two lists cannot drift apart. */
 async function loadAgentList() {
   const custom = ui.opponent.querySelector('option[value="custom"]');
   try {
     const data = await api("/api/agents");
     if (!data.baselines || !custom) return;
+    bestInfo = data.best || null;
     ui.opponent.innerHTML = "";
+    if (bestInfo && bestInfo.available) {
+      const option = document.createElement("option");
+      option.value = "best";
+      option.textContent = bestInfo.label || "Strongest trained (auto)";
+      ui.opponent.appendChild(option);
+      const choices = bestInfo.sims_choices || [];
+      if (choices.length) {
+        ui.sims.innerHTML = "";
+        const labels = { 100: " · quick", 400: " · strong", 1200: " · slow" };
+        choices.forEach((n) => {
+          const opt = document.createElement("option");
+          opt.value = String(n);
+          opt.textContent = n + (labels[n] || "");
+          ui.sims.appendChild(opt);
+        });
+      }
+      ui.sims.value = String(bestInfo.default_sims || 400);
+    }
     data.baselines.forEach((spec) => {
       const option = document.createElement("option");
       option.value = spec;
@@ -618,19 +664,16 @@ async function loadAgentList() {
       ui.opponent.appendChild(option);
     });
     ui.opponent.appendChild(custom);
-    ui.opponent.value = data.default || data.baselines[0];
+    ui.opponent.value = data.default || data.fallback_default || data.baselines[0];
     if (data.custom_example) ui.spec.placeholder = data.custom_example;
   } catch (err) {
     // the markup already lists the baselines; nothing to do
   }
+  syncOpponentFields(false);
 }
 
 ui.setup.addEventListener("submit", newGame);
-ui.opponent.addEventListener("change", () => {
-  const custom = ui.opponent.value === "custom";
-  ui.specField.classList.toggle("hidden", !custom);
-  if (custom) ui.spec.focus();
-});
+ui.opponent.addEventListener("change", () => syncOpponentFields(true));
 ui.hint.addEventListener("click", askHint);
 ui.cancel.addEventListener("click", () => { sel = null; suggestion = null; render(); });
 ui.overlayOk.addEventListener("click", () => {
