@@ -40,7 +40,9 @@ The strongest trained net, playable by anyone, with **nothing running on a serve
 Open the page and the tab downloads the exported net once (~16 MB over the wire, cached
 afterwards), then plays Azul against you entirely on your own machine — the same PUCT tree
 search the trainer uses, running in a Web Worker on top of onnxruntime-web (WASM). No
-account, no upload, works offline once loaded, and fine on a phone.
+account, no upload of anything about you — the only outbound request is the public,
+anonymous tally ping described above. Works offline once loaded (the tally simply skips),
+and fine on a phone.
 
 The header names which checkpoint you are facing and its internal Elo; **AI thinks for**
 (instant / 3 / 5 / 10 s) is the same strength dial as the local GUI, and the table talk

@@ -234,7 +234,10 @@ sims/move, so even the pessimistic end is ~50× more search than the rating was 
 
 **Payload.** 26.9 MB on disk, **~15.9 MB over the wire** (GitHub Pages gzips both big
 files): 13.3 MB ONNX → 12.4 MB, 13.5 MB onnxruntime wasm → 3.5 MB, plus ~150 KB of my own
-JS/CSS/HTML. All vendored, no CDN, no third-party request at runtime. The page streams the
+JS/CSS/HTML. All vendored, no CDN, no third-party *code* at runtime. (Since 2026-08-16
+there is exactly one third-party *request*: the anonymous, cookie-free GoatCounter tally
+ping — Rémi's call, publicly readable at faience.goatcounter.com, and disclosed in the
+game's About panel.) The page streams the
 download and shows a percentage, because on a phone that is several seconds of nothing.
 
 **The part I was most worried about, and how it is nailed down.** The browser needs the Azul
