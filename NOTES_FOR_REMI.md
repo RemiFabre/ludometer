@@ -4,6 +4,90 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-15 — GUI v3, and **why you never saw the animations**
+
+You asked for tile animations repeatedly, and kept telling me the tiles still moved
+instantly. Every agent before me implemented the flights, verified them in headless Chrome,
+and reported them done. You were both right. Here is the actual cause.
+
+**Your Mac has "Reduce motion" switched on.**
+
+```
+$ defaults read com.apple.Accessibility ReduceMotionEnabled
+1
+```
+
+Safari and Chrome forward that to pages as `prefers-reduced-motion: reduce`, and the GUI
+honoured it in **two** independent places:
+
+1. `web/play/ui/animate.js` — `flyTiles()` returned immediately when the flag was set, and
+   `sleep()` collapsed to zero, so no tile ever left its square;
+2. `web/play/ui/board.css` — a blanket `@media (prefers-reduced-motion: reduce)` rule forced
+   `transition-duration: .001ms !important` on *every element on the page*, which would have
+   killed the flights even if the JavaScript had run.
+
+So the code was doing exactly what it said, there was no setting anywhere that could turn
+the animation back on, and the tests passed because
+`web/player/test/browser.test.mjs` set `prefers-reduced-motion: no-preference` before it
+looked — a line with a comment explaining that the page "honours that by not animating at
+all". The blind spot was documented and then tested around.
+
+Both gates are gone. **Motion is now governed by one thing: a setting in the page.**
+
+### What shipped, in the local GUI *and* on the public site
+
+- **A gear under the status band** opens an inline panel (no pop-up — this page still has
+  none) with `Off / 0.5× / 1× / 2×`, default **1×**, remembered in `localStorage`. When your
+  OS asks for reduced motion the panel says so out loud and tells you this switch decides —
+  it does not quietly obey.
+- **Every tile movement animates**: the tiles you take, *the rest of the factory falling into
+  the middle* (the one you called out), the first-player marker, full pattern lines onto the
+  wall at round end, the floor line into the lid — and the AI's moves the same way.
+- **Both** of the AI's moves when a round boundary puts it on move twice. That gap was real:
+  its second move starts from a table the engine scored and refilled *inside* the first move,
+  a position the page had never been given. Every move now reports `state_before`, so the
+  refilled table is drawn and then the second move plays out.
+- **Filled vs empty, rebuilt.** This is your wife's complaint and she was right: every empty
+  wall square used to be a pale tint of the colour that belongs there, so each board was
+  forty pastel squares with five real tiles hidden in them. New rule — **hue means
+  occupied**: a tile is saturated, rimmed and raised; every empty square is the same neutral,
+  recessed well; the wall keeps its pattern as a thin *outlined* diamond in the tile's ink.
+  Glazes nudged closer to the physical tiles. Before/after screenshots are worth a look.
+- **One theme file.** Every colour in the game — five glazes, boards, slots, dishes, panels,
+  buttons — is a custom property in `web/play/ui/theme.css`. `board.css` and both page shells
+  contain **zero** hex literals now, and a test fails if one appears. `THEMING.md` explains
+  how to write a skin and ships one (`dusk`) as a worked example, so restyling is one file.
+- **Move navigation like chess.** ← / → step through every position, `End` (or the **Latest**
+  button) returns to play, and the band reads *"Viewing move 12 of 31"*. Pure client-side
+  replay of positions the page already holds — no request, no re-search, live game untouched.
+  Works on finished games.
+- **Pictographic move log, newest first.** The tiles that moved are drawn as tiles in the
+  board's glazes (*▪▪▪ factory 3 → row 5*); only the places stay as words. Every entry drawn
+  identically, including the newest — the status band is where "now" lives.
+
+### How it is proved this time
+
+`web/play/test/gui.test.mjs` drives **both** tables in headless Chrome — it starts the Flask
+GUI itself — and runs every motion check **twice, once in each `prefers-reduced-motion`
+state**. It counts flight clones and measures their transition durations: 460 ms at 1×,
+230 ms at 2×, 920 ms at 0.5×, none at Off. It also walks the history with the arrow keys,
+checks the log is glyphs and newest-first, asserts filled and empty squares differ in
+*computed colour* (not class name), and flips `[data-skin]` to prove the palette really is
+centralised. On the last run: **31/31 and 29/29 moves animated, 3 and 2 double AI moves
+respectively**. `tests/test_gui.py` is at 51 tests (257 across the suite), and the two `ui/`
+copies must be byte-identical or the suite fails.
+
+### One thing to know
+
+If you *liked* not having animations, the gear now has an `Off` preset and it sticks. The
+difference is that it is your choice rather than a side effect of an accessibility setting
+you turned on years ago for something else.
+
+The public site is redeployed and now serves **`run3/ckpt-007680`, +2198 Elo** (was
+ckpt-001024, +2185) — `deploy_player.sh` picks the strongest checkpoint on disk each time.
+
+---
+
 ## 2026-08-15 — Public player now matches the new GUI, and serves a **run3** checkpoint
 
 <https://remifabre.github.io/ludometer/> is redeployed with the redesigned table **and** a
