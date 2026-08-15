@@ -4,6 +4,23 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-15 — run2 retired at +2020, run3 (structured net) is training
+
+- **run2 final**: best checkpoint **ckpt-023040 at +2020 ± 39** after ~24.5k games — a hair
+  above run1's +2014 but with clearly better per-game learning. I stopped it at midday: its
+  gains had flattened to ~+20 Elo/1k games, and the compute is better spent on run3.
+- **run3 is the redesign**: instead of a flat MLP, a *structured* net that sees the board as
+  22 entities (factories, pattern rows tied to their wall rows, floors, supply) mixed by
+  self-attention, with a factorized source×color×destination policy head. Plus: 512 sims/move
+  self-play (2× run2) made affordable by MCTS tree reuse, and it **warm-starts by pretraining
+  on run2's entire 500k-position replay buffer** — it begins where run2's knowledge left off
+  rather than from scratch. Both run1's and run2's best are pinned as Elo anchors, same ruler.
+- Mid-day incident, resolved: run2 crashed once when the run3 build agent edited MCTS code
+  in-place (training workers import live source). Fixed by moving all build work to isolated
+  git worktrees; run2 lost ~20 minutes, nothing else.
+- The dashboard now shows all three runs; the browser player still serves run2's best and
+  I'll redeploy it the moment run3 produces a stronger checkpoint.
+
 ## 2026-08-15 — Anyone can now play our best net, in their browser: **https://remifabre.github.io/ludometer/**
 
 Send that link to anyone. It opens a full Azul game against **run2/ckpt-023040 (+2020 Elo)**

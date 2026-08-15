@@ -1,11 +1,11 @@
 {
   "run": "run2",
-  "state": "running",
+  "state": "failed",
   "started": "2026-08-14T21:16:15Z",
-  "updated": "2026-08-15T08:50:58Z",
-  "ended": null,
-  "error": null,
-  "games": 22528,
-  "steps": 6983,
-  "note": "iter 353: self-play 48/64 games"
+  "updated": "2026-08-15T09:56:45Z",
+  "ended": "2026-08-15T09:56:44Z",
+  "error": "KeyboardInterrupt: SIGTERM",
+  "games": 24448,
+  "steps": 7583,
+  "note": "failed: KeyboardInterrupt: SIGTERM"
 }
