@@ -413,6 +413,54 @@ async function checkLog(page, label, errors) {
   console.log(`    ${label}: ${log.moves} moves, ${log.glyphs} glyphs, newest first (${log.places[0]})`);
 }
 
+/**
+ * Coach verdicts survive the reversed log.
+ *
+ * The chip is attached to the entry it is about, not to a position in the list,
+ * so drawing newest-first must not move it onto someone else's move. Skipped
+ * where the opponent has no search to borrow (the scripted baselines).
+ */
+async function checkCoach(page, label, errors) {
+  const available = await page.eval(`
+    const box = document.getElementById("coach");
+    if (box.disabled) return false;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    return true;
+  `);
+  if (!available) {
+    console.log(`    ${label}: coach mode unavailable against this opponent — skipped`);
+    return;
+  }
+  await playMoves(page, 1);
+  const chips = await page.eval(`
+    const withChip = [...document.querySelectorAll("#log .log-entry")]
+      .filter((e) => e.querySelector(".coach-chip"));
+    return withChip.map((e) => ({
+      kind: e.dataset.kind,
+      side: e.dataset.side,
+      grade: e.querySelector(".coach-chip").dataset.grade,
+      glyphs: e.querySelectorAll(".glyph").length,
+      text: e.querySelector(".coach-delta").textContent,
+    }));
+  `);
+  await page.eval(`
+    const box = document.getElementById("coach");
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    return true;
+  `);
+  if (!chips.length) return errors.push(`${label}: coach mode produced no verdict`);
+  chips.forEach((c) => {
+    if (c.kind !== "move" || c.side !== "human") {
+      errors.push(`${label}: a coach chip landed on a ${c.side} ${c.kind} entry`);
+    }
+    if (!c.grade) errors.push(`${label}: a coach chip has no grade`);
+    if (!c.glyphs) errors.push(`${label}: a rated move lost its tile glyphs`);
+  });
+  console.log(`    ${label}: ${chips.length} coach chip(s), all on your own moves (${chips[0].text})`);
+}
+
 /** ← and → walk the game; the live position is untouched while you look. */
 async function checkHistory(page, label, errors) {
   const key = (k) => page.eval(`
@@ -547,6 +595,7 @@ async function checkPage({ name, url, deal, errors, shots }) {
     console.log(`    ${name}: played ${played} moves`);
     await checkEveryMoveAnimated(page, name, errors);
     await checkLog(page, name, errors);
+    await checkCoach(page, name, errors);
     await checkHistory(page, name, errors);
 
     // 5. Nothing may cover the board, settings panel included.
