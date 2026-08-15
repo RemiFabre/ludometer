@@ -1,2 +1,3 @@
 {"date": "2026-08-15", "human": "R's wife", "human_level": "BGA Azul ~700 Elo (~top 0.1%)", "opponent": "run2 best (+2020, ~5s think)", "games": 1, "human_wins": 1, "note": "single morning game, local GUI"}
 {"date": "2026-08-15", "human": "R's wife", "human_level": "BGA Azul ~700 Elo (~top 0.1%)", "opponent": "run3/ckpt-001024 (+2185 internal, 5s think)", "games": 5, "human_wins": 1, "seed": 400727202, "note": "AI won 4/5 -> AI ~ +241 Elo above her, 95% CI [-88, +570]"}
+{"date": "2026-08-16", "human": "Remi", "human_level": "strong (BGA level unknown)", "opponent": "run3/ckpt-020992 (+2336 internal)", "games": 1, "human_wins": 1, "seed": 694278719, "note": "Remi won; also observed lazy endgame moves when win already decided"}
