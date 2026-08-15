@@ -670,6 +670,7 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
   .setup .field { flex: 1 1 120px; }
   .btn { padding: 10px 14px; min-height: 44px; }
   .check { padding-bottom: 0; min-height: 44px; }
+  .check input { width: 20px; height: 20px; }
 
   .table { padding: 10px 10px 32px; gap: 10px; }
   .panel { padding: 11px 11px 13px; }

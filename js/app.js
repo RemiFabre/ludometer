@@ -138,9 +138,14 @@ async function bootEngine() {
         modelUrl: new URL("../model/model.onnx", import.meta.url).href,
       },
       (msg) => {
-        if (msg.type !== "loading" || !msg.total) return;
-        const pct = Math.round((msg.received / msg.total) * 100);
-        ui.engineText.textContent = `Downloading the net — ${pct}% of ${(msg.total / 1e6).toFixed(1)} MB`;
+        if (msg.type !== "loading") return;
+        // GitHub Pages gzips the .onnx, so content-length is the *compressed*
+        // size while `received` counts decompressed bytes: prefer the true size
+        // from the metadata, and never show more than 100%.
+        const total = (meta && meta.onnx_bytes) || msg.total;
+        if (!total) return;
+        const pct = Math.min(100, Math.round((msg.received / total) * 100));
+        ui.engineText.textContent = `Downloading the net — ${pct}% of ${(total / 1e6).toFixed(1)} MB`;
       }
     );
   } catch (err) {
