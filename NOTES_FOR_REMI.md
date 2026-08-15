@@ -4,6 +4,155 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-16 — "Would a faster language help?" — **no, and here is the profile**. The browser player now uses your GPU
+
+You asked whether re-implementing the search in a much faster language, to explore more
+nodes, would get us to superhuman. I profiled a real 5-second think instead of guessing.
+**A faster engine language buys +2%. The answer was never the language — it was the batch
+size.** The player now searches **6× more positions per second** on any browser with WebGPU,
+and 1.8× more on the ones without.
+
+### Where a 5-second think actually goes
+
+One search from a real midgame position, node + the vendored WASM runtime, every call timed:
+
+| | share of the wall clock |
+| --- | --- |
+| `session.run` — the neural net | **91.6 %** |
+| everything the "engine" does (clone, apply, legal moves, encode) | **2.3 %** |
+| the search itself (PUCT select, backup, tensor alloc, softmax, awaits) | 6.1 % |
+
+7,154 simulations in 5.00 s = **1,431 positions/s**, of which 0.64 ms per position is the net.
+The same search with the net replaced by a stub that returns instantly runs at **34,610
+positions/s** — 24× faster. So an infinitely fast Rust/C engine, with the same net, would take
+us from 1,431 to about 1,464 positions/s. **+2.3%.** Not a rounding error away from nothing,
+but close enough that it would be the worst-value week of work on this project.
+
+That is the honest answer to the question: the JavaScript is not the problem. **We are
+inference-bound, and we were inference-bound in the dumbest possible way — one position per
+forward pass.**
+
+### What was actually being wasted
+
+A 1.7M-parameter net evaluated one position at a time uses a fraction of the machine. Raw
+`session.run` throughput in Chrome on the M3 Pro:
+
+| batch | WASM (CPU) | WebGPU |
+| --- | --- | --- |
+| 1 | 2,079 pos/s | **249 pos/s** |
+| 8 | 3,634 | 1,935 |
+| 16 | 3,969 | 4,555 |
+| 32 | 4,177 | 8,202 |
+| 64 | 4,167 | **16,537** |
+| 256 | 4,108 | **49,797** |
+
+Read the WebGPU column carefully, because it is the trap. **A GPU dispatch costs ~3.9 ms
+whatever you put in it.** At batch 1 WebGPU is *eight times slower* than the CPU. Anyone who
+"adds WebGPU" to this player without touching the search would ship a 6× regression and a
+2.9 MB download to pay for it. That is the measurement that decided the whole design.
+
+### What shipped
+
+**Batched search with virtual loss.** The search now gathers up to N leaves per forward pass:
+each descent lays a virtual loss on the edges it walks so the next descent is pushed
+elsewhere, all N are evaluated in one dispatch, then the real values are backed up and the
+assumed losses removed. The bookkeeping is exact — a finished batch leaves the tree in
+precisely the state the same leaf evaluations would have left it in sequentially, which the
+tests assert directly (visits sum to the simulation count; no Q escapes [-1, 1]).
+
+**A second onnxruntime build, downloaded only if it will be used.** The worker feature-detects
+`navigator.gpu` + JSPI and loads the WebGPU runtime; anything else — Safari today, Firefox
+today, an old Chrome, a machine with no adapter — takes the WASM path that shipped before, and
+never requests the WebGPU binary at all. A WebGPU session that creates and then fails on its
+first dispatch also falls back, because the warm-up evaluation is inside the try.
+
+Full search, Chrome, 4-second budget, same position:
+
+| | positions/s | vs what was deployed |
+| --- | --- | --- |
+| WASM, batch 1 (what was live) | 1,639 | — |
+| WASM, batch 16 (now live) | 2,943 | **1.8×** |
+| WebGPU, batch 64 (now live) | 10,117 | **6.2×** |
+
+The page says which one it got: the engine bar now reads "searching on your GPU (WebGPU)" or
+"…your CPU (WebAssembly)", and the about line carries the batch size and the machine's own
+measured positions/s once the first search has run.
+
+### The part I nearly got wrong
+
+More positions is only worth having if it wins games, so I checked instead of assuming — and
+the first version of this was **much weaker**. At equal simulation counts, a flat batch of 64
+lost **3–17** to the old one-at-a-time search. With nothing in the tree yet, virtual loss
+shoves all 64 descents down 64 different early branches and an 800-simulation search never
+recovers from spending its first eighth that way.
+
+The damage is a function of *batch ÷ tree*, so the batch now starts small and grows with the
+tree (never more than a sixteenth of it, with a floor of 8 on the GPU where a batch of one is
+just a wasted dispatch). That took the same equal-node match from 15% to 25% — still a real
+per-simulation cost, which is the honest way to describe batching: **you are buying quantity
+at a small price in quality.**
+
+The trade only matters if the quantity wins. Head to head in Chrome, 1.5 s a move, the new
+player (WebGPU, batch 64) against exactly what was deployed yesterday (WASM, batch 1):
+**7 wins, 3 losses, 2 draws — 66.7%, about +120 Elo**, at 3.85× the
+positions/s (10,743 vs 2,788). Twelve games is a wide error bar and I will not pretend
+otherwise, but the sign is not in doubt and the node count is measured, not estimated.
+
+### Payload
+
+Nothing changed for a visitor without WebGPU. A visitor with it downloads the WebGPU runtime
+instead of the CPU one, which is **+0.24 MB gzipped** (3.66 MB vs 3.42 MB) on top of the 6.5 MB
+model. I picked the JSPI build for exactly this reason: the other two WebGPU builds
+onnxruntime ships are +2.5 MB and +2.9 MB gzipped for the same feature, and both measured
+slower (16.5k vs 11.2k vs 9.5k positions/s at batch 64). The repo carries both runtimes —
+35 MB in `web/player/` — but no one downloads both.
+
+Safari and Firefox have WebGPU but not JSPI yet, so they stay on the CPU path today and will
+flip to the GPU on their own, with no change here, when they ship it.
+
+### run4's margin head is already wired up
+
+You said run4 gains a third output that predicts the score gap. The deployed player now
+**feature-detects it**: it reads the session's output names, and if `margin` is there the
+search averages it up the tree alongside the value and picks the root move
+lexicographically — among the moves whose win-Q is within 0.03 of the best, play the one with
+the biggest expected gap. A win is never traded for points, and a move the search barely
+looked at cannot define "the best" (a candidate needs a tenth of the top child's visits — a
+one-visit edge with a lucky Q of +1.0 would otherwise drag the window). Two-output models keep
+the current behaviour bit for bit.
+
+So when you export run4, the live page starts playing decisively **without a JavaScript
+redeploy**. It is tested against two hand-built ONNX graphs (`test/fixtures/toy_*.onnx`, three
+outputs and two) that route their input straight to their outputs, so the expected answer is
+exact rather than approximate.
+
+### What this means for superhuman
+
+The ceiling moved, but it is worth being clear about which ceiling. At 5 seconds a move the
+player went from ~8,000 positions to ~50,000 on a WebGPU machine. In MCTS that is worth
+roughly two and a half doublings of search — real, and the sort of thing that shows up as the
+opponent no longer missing tactics, but it is not a different kind of player. **The remaining
+gap to superhuman is in the net, not in the search budget**, and the profile says so: we spend
+92% of the clock asking a 1.7M-parameter net what it thinks, and its answer is the thing that
+is not yet superhuman.
+
+Two things follow that are worth knowing before spending a week anywhere:
+
+- **A bigger net is now affordable on the GPU and not on the CPU.** At batch 64 the GPU is
+  doing 16.5k positions/s on a net that only needs 4.2k to keep the old search fed. There is
+  roughly 4× of net capacity available for free on WebGPU machines before the search slows
+  back to where it was. If run5 wants to be 4× bigger, the browser can already carry it —
+  though the CPU fallback could not, so that would become a two-model decision.
+- **The engine language question comes back, but only later.** At 1,431 positions/s the engine
+  was 2.3% of the clock. At 10,117 it is closer to 25%, and if the net were ever made much
+  faster still it would be the wall. So "rewrite it in Rust" is not wrong forever — it is
+  wrong *now*, by a factor of forty, and it becomes worth measuring again only after the net
+  stops being the bottleneck. WASM-compiled Rust for the engine, not a rewrite of the page.
+
+Gates: engine fixtures, WASM parity against torch, **WebGPU parity against the same torch
+reference** (value agrees to 8×10⁻⁷, and it never ranks a different move first), the new
+margin/batching test, selfplay, and the headless-Chrome page test all green before the deploy.
+
 ## 2026-08-16 — run3 retired (~+2255 true), run4 training with a "win big" head
 
 - **run3 final**: 29,000 games, ~12.9 h. Its headline +2336 was a measurement spike: I re-rated

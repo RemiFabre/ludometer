@@ -25,6 +25,25 @@
  * inference (batch of 1), and the loop yields to the event loop periodically so a
  * worker can still answer messages. Dirichlet noise is not ported — it only ever
  * applies to self-play training, never to a game against a human.
+ *
+ * Batching (`config.batch > 1`). A profile of a 5 s think said 92 % of it is
+ * spent inside one `session.run` per simulation — the search itself, cloning and
+ * legal-move generation included, is 2 %. The only way to buy more positions is
+ * therefore to put more of them in each forward pass, which is what `_collect`
+ * does: descend `batch` times, each descent laying down a **virtual loss** on the
+ * edges it walks so the next one is pushed elsewhere, evaluate the whole leaf set
+ * in one dispatch, then back the real values up and take the virtual loss off
+ * again. Because the virtual loss is added and removed in the same units it is
+ * exact bookkeeping: a finished batch leaves the tree in the state the same
+ * sequence of leaf evaluations would have left it in sequentially. `batch = 1`
+ * takes the original code path, untouched.
+ *
+ * The margin head (`config.margin`). If the loaded net has a third output the
+ * search also averages it up the tree, in player 0's frame like the value, and
+ * the *root* move is then chosen lexicographically: among the moves whose win-Q
+ * is within `marginEpsilon` of the best, play the one with the largest expected
+ * score gap. A two-output net has no margin at all and keeps the old rule
+ * (most-visited child), bit for bit.
  */
 
 import { ACTION_SPACE, CENTER, Rng } from "./engine.js";
@@ -39,6 +58,34 @@ export const DEFAULT_CONFIG = {
   cPuct: 1.4,
   chanceChildren: 4,
   fpu: 0.0, // Q assumed for an unvisited edge, in the parent's frame
+  /* Leaves gathered per forward pass. 1 is the original one-at-a-time search;
+   * the worker raises it to what the active backend actually likes (measured:
+   * 16 for WASM, 64 for WebGPU). This is a *ceiling* — see `batchRamp`. */
+  batch: 1,
+  /* The batch may not exceed the tree divided by this.
+   *
+   * Measured the hard way. A flat batch of 64 from the first simulation loses
+   * 3–17 to the same search at batch 1 over the same number of simulations:
+   * with nothing in the tree yet, virtual loss pushes all 64 descents down 64
+   * different early branches, and a 800-simulation search never recovers from
+   * spending its first eighth that way. The damage is entirely a function of
+   * batch ÷ tree, so the batch starts small and grows with the tree, and by the
+   * time it is at its ceiling the tree is 16× bigger than it. */
+  batchRamp: 16,
+  /* …but never below this, because on a GPU a batch of one is not a smaller
+   * step, it is a wasted 4 ms dispatch. Raised with `batch` by the worker. */
+  minBatch: 1,
+  /* Discouragement applied to an edge already on a pending descent, in the same
+   * [-1, 1] units as the value. 1.0 = "assume it loses" is the usual choice and
+   * is what keeps a batch from collecting the same leaf `batch` times. */
+  virtualLoss: 1.0,
+  /* Root moves whose win-Q is within this of the best are considered equally
+   * good, and the margin head breaks the tie. Ignored without a margin head. */
+  marginEpsilon: 0.03,
+  /* A child must have at least this share of the most-visited child's visits to
+   * be a candidate for that tie-break — a one-visit edge can carry a Q of +1 by
+   * luck, and that must not be allowed to define "the best". */
+  marginMinVisitShare: 0.1,
 };
 
 /* Two arg-max players can loop forever in a game where no pattern line is ever
@@ -61,21 +108,27 @@ class Node {
     this.priors = null;
     this.visits = null;
     this.wins = null;
+    this.margins = null; // parallel to `wins`, only allocated with a margin head
     this.children = null; // Node | Map<string, Node> | null, per edge
     this.expanded = false;
+    this.pending = false; // already queued for evaluation in the current batch
     this.nVisits = 0;
     this.terminalV0 = state.isTerminal ? state.outcome() || 0 : 0;
+    // The margin of a finished game is the real score gap, in player 0's frame,
+    // on the same scale the head is trained on (points).
+    this.terminalMargin0 = state.isTerminal ? state.scores[0] - state.scores[1] : 0;
   }
 
   get isTerminal() {
     return this.state.isTerminal;
   }
 
-  initEdges(priors) {
+  initEdges(priors, withMargin = false) {
     const n = this.legal.length;
     this.priors = priors;
     this.visits = new Int32Array(n);
     this.wins = new Float64Array(n);
+    if (withMargin) this.margins = new Float64Array(n);
     this.children = new Array(n).fill(null);
     this.expanded = true;
   }
@@ -94,6 +147,11 @@ export class MCTS {
     this.counter = 0;
     this.nodesCreated = 0;
     this.evals = 0;
+    this.batches = 0;
+    // A margin head is a property of the loaded net, so it is read off the
+    // evaluator rather than configured — `config.margin` can still force it off.
+    this.hasMargin =
+      config.margin === false ? false : !!(evaluator && evaluator.hasMargin);
   }
 
   /**
@@ -131,12 +189,26 @@ export class MCTS {
     }
 
     const cap = this.config.sims;
+    const batch = Math.max(1, this.config.batch | 0);
+    const minBatch = Math.max(1, Math.min(batch, this.config.minBatch | 0));
+    const ramp = Math.max(1, this.config.batchRamp | 0);
     const deadline = timeLimitS > 0 ? started + timeLimitS * 1000 : Infinity;
     let done = 0;
+    let sinceYield = 0;
     while (done < cap) {
-      await this._simulate(root);
-      done += 1;
-      if (done % YIELD_EVERY === 0) {
+      // As big as the tree can afford, never bigger than the backend wants.
+      const want = Math.max(minBatch, Math.min(batch, Math.floor(root.nVisits / ramp)));
+      const step =
+        want === 1
+          ? ((await this._simulate(root)), 1)
+          : await this._simulateBatch(root, Math.min(want, cap - done));
+      // A batch that collected nothing (everything below the root is pending or
+      // terminal) would spin; stop rather than burn the clock.
+      if (step <= 0) break;
+      done += step;
+      sinceYield += step;
+      if (sinceYield >= YIELD_EVERY) {
+        sinceYield = 0;
         if (onProgress) onProgress({ sims: done, elapsedS: (nowMs() - started) / 1000 });
         await yieldToLoop();
         if (shouldStop && shouldStop()) break;
@@ -148,7 +220,6 @@ export class MCTS {
     const total = root.nVisits;
     const policy = new Float32Array(ACTION_SPACE);
     const visits = new Map();
-    let best = root.legal[0];
     let bestN = -1;
     let winsSum = 0;
     for (let i = 0; i < root.legal.length; i++) {
@@ -157,10 +228,7 @@ export class MCTS {
       visits.set(action, n);
       winsSum += root.wins[i];
       if (n && total) policy[action] = n / total;
-      if (n > bestN) {
-        bestN = n;
-        best = action;
-      }
+      if (n > bestN) bestN = n;
     }
     return {
       policy,
@@ -168,9 +236,58 @@ export class MCTS {
       visits,
       sims: total,
       elapsedS,
-      best,
+      best: this._bestRootAction(root),
       forced: false,
     };
+  }
+
+  /**
+   * The move to play from the finished tree.
+   *
+   * Without a margin head this is the rule the agent has always used and the one
+   * the Python trainer uses: the most-visited root child. With one, visits still
+   * decide which moves are *candidates* — a move the search barely looked at is
+   * not evidence of anything — but among the candidates whose win-Q is within
+   * `marginEpsilon` of the best, the largest expected score gap wins. That is
+   * what turns "wins by one point" into "wins by twenty" without ever trading a
+   * win away for points.
+   */
+  _bestRootAction(root) {
+    let bestN = -1;
+    let bestI = 0;
+    for (let i = 0; i < root.legal.length; i++) {
+      if (root.visits[i] > bestN) {
+        bestN = root.visits[i];
+        bestI = i;
+      }
+    }
+    if (!this.hasMargin || !root.margins || bestN <= 0) return root.legal[bestI];
+
+    const floor = Math.max(1, bestN * this.config.marginMinVisitShare);
+    let bestQ = -Infinity;
+    for (let i = 0; i < root.legal.length; i++) {
+      const n = root.visits[i];
+      if (n >= floor) bestQ = Math.max(bestQ, root.wins[i] / n);
+    }
+    if (!Number.isFinite(bestQ)) return root.legal[bestI];
+
+    let pickI = bestI;
+    let pickMargin = -Infinity;
+    let pickVisits = -1;
+    for (let i = 0; i < root.legal.length; i++) {
+      const n = root.visits[i];
+      if (n < floor) continue;
+      if (root.wins[i] / n < bestQ - this.config.marginEpsilon) continue;
+      const margin = root.margins[i] / n;
+      // ties on margin fall back to the visit count, so the rule stays a
+      // refinement of the old one rather than a different search
+      if (margin > pickMargin || (margin === pickMargin && n > pickVisits)) {
+        pickMargin = margin;
+        pickVisits = n;
+        pickI = i;
+      }
+    }
+    return root.legal[pickI];
   }
 
   /**
@@ -191,6 +308,8 @@ export class MCTS {
         action: root.legal[i],
         visits,
         q: visits ? root.wins[i] / visits : null,
+        // expected score gap, in the root player's frame; null without a margin head
+        margin: visits && root.margins ? root.margins[i] / visits : null,
         prior: root.priors ? root.priors[i] : 0,
       });
     }
@@ -204,9 +323,10 @@ export class MCTS {
   }
 
   async _expand(node) {
-    const { priors, value } = await this.evaluator.evaluate(node.state, node.legal);
+    const { priors, value, margin } = await this.evaluator.evaluate(node.state, node.legal);
     this.evals += 1;
-    node.initEdges(priors);
+    node.initEdges(priors, this.hasMargin);
+    node.evalMargin = this.hasMargin && margin != null ? margin : 0;
     return value;
   }
 
@@ -287,14 +407,17 @@ export class MCTS {
     let node = root;
     const path = [];
     let v0;
+    let m0 = 0;
     for (;;) {
       if (node.isTerminal) {
         v0 = node.terminalV0;
+        m0 = node.terminalMargin0;
         break;
       }
       if (!node.expanded) {
         const value = await this._expand(node);
         v0 = node.player === 0 ? value : -value;
+        m0 = node.player === 0 ? node.evalMargin : -node.evalMargin;
         break;
       }
       const index = this._select(node);
@@ -304,8 +427,91 @@ export class MCTS {
     for (const [parent, index] of path) {
       parent.visits[index] += 1;
       parent.nVisits += 1;
-      parent.wins[index] += parent.player === 0 ? v0 : -v0;
+      const sign = parent.player === 0 ? 1 : -1;
+      parent.wins[index] += sign * v0;
+      if (parent.margins) parent.margins[index] += sign * m0;
     }
+  }
+
+  /* ------------------------------------------------------------- batched search */
+
+  /**
+   * One descent, laying virtual loss as it goes.
+   *
+   * Ends either at a terminal node — backed up immediately, since no net is
+   * needed — or at an unexpanded one, which is filed in `queue` for the coming
+   * forward pass. A leaf that two descents both reach keeps one queue entry and
+   * two paths: both are real simulations and both get the same value back.
+   */
+  _collect(root, queue, byNode) {
+    const vl = this.config.virtualLoss;
+    let node = root;
+    const path = [];
+    for (;;) {
+      if (node.isTerminal) {
+        this._backup(path, node.terminalV0, node.terminalMargin0);
+        return;
+      }
+      if (!node.expanded) {
+        let entry = byNode.get(node);
+        if (!entry) {
+          entry = { node, paths: [] };
+          byNode.set(node, entry);
+          queue.push(entry);
+          node.pending = true;
+        }
+        entry.paths.push(path);
+        return;
+      }
+      const index = this._select(node);
+      // The visit is taken now and the loss assumed now; `_backup` puts the
+      // assumed loss back and adds the real value, so the finished tree is the
+      // one a sequential search would have built.
+      node.visits[index] += 1;
+      node.nVisits += 1;
+      node.wins[index] -= vl;
+      path.push([node, index]);
+      node = this._child(node, index);
+    }
+  }
+
+  /** Undo the virtual loss along `path` and credit the real result. */
+  _backup(path, v0, m0) {
+    const vl = this.config.virtualLoss;
+    for (let k = 0; k < path.length; k++) {
+      const parent = path[k][0];
+      const index = path[k][1];
+      const sign = parent.player === 0 ? 1 : -1;
+      parent.wins[index] += vl + sign * v0;
+      if (parent.margins) parent.margins[index] += sign * m0;
+    }
+  }
+
+  /** Gather up to `want` leaves, evaluate them in one pass, back them all up. */
+  async _simulateBatch(root, want) {
+    const queue = [];
+    const byNode = new Map();
+    for (let i = 0; i < want; i++) this._collect(root, queue, byNode);
+    if (!queue.length) return want; // every descent hit a terminal node
+
+    const results = await this.evaluator.evaluateBatch(
+      queue.map((e) => e.node.state),
+      queue.map((e) => e.node.legal)
+    );
+    this.evals += queue.length;
+    this.batches += 1;
+    for (let i = 0; i < queue.length; i++) {
+      const { node, paths } = queue[i];
+      const { priors, value, margin } = results[i];
+      node.initEdges(priors, this.hasMargin);
+      node.evalMargin = this.hasMargin && margin != null ? margin : 0;
+      node.pending = false;
+      const sign = node.player === 0 ? 1 : -1;
+      const v0 = sign * value;
+      const m0 = sign * node.evalMargin;
+      for (let p = 0; p < paths.length; p++) this._backup(paths[p], v0, m0);
+    }
+    return want;
   }
 }
 

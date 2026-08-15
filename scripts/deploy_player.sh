@@ -50,6 +50,14 @@ nice -n 15 node web/player/test/engine.test.mjs
 say "Checking onnxruntime-web against the torch reference"
 nice -n 15 node web/player/test/parity.test.mjs
 
+# The GPU path only some visitors take, held to the same reference. Skips itself
+# (and passes) on a machine with no WebGPU adapter.
+say "Checking the WebGPU backend against the same reference"
+nice -n 15 node web/player/test/webgpu.test.mjs
+
+say "Checking output detection, batched read-out and virtual-loss bookkeeping"
+nice -n 15 node web/player/test/margin.test.mjs
+
 # 3. stage the site -------------------------------------------------------------
 say "Staging the site"
 STAGE="$(mktemp -d)"
@@ -67,6 +75,21 @@ if [ ! -f "$STAGE/model/model.onnx" ]; then
 fi
 SIZE=$(du -sk "$STAGE" | cut -f1)
 echo "site payload: $((SIZE / 1024)) MB across $(find "$STAGE" -type f | wc -l | tr -d ' ') files"
+# The site carries two onnxruntime builds but every visitor downloads exactly
+# one of them, so the total on disk is not what anybody waits for. Pages serves
+# these gzipped, which is the number that matters.
+gz() { gzip -c "$1" 2>/dev/null | wc -c | tr -d ' '; }
+V="$STAGE/vendor/onnxruntime-web"
+if [ -f "$V/ort-wasm-simd-threaded.wasm" ]; then
+  MODEL_GZ=$(gz "$STAGE/model/model.onnx")
+  CPU_GZ=$(gz "$V/ort-wasm-simd-threaded.wasm")
+  GPU_GZ=$([ -f "$V/ort-wasm-simd-threaded.jspi.wasm" ] && gz "$V/ort-wasm-simd-threaded.jspi.wasm" || echo 0)
+  printf 'over the wire (gzipped), per visitor: %s MB on the CPU path' \
+    "$(echo "$MODEL_GZ $CPU_GZ" | awk '{printf "%.1f", ($1+$2)/1e6}')"
+  [ "$GPU_GZ" != 0 ] && printf ', %s MB on the WebGPU path' \
+    "$(echo "$MODEL_GZ $GPU_GZ" | awk '{printf "%.1f", ($1+$2)/1e6}')"
+  printf '\n'
+fi
 
 # 4. commit it onto gh-pages ----------------------------------------------------
 say "Building the $BRANCH commit"
