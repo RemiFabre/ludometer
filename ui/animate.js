@@ -121,10 +121,14 @@ export function rectOf(target) {
  * rectangles, `color` is 0..4 (or "marker"), `hide` defaults to true and hides
  * the source element while its clone is in the air.
  *
- * `options`: `{layer, duration, stagger, scale}` — `duration` and `stagger` are
- * 1× milliseconds and are scaled by the speed setting here. Returns a promise
- * that always resolves (never rejects) so a caller can `await` it in a turn
- * sequence.
+ * `options`: `{layer, duration, stagger, scale, keep, collect}` — `duration`
+ * and `stagger` are 1× milliseconds and are scaled by the speed setting here.
+ * With `keep: true` the clones are left parked at their destination instead of
+ * removed — the caller owns them from then on (a held selection uses this; see
+ * the player page). `collect`, an array, receives each clone the moment it is
+ * created, so a caller can find its clones even while they are still in the
+ * air. Returns a promise that always resolves (never rejects) so a caller can
+ * `await` it in a turn sequence.
  */
 export function flyTiles(flights, options = {}) {
   const layer = options.layer;
@@ -150,10 +154,16 @@ export function flyTiles(flights, options = {}) {
     ghost.style.transitionDuration = duration + "ms";
     ghost.style.transitionDelay = i * stagger + "ms";
     layer.appendChild(ghost);
+    if (options.collect) options.collect.push(ghost);
     if (flight.hide !== false && flight.from && flight.from.style) {
       flight.from.style.visibility = "hidden";
     }
-    const scale = options.scale === false ? 1 : b.width / (a.width || 1);
+    // A tile stays a tile in the air. The destination is sometimes a whole
+    // panel (the lid, the centre dish), and matching its width used to blow the
+    // clone up to the width of the page mid-flight — so the scale is clamped to
+    // "slightly bigger or smaller", never "as big as whatever it lands in".
+    const raw = options.scale === false ? 1 : b.width / (a.width || 1);
+    const scale = Math.max(0.6, Math.min(1.25, raw));
     const dx = b.left + (b.width - a.width * scale) / 2 - a.left;
     const dy = b.top + (b.height - a.height * scale) / 2 - a.top;
     airborne.push([ghost, dx, dy, scale]);
@@ -168,8 +178,8 @@ export function flyTiles(flights, options = {}) {
           "translate(" + dx + "px, " + dy + "px) scale(" + scale.toFixed(3) + ")";
       });
       setTimeout(() => {
-        airborne.forEach(([ghost]) => ghost.remove());
-        done();
+        if (!options.keep) airborne.forEach(([ghost]) => ghost.remove());
+        done(options.keep ? airborne.map(([ghost]) => ghost) : undefined);
       }, total);
     });
   });

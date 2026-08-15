@@ -59,9 +59,12 @@ export function createHistory(host, options = {}) {
     return (opts.log() || []).filter((e) => e.ply === undefined || e.ply <= ply);
   }
 
-  function announce() {
+  /* `change` is {from, to}: the ply that was showing and the ply that now is
+   * (the live ply when not browsing). Pages that animate the step read it;
+   * pages that just redraw ignore the argument, as they always have. */
+  function announce(change) {
     draw();
-    if (opts.onChange) opts.onChange();
+    if (opts.onChange) opts.onChange(change);
   }
 
   const usable = () => !opts.enabled || opts.enabled();
@@ -86,21 +89,22 @@ export function createHistory(host, options = {}) {
     if (target >= latest) {
       if (viewing === null) return false;
       viewing = null;
-      announce();
+      announce({ from, to: latest });
       return true;
     }
     const found = seek(target, delta < 0 ? -1 : 1);
     if (found === null || found === viewing) return false;
     viewing = found;
-    announce();
+    announce({ from, to: found });
     return true;
   }
 
   /** Jump back to the live game. */
   function toLatest() {
     if (viewing === null || !usable()) return false;
+    const from = viewing;
     viewing = null;
-    announce();
+    announce({ from, to: latest });
     return true;
   }
 
@@ -137,6 +141,8 @@ export function createHistory(host, options = {}) {
 
     browsing: () => viewing !== null,
     latest: () => latest,
+    /** The recorded position after `ply` moves, or null. */
+    stateAt: (ply) => (has(ply) ? frames[ply] : null),
     step,
     toLatest,
     draw,

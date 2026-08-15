@@ -11,13 +11,16 @@
  * How a turn plays out — and why there is no overlay, sheet or toast anywhere on
  * this page:
  *
- *   1. you click a colour, then a row; with coach mode on, the search rates your
- *      move first and the band shows the rating clock;
- *   2. the tiles fly, in a straight line, from the dish to your board, and the
- *      dish's leftovers fly to the middle;
- *   3. if that ended the round, full pattern lines fly to the wall and the floor
- *      line flies to the lid, and the round's scoring appears *inline* under the
- *      boards — the position behind it stays readable;
+ *   1. you click a colour and the selection is acted out at once: your tiles fly
+ *      to a small "hand" tray on the middle panel and the dish's leftovers fly to
+ *      the centre — a preview of the move, undone the instant you change your
+ *      mind (Escape, the Clear button, or another colour);
+ *   2. you click a row and the held tiles continue from the hand to your board;
+ *      nothing ever waits for the coach — with coach mode on, the rating runs in
+ *      the background *after* the turn and fills in on the move's log entry;
+ *   3. if that ended the round, full pattern lines fly to the wall — each tile
+ *      popping the points it earns as it lands, the floor line popping its cost —
+ *      and the round's scoring appears *inline* under the boards;
  *   4. the AI thinks against the clock in the status band (on your CPU, so the
  *      band also counts the positions it has visited), then its move plays out on
  *      the right-hand board exactly the same way.
@@ -35,14 +38,16 @@
  */
 "use strict";
 
-import { flyTiles, initSpeed, sleep } from "../ui/animate.js";
+import { animated, flyTiles, initSpeed, scaled, sleep } from "../ui/animate.js";
 import { createBoard, createMiddle } from "../ui/board.js";
-import { COLORS, FLOOR, node } from "../ui/dom.js";
+import { COLORS, CUM_PENALTY, FLOOR, node } from "../ui/dom.js";
 import { bindHistoryKeys, createHistory } from "../ui/history.js";
 import { renderLog } from "../ui/log.js";
+import { popScore } from "../ui/popups.js";
 import { clearScoring, renderFinalPanel, renderRoundPanel } from "../ui/scoring.js";
 import { createSettings } from "../ui/settings.js";
 import { createStatus } from "../ui/status.js";
+import { analyticsOn, track } from "./analytics.js";
 import { GameSession } from "./game.js";
 import { describeAction } from "./report.js";
 
@@ -55,6 +60,7 @@ const ui = {
   scoring: el("scoring"), log: el("log"), coach: el("coach"),
   coachField: el("coach-field"), coachLegend: el("coach-legend"), supply: el("supply"),
   settings: el("settings"), nav: el("nav"),
+  hand: el("hand"), handTiles: el("hand-tiles"), pops: el("pops"),
 };
 
 let session = null;    // the GameSession that owns the rules
@@ -68,10 +74,12 @@ let liveSims = 0;      // positions the current search has visited
 let coachOn = false;   // rate my moves with the AI's own search
 let notice = "";       // a passing message, shown in the band, never over the board
 let noticeTimer = null;
+let held = null;       // the acted-out selection: parked tile clones + hidden originals
+let navToken = 0;      // invalidates a history-step animation when another step lands
 
 initSpeed(); // before anything can animate: the stored speed, or 1×
 const status = createStatus(el("status"));
-const settings = createSettings(ui.settings);
+const settings = createSettings(ui.settings, { popups: true });
 const middle = createMiddle(ui.middle, { onPick: pick });
 const boards = {
   human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: play }),
@@ -80,17 +88,18 @@ const boards = {
 const nav = createHistory(ui.nav, {
   log: () => (S && S.log) || [],
   enabled: () => !busy,
-  onChange: () => render(),
+  onChange: onNavChange,
 });
 
-/* The coach's own clock, as in ludometer/gui/coach.py: it runs *before* your move
- * is committed, so it is deliberately shorter than the opponent's can be. */
+/* The coach's own clock, as in ludometer/gui/coach.py — but unlike the Python
+ * GUI it runs *after* the turn, in the background, so your move lands the
+ * moment you click it. It is still kept shorter than the opponent's budget. */
 const COACH_THINK_S = 2;
 const COACH_MAX_THINK_S = 3;
 const COACH_LEGEND =
   "Coach mode rates your move with the AI's own search: 0.00 = the move it would " +
-  "have played, −1 ≈ a whole win thrown away. It thinks before your move lands, " +
-  "so each turn takes a couple of seconds longer.";
+  "have played, −1 ≈ a whole win thrown away. Your move lands at once; the " +
+  "verdict fills in on its log entry when the search finishes.";
 
 /* ------------------------------------------------------------------ plumbing */
 /** A passing message. It goes in the status band's detail line — never a pop-up. */
@@ -254,6 +263,7 @@ function seatBoards() {
  */
 function render() {
   if (!S) return;
+  clearHeld(); // a redraw rebuilds the dishes, so any acted-out selection resets
   const frame = nav.frame();
   const live = !frame;
   const st = live ? S.state : frame.state;
@@ -436,6 +446,7 @@ function newGame(event) {
   });
   adopt({ reseat: true });
   say("new tiles dealt");
+  track("game-start");
   // the AI opens when you took the second seat
   if (session.aiTurn) resumeIfPending();
 }
@@ -473,37 +484,112 @@ function pick(source, color) {
   sel = sel && sel.source === source && sel.color === color ? null : { source, color };
   suggestion = null;
   render();
+  if (sel) holdSelection();
+}
+
+/* ------------------------------------------------------- the held selection */
+/**
+ * Act the selection out, immediately: the tiles you clicked fly to the hand
+ * tray on the middle panel, and the dish's leftovers fly to the centre — the
+ * table as it *will* look if you commit. It is pure picture: parked clones
+ * over hidden originals, with the game state untouched, so any redraw (another
+ * colour, Escape, browsing the history) puts everything back at once.
+ */
+function holdSelection() {
+  if (!sel || !animated() || !S) return;
+  const { source, color } = sel;
+  const taken = middle.sourceTiles(source, color);
+  if (!taken.length) return;
+  ui.handTiles.innerHTML = "";
+  const slots = taken.map(() => {
+    const s = node("div", "slot");
+    ui.handTiles.appendChild(s);
+    return s;
+  });
+  ui.hand.hidden = false;
+  const rest = middle.remainderTiles(source, color);
+  held = { source, color, taken: [], rest: [], hidden: taken.concat(rest) };
+  flyTiles(
+    taken.map((from, i) => ({ from, to: slots[i], color })),
+    { layer: ui.fly, keep: true, collect: held.taken }
+  );
+  if (rest.length) {
+    // the leftovers spread into a neat row at the centre of the dish they join
+    const centre = middle.centerEl().getBoundingClientRect();
+    const tw = rest[0].getBoundingClientRect().width || 32;
+    const gap = 4;
+    const x0 = centre.left + (centre.width - (rest.length * (tw + gap) - gap)) / 2;
+    const y = centre.top + (centre.height - tw) / 2;
+    flyTiles(
+      rest.map((from, i) => ({
+        from,
+        to: { left: x0 + i * (tw + gap), top: y, width: tw, height: tw },
+        color: Number(from.dataset.color),
+      })),
+      { layer: ui.fly, keep: true, collect: held.rest }
+    );
+  }
+}
+
+/** Put the acted-out selection back: clones gone, originals visible, tray shut. */
+function clearHeld() {
+  if (!held) {
+    ui.hand.hidden = true;
+    return;
+  }
+  held.taken.forEach((g) => g.remove());
+  held.rest.forEach((g) => g.remove());
+  held.hidden.forEach((elm) => {
+    if (elm && elm.style) elm.style.visibility = "";
+  });
+  ui.hand.hidden = true;
+  ui.handTiles.innerHTML = "";
+  held = null;
 }
 
 /**
- * One turn: your move (rated first if coach mode is on), then the AI's reply.
+ * Hand the held selection to the move that commits it. The caller now owns the
+ * clones (they become the move's flight sources), and render() will no longer
+ * reset them.
+ */
+function takeHeld() {
+  const h = held;
+  held = null;
+  if (h) ui.hand.hidden = true;
+  return h;
+}
+
+/**
+ * One turn: your move — applied and animated at once — then the AI's reply.
  *
  * The tiles are animated from the *current* DOM, before the new state is drawn,
- * so what you see leaving the dish is what actually left it — which is why the
- * move is described before `playHuman` applies it.
+ * so what you see leaving the dish is what actually left it. With coach mode on
+ * the position is snapshotted first and the rating is queued: it runs on the
+ * worker *after* the AI has replied, and fills in on the move's log entry —
+ * nothing about your move, the board or the animations ever waits for it.
  */
 async function play(id) {
   if (busy || !session || !S || !S.your_turn || nav.browsing()) return;
   sel = null;
+  const carried = takeHeld(); // the acted-out selection becomes the move's take-off
   setBusy(true);
   clearScoring(ui.scoring);
   try {
-    const coach = coachOn ? await rateMove(id) : null;
+    const setupBefore = coachOn ? session.state.toSetup() : null;
     const { move: applied, reports } = session.playHuman(id);
-    if (coach) {
-      const entry = session.log[applied.log_n];
-      if (entry) entry.coach = coach;
-    }
-    await settle([applied], boards.human, reports, "human");
-    if (!session.aiTurn) return;
-    await runAiTurn();
+    if (setupBefore) queueRating(setupBefore, id, session.log[applied.log_n]);
+    await settle([applied], boards.human, reports, "human", carried);
+    if (session.aiTurn) await runAiTurn();
   } catch (err) {
     status.stopClock();
     say(err.message);
     adopt();
   } finally {
+    // whatever happened, no clone may outlive the turn that owned it
+    if (carried) carried.taken.concat(carried.rest).forEach((g) => g.remove());
     setBusy(false);
     resumeIfPending(); // a failed search leaves the AI owing a move
+    flushRatings(); // now the table is quiet, let the coach think
   }
 }
 
@@ -558,7 +644,7 @@ async function runAiTurn() {
  * the position it was played from, so we draw that first and then animate: both
  * moves are shown, in order, from the right board.
  */
-async function playMoves(moves, board, reports, mover) {
+async function playMoves(moves, board, reports, mover, carried) {
   let taken = 0;
   for (let i = 0; i < moves.length; i++) {
     const move = moves[i];
@@ -573,7 +659,7 @@ async function playMoves(moves, board, reports, mover) {
         tone: "ai",
       });
     }
-    await animateTake(move, board, middle);
+    await animateTake(move, board, middle, i === 0 ? carried : null);
     // an observability hook, so a test can prove that *every* move animates —
     // including the second of the AI's double move across a round boundary
     document.dispatchEvent(
@@ -592,9 +678,12 @@ async function playMoves(moves, board, reports, mover) {
 }
 
 /** Play out `moves`, then show the position they led to and the round's scoring. */
-async function settle(moves, board, reports, mover) {
-  await playMoves(moves, board, reports, mover);
+async function settle(moves, board, reports, mover, carried) {
+  await playMoves(moves, board, reports, mover, carried);
   adopt({ moves });
+  // the leftovers' parked clones bow out in the same paint that draws the real
+  // tiles they stood in for
+  if (carried) carried.rest.forEach((g) => g.remove());
   if (reports.length) {
     const last = reports[reports.length - 1];
     flashWall(last);
@@ -602,6 +691,13 @@ async function settle(moves, board, reports, mover) {
   }
   if (S.state.is_terminal && S.final) {
     renderFinalPanel(ui.scoring, S.final, sides());
+    track(
+      S.final.winner_side === "human"
+        ? "game-win"
+        : S.final.winner_side === "ai"
+          ? "game-loss"
+          : "game-draw"
+    );
   } else if (mover === "ai" && S.last_ai_move) {
     // let the AI's own move stand as the headline for a beat before your turn
     status.set({ headline: "AI " + S.last_ai_move.text, detail: turnDetail(), tone: "ai" });
@@ -615,40 +711,48 @@ function sides() {
 }
 
 /* ---------------------------------------------------------------- coach mode */
-/**
- * Rate the move you are about to play with the AI's own search.
- *
- * Same definition as the local GUI (ludometer/gui/coach.py): the search runs on
- * the position *before* your move is applied, and the verdict is the gap between
- * your move's Q at the root and the best explored child's.
- */
-async function rateMove(id) {
-  const budget = coachBudget();
-  status.set({
-    headline: "Rating your move",
-    detail: "the AI is searching your position",
-    tone: "ai",
-    keepClock: true,
-  });
-  status.startClock({
-    budget,
-    label: (spent, cap) =>
-      cap
-        ? "Rating your move — " + spent.toFixed(1) + "s of " + cap + "s"
-        : "Rating your move — " + spent.toFixed(1) + "s",
-  });
+/* Same definition as the local GUI (ludometer/gui/coach.py): the search runs on
+ * the position *before* your move was applied — snapshotted at the moment you
+ * clicked — and the verdict is the gap between your move's Q at the root and
+ * the best explored child's. The difference is *when*: the rating is queued and
+ * runs on the worker after the opponent has replied, so your move, the flights
+ * and the AI's answer never wait for it. Until it lands, the move's log entry
+ * says "rating…". */
+const ratings = []; // {setup, actionId, entry, forSession} still to be rated
+let ratingNow = false;
+
+function queueRating(setup, actionId, entry) {
+  if (!entry) return;
+  entry.coach = { pending: true };
+  ratings.push({ setup, actionId, entry, forSession: session });
+}
+
+/** Work the rating queue, one search at a time. Reentry-safe; never throws. */
+async function flushRatings() {
+  if (ratingNow) return;
+  ratingNow = true;
   try {
-    const reply = await ask({
-      type: "rate",
-      setup: session.state.toSetup(),
-      actionId: id,
-      budgetS: budget,
-    });
-    return reply.coach;
-  } catch (err) {
-    return { unrated: true, reason: err.message };
+    while (ratings.length) {
+      const job = ratings.shift();
+      let verdict;
+      try {
+        const reply = await ask({
+          type: "rate",
+          setup: job.setup,
+          actionId: job.actionId,
+          budgetS: coachBudget(),
+        });
+        verdict = reply.coach;
+      } catch (err) {
+        verdict = { unrated: true, reason: err.message };
+      }
+      job.entry.coach = verdict;
+      // the entry lives in the session's own log, so any later redraw shows the
+      // verdict; redraw now only if the table is quiet and still this game's
+      if (job.forSession === session && S && !busy) render();
+    }
   } finally {
-    status.stopClock();
+    ratingNow = false;
   }
 }
 
@@ -707,39 +811,151 @@ function travelTargets(board, move) {
  * Both halves matter: the tiles you took travel to your board, and the dish's
  * *remainder* travels to the centre. Watching the leftovers arrive in the
  * middle is how you learn what the next player can take.
+ *
+ * When the move commits a selection that was already acted out (`carried`, from
+ * takeHeld()), the story continues instead of restarting: the tiles fly on from
+ * the hand tray — wherever they are, even mid-air — and the leftovers, already
+ * sitting in the middle, stay put. The dish's freshly-redrawn originals are
+ * hidden for the duration; the redraw at the end of the turn replaces them.
  */
-async function animateTake(move, board, table) {
+async function animateTake(move, board, table, carried) {
   const dish = table.sourceEl(move.source);
   const row = board.lineRow(move.dest);
   if (dish) dish.classList.add("picked");
   if (row) row.classList.add("incoming");
 
-  const taken = table.sourceTiles(move.source, move.color, move.count);
   const targets = travelTargets(board, move);
-  const flights = taken.map((from, i) => ({ from, to: targets[i], color: move.color }));
-
-  // leftovers slide to the middle; the marker, if taken, drops onto the floor
-  const centre = table.centerEl();
-  table.remainderTiles(move.source, move.color).forEach((from) => {
-    flights.push({ from, to: centre, color: Number(from.dataset.color) });
-  });
+  const handoff =
+    carried && carried.source === move.source && carried.color === move.color;
+  let flights;
+  if (handoff) {
+    const rects = carried.taken.map((g) => g.getBoundingClientRect());
+    carried.taken.forEach((g) => g.remove());
+    // what is visually in the hand and in the middle must not also sit in the dish
+    table.sourceTiles(move.source, move.color, move.count).forEach((elm) => {
+      elm.style.visibility = "hidden";
+    });
+    table.remainderTiles(move.source, move.color).forEach((elm) => {
+      elm.style.visibility = "hidden";
+    });
+    flights = rects.map((r, i) => ({ from: r, to: targets[i], color: move.color }));
+  } else {
+    const taken = table.sourceTiles(move.source, move.color, move.count);
+    flights = taken.map((from, i) => ({ from, to: targets[i], color: move.color }));
+    // leftovers slide to the middle
+    const centreEl = table.centerEl();
+    table.remainderTiles(move.source, move.color).forEach((from) => {
+      flights.push({ from, to: centreEl, color: Number(from.dataset.color) });
+    });
+  }
+  // the marker, if taken, drops onto the floor
   if (move.took_marker) {
-    const chip = centre.querySelector(".marker");
+    const chip = table.centerEl().querySelector(".marker");
     const slot = board.floorSlots()[0];
     if (chip && slot) flights.push({ from: chip, to: slot, color: "marker" });
   }
 
   await flyTiles(flights, { layer: ui.fly });
+  popFloorCost(move, board);
   if (dish) dish.classList.remove("picked");
   if (row) row.classList.remove("incoming");
 }
 
-/** Round end: full lines travel to the wall, the floor line travels to the lid. */
+/** What this move just added to the floor bill, popped off the floor line. */
+function popFloorCost(move, board) {
+  const dropped = (move.to_floor || 0) + (move.took_marker ? 1 : 0);
+  if (!dropped || !move.state_before) return;
+  const me = move.state_before.players[move.player];
+  if (!me) return;
+  const occupied = me.floor.reduce((a, b) => a + b, 0) + (me.floor_marker ? 1 : 0);
+  const cost =
+    CUM_PENALTY[Math.min(7, occupied + dropped)] - CUM_PENALTY[Math.min(7, occupied)];
+  if (!cost) return;
+  popScore(ui.pops, board.floorEl(), String(cost).replace("-", "−"), "loss");
+}
+
+/* ------------------------------------------------- animated history steps */
+/**
+ * A step through the history plays its move — forwards, or in reverse.
+ *
+ * The plan is read from the *outgoing* frame's DOM before the target frame is
+ * drawn; the target is then rendered immediately (browsing must never feel
+ * slower than the keypress), and the moved tiles fly over the finished board
+ * from where they were to where they now are. A step that crosses a round
+ * boundary just redraws — half the board changes there, and a lone flight
+ * would tell less of the story than the scoring panel already did.
+ */
+function onNavChange(change) {
+  const token = ++navToken;
+  const plan = change ? planNavStep(change) : null;
+  render();
+  if (plan) flyNavStep(plan, token);
+}
+
+function planNavStep(change) {
+  if (!animated() || !S) return null;
+  const delta = change.to - change.from;
+  if (Math.abs(delta) !== 1) return null;
+  const ply = Math.max(change.from, change.to); // the move between the two frames
+  const entry = (S.log || []).find((e) => e.kind === "move" && e.ply === ply);
+  if (!entry || typeof entry.color !== "number") return null;
+  const a = nav.stateAt(change.from);
+  const b = nav.stateAt(change.to) || (change.to === nav.latest() ? S.state : null);
+  if (!a || !b || a.round !== b.round) return null;
+  const board = entry.side === "human" ? boards.human : boards.ai;
+  const placed = Math.max(0, entry.count - (entry.overflow || 0));
+  const floorCount = entry.dest === FLOOR ? entry.count : entry.overflow || 0;
+  let from;
+  if (delta > 0) {
+    // forwards: the tiles leave the dish they were taken from
+    from = middle.sourceTiles(entry.source, entry.color, entry.count);
+  } else {
+    // backwards: they leave the row (and the floor) they had landed on
+    const rowTiles = entry.dest !== FLOOR ? board.lineTiles(entry.dest).slice(-placed) : [];
+    from = rowTiles.concat(floorCount ? board.floorTiles().slice(-floorCount) : []);
+  }
+  const rects = from.map((elm) => elm.getBoundingClientRect());
+  return { dir: delta, entry, board, placed, floorCount, rects };
+}
+
+/** Fly a planned step over the already-rendered target frame. */
+async function flyNavStep(plan, token) {
+  if (token !== navToken) return;
+  const { entry, board } = plan;
+  let dests;
+  if (plan.dir > 0) {
+    const rowTiles =
+      entry.dest !== FLOOR ? board.lineTiles(entry.dest).slice(-plan.placed) : [];
+    dests = rowTiles.concat(
+      plan.floorCount ? board.floorTiles().slice(-plan.floorCount) : []
+    );
+  } else {
+    dests = middle.sourceTiles(entry.source, entry.color, entry.count);
+  }
+  const flights = [];
+  const covered = [];
+  dests.forEach((elm, i) => {
+    const from = plan.rects[i];
+    if (!from || !elm) return;
+    elm.style.visibility = "hidden"; // the flight is this tile, mid-journey
+    covered.push(elm);
+    flights.push({ from, to: elm, color: entry.color, hide: false });
+  });
+  await flyTiles(flights, { layer: ui.fly, duration: 300, stagger: 35 });
+  covered.forEach((elm) => {
+    elm.style.visibility = "";
+  });
+}
+
+/** Round end: full lines travel to the wall, the floor line travels to the lid —
+ * each wall tile popping its points as it lands, each floor line its bill. */
 async function animateTiling(report) {
   if (!report) return;
   const wall = [];
+  const pops = [];
   const lid = [];
   const lidEl = lidTarget();
+  const floorBills = [];
   [[S.human_seat, boards.human], [S.ai_seat, boards.ai]].forEach(([seat, board]) => {
     const player = report.players[seat];
     if (!player) return;
@@ -747,13 +963,28 @@ async function animateTiling(report) {
       const tiles = board.lineTiles(t.row);
       const from = tiles[tiles.length - 1] || board.lineRow(t.row);
       const to = board.wallCell(t.row, t.col);
-      if (from && to) wall.push({ from, to, color: t.color, hide: false });
+      if (from && to) {
+        wall.push({ from, to, color: t.color, hide: false });
+        // a rect, not the element: the pop may outlive this render of the cell
+        pops.push({ at: to.getBoundingClientRect(), text: "+" + t.points });
+      }
     });
     board.floorTiles().forEach((from) => {
       lid.push({ from, to: lidEl, color: Number(from.dataset.color) });
     });
+    if (player.floor.penalty) {
+      floorBills.push([board.floorEl(), String(player.floor.penalty).replace("-", "−")]);
+    }
+  });
+  // each "+N" appears as its tile touches down — or on a steady beat when the
+  // tiles are not animating, so the arithmetic is still told one step at a time
+  const land = scaled(520);
+  const beat = scaled(70);
+  pops.forEach((p, i) => {
+    setTimeout(() => popScore(ui.pops, p.at, p.text), land ? land + i * beat : i * 240);
   });
   await flyTiles(wall, { layer: ui.fly, duration: 520, stagger: 70 });
+  floorBills.forEach(([floorEl, bill]) => popScore(ui.pops, floorEl, bill, "loss"));
   if (lid.length) {
     lidEl.classList.add("receiving");
     await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
@@ -810,6 +1041,20 @@ document.addEventListener("keydown", (event) => {
 });
 // ← / → / End walk the game, exactly as they do in a chess client
 bindHistoryKeys(nav, { enabled: () => !busy });
+
+// The tally is off until analytics.js names an endpoint. When it is on, the
+// About panel must stop claiming a silence the page no longer keeps.
+if (analyticsOn()) {
+  ui.aboutMeta.before(
+    node(
+      "p",
+      null,
+      "One anonymous, cookie-free counter ping records that a game was played " +
+        "and how it ended — nothing else, and nothing about you."
+    )
+  );
+  track("pageview");
+}
 
 syncCoach();
 bootEngine();
