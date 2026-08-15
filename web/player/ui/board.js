@@ -130,7 +130,8 @@ export function createBoard(host, options = {}) {
           t.title = COLORS[colour] + " — row " + (r + 1) + ", column " + (col + 1);
           wallRow.appendChild(t);
         } else {
-          const cell = node("div", "cell bisque");
+          // an empty square is a neutral well with the glaze only outlined in it
+          const cell = node("div", "cell empty");
           cell.dataset.color = colour;
           cell.dataset.row = r;
           cell.dataset.col = col;

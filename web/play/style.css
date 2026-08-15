@@ -22,9 +22,9 @@ body {
   background-color: var(--linen);
   /* woven linen: two hairline threads plus a warm vignette */
   background-image:
-    linear-gradient(rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
-    radial-gradient(120% 90% at 50% 0%, #efe6d3 0%, var(--linen) 55%, var(--linen-dark) 100%);
+    linear-gradient(var(--linen-thread) 1px, rgba(0, 0, 0, 0) 1px),
+    linear-gradient(90deg, var(--linen-thread) 1px, rgba(0, 0, 0, 0) 1px),
+    radial-gradient(120% 90% at 50% 0%, var(--linen-warm) 0%, var(--linen) 55%, var(--linen-dark) 100%);
   background-size: 7px 7px, 7px 7px, 100% 100%;
 }
 
@@ -38,7 +38,7 @@ button, input, select { font: inherit; color: inherit; }
   align-items: flex-end;
   gap: 14px 24px;
   padding: 12px clamp(14px, 3vw, 34px);
-  background: linear-gradient(#fdfaf3, #f4ecdc);
+  background: linear-gradient(var(--topbar-top), var(--topbar-bottom));
   border-bottom: 1px solid var(--grout);
   box-shadow: 0 6px 18px -14px rgba(60, 44, 20, .6);
 }
@@ -49,7 +49,7 @@ button, input, select { font: inherit; color: inherit; }
   letter-spacing: .16em;
   text-transform: uppercase;
   /* the title is glazed like a tile: cobalt with a highlight along the top */
-  background: linear-gradient(#3d76bd, var(--c0) 55%, var(--c0-lo));
+  background: linear-gradient(var(--c0-hi), var(--c0) 55%, var(--c0-lo));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -68,10 +68,10 @@ button, input, select { font: inherit; color: inherit; }
 .field select, .field input {
   padding: 6px 9px;
   min-width: 132px;
-  background: #fffdf7;
+  background: var(--field-bg);
   border: 1px solid var(--grout);
   border-radius: 2px;
-  box-shadow: 0 1px 0 #fff inset;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset;
 }
 .field-wide input { min-width: 320px; }
 .field-narrow input { min-width: 78px; width: 88px; }
@@ -84,14 +84,14 @@ button, input, select { font: inherit; color: inherit; }
   min-height: 13px;
 }
 .check { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; font-size: 14px; }
-.check.coach { padding: 5px 10px 5px 8px; border: 1px solid var(--grout); border-radius: 2px; background: #fffdf7; }
+.check.coach { padding: 5px 10px 5px 8px; border: 1px solid var(--grout); border-radius: 2px; background: var(--field-bg); }
 .check.coach.off { opacity: .5; }
 
 .btn {
   padding: 7px 15px;
   border: 1px solid var(--grout);
   border-radius: 2px;
-  background: linear-gradient(#fffdf8, #f0e7d5);
+  background: linear-gradient(var(--btn-top), var(--btn-bottom));
   cursor: pointer;
   font-family: var(--font-label);
   font-size: 13px;
@@ -99,15 +99,15 @@ button, input, select { font: inherit; color: inherit; }
   text-transform: uppercase;
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
-.btn:hover { background: linear-gradient(#fff, #f6efe1); }
+.btn:hover { background: linear-gradient(var(--btn-top-hover), var(--btn-bottom-hover)); }
 .btn:active { transform: translateY(1px); }
 .btn-primary {
-  color: #fdfaf2;
+  color: var(--btn-primary-ink);
   border-color: var(--c0-lo);
-  background: linear-gradient(#3d76bd, var(--c0) 60%, var(--c0-lo));
+  background: linear-gradient(var(--btn-primary-top), var(--c0) 60%, var(--btn-primary-bottom));
   box-shadow: 0 1px 0 rgba(255, 255, 255, .35) inset, 0 2px 6px -3px rgba(20, 40, 80, .8);
 }
-.btn-primary:hover { background: linear-gradient(#4d84c8, #1c5296); }
+.btn-primary:hover { background: linear-gradient(var(--btn-primary-top-hover), var(--btn-primary-bottom-hover)); }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
 :where(a, button, input, select, [tabindex]):focus-visible {
@@ -169,7 +169,7 @@ button, input, select { font: inherit; color: inherit; }
 .swatch .chip[data-color="4"] { background: var(--c4); }
 .supply-total { margin-left: auto; font-family: var(--font-label); font-size: 12px; color: var(--ink-faint); }
 #lid-row { border-radius: 3px; padding: 2px 4px; transition: background .3s ease; }
-#lid-row.receiving { background: rgba(217, 154, 18, .18); }
+#lid-row.receiving { background: var(--lid-receiving); }
 
 /* ------------------------------------------------------------------- toasts */
 .toasts {
@@ -186,7 +186,7 @@ button, input, select { font: inherit; color: inherit; }
   padding: 10px 14px;
   border-radius: 3px;
   border-left: 4px solid var(--c2);
-  background: #fffdf6;
+  background: var(--toast-bg);
   box-shadow: 0 14px 30px -18px rgba(40, 28, 10, .85);
   font-size: 14px;
 }
@@ -201,6 +201,9 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
 }
 @media (max-width: 720px) {
   .boards { grid-template-columns: minmax(0, 1fr); }
+  /* the settings and the navigator are controls, so they get a tap target too */
+  .gear, .speed, .nav-btn { min-height: 44px; }
+  .settings-panel { gap: 8px 12px; }
   .scoring-grid { grid-template-columns: minmax(0, 1fr); }
   .board { --tile: clamp(24px, 7vw, 34px); }
   .brand-name { font-size: 23px; }

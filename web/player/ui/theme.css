@@ -1,0 +1,222 @@
+/* theme.css — every colour this game is made of, in one place.
+ *
+ * If you want to restyle the table, this is the only file you need to open.
+ * Nothing below `:root` invents a colour: board.css, style.css and the JS
+ * modules all draw from these custom properties. See THEMING.md for how to add
+ * a skin.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * The one rule this palette is built on: **hue means occupied.**
+ *
+ * The board is mostly empty space — 25 wall squares, 15 pattern-line slots and
+ * 7 floor slots per player — and for a long time all of them were painted in a
+ * pale tint of the colour that belongs there. The result was a mosaic of forty
+ * pastel squares in which the five real tiles had to be hunted for. So: a tile
+ * that is *there* is saturated, raised and rimmed; a slot that is *empty* is a
+ * neutral, recessed well with no glaze in it at all. The wall keeps its pattern
+ * as a thin outlined diamond in the tile's own ink — enough to plan with, far
+ * too faint to mistake for a tile. From a metre away the board now reads as
+ * holes with a few jewels in it, which is what the cardboard one looks like.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  /* ============================================================ the table ==
+   * Linen cloth, plaster boards, mortar between the wall squares. */
+  --linen: #e6dbc6;
+  --linen-dark: #d8c9ae;
+  --linen-warm: #efe6d3;
+  --linen-thread: rgba(255, 255, 255, .35);
+
+  --plaster: #faf6ec;
+  --plaster-hi: #fdfbf5;
+  --plaster-edge: #e2d7bd;
+  --plaster-sunk: #f2ebda;
+
+  --grout: #bcab8c;
+  --grout-deep: #a3906f;
+
+  --ink: #2c2722;
+  --ink-soft: #6a5d4e;
+  --ink-faint: #92836f;
+
+  /* ======================================================== the five glazes ==
+   * Matched to the tiles you hold in your hand: deep cobalt, mustard ochre,
+   * brick terracotta, near-black charcoal, and the pale one — "ice", a bright
+   * cyan-turquoise that must read lighter than the cobalt at a glance.
+   *
+   *   --cN      the glaze itself (what a tile *is*)
+   *   --cN-hi   the lit edge, top-left
+   *   --cN-lo   the shaded edge, bottom-right
+   *   --cN-rim  the fired rim drawn around a placed tile
+   *   --cN-ink  the same hue as a line: outlines, text, the wall's diamonds
+   *   --cN-wash a transparent wash of the hue, for highlight backgrounds */
+  --c0: #16509f; --c0-hi: #5b8dd2; --c0-lo: #0a2f61; --c0-rim: #082851; --c0-ink: #123f7d;
+  --c1: #e2a41f; --c1-hi: #f7ca55; --c1-lo: #96680a; --c1-rim: #7c5507; --c1-ink: #8a6009;
+  --c2: #b8402c; --c2-hi: #dc7761; --c2-lo: #77220f; --c2-rim: #611a0b; --c2-ink: #8c2c18;
+  --c3: #262b31; --c3-hi: #5d6673; --c3-lo: #0b0e12; --c3-rim: #000; --c3-ink: #2b3038;
+  --c4: #4cc3d8; --c4-hi: #93e2ef; --c4-lo: #1b8399; --c4-rim: #146b7e; --c4-ink: #12707f;
+
+  --c0-wash: rgba(22, 80, 159, .12);
+  --c1-wash: rgba(226, 164, 31, .14);
+  --c2-wash: rgba(184, 64, 44, .12);
+  --c3-wash: rgba(38, 43, 49, .12);
+  --c4-wash: rgba(76, 195, 216, .16);
+
+  /* ========================================================== empty slots ==
+   * One neutral, for every empty square on the board. Deliberately duller and
+   * darker than any glaze and than the plaster around it, so a hole looks like
+   * a hole. `--slot-motif` is how strongly the wall's colour hint shows. */
+  --slot: #c6bda9;
+  --slot-lo: #b0a58e;
+  --slot-rim: #978b73;
+  --slot-shade: rgba(72, 56, 30, .34);
+  --slot-motif: .55;
+
+  /* ============================================================== fixtures ==
+   * The bowls the tiles sit in, the marker chip, the lid. */
+  --dish: #f4ead4;
+  --dish-hi: #fffdf6;
+  --dish-lo: #dccdb0;
+  --dish-rim: var(--grout);
+  --marker-face: #fffdf4;
+  --marker-lo: #e9dcc0;
+  --lid-receiving: rgba(226, 164, 31, .2);
+
+  /* ============================================================== meaning ==
+   * The four things the status band can be about, and the coach's three
+   * verdicts. Every one of them is a glaze, so the page never invents an
+   * accent colour that is not on the table. */
+  --tone-you: var(--c4);
+  --tone-ai: var(--c0);
+  --tone-scoring: var(--c1);
+  --tone-end: var(--c2);
+  --tone-idle: var(--grout);
+
+  --grade-best: var(--c0-ink);
+  --grade-slip: var(--c1-ink);
+  --grade-blunder: var(--c2-ink);
+
+  --gain: var(--c0-ink);
+  --loss: var(--c2-ink);
+
+  /* ================================================================ chrome ==
+   * Panels, buttons, fields — the furniture around the table. */
+  --panel-top: #fdfbf5;
+  --panel-bottom: var(--plaster);
+  --panel-edge: var(--plaster-edge);
+  --field-bg: #fffdf7;
+  --btn-top: #fffdf8;
+  --btn-bottom: #f0e7d5;
+  --btn-top-hover: #fffefb;
+  --btn-bottom-hover: #f6efe1;
+  --btn-primary-top: #3d76bd;
+  --btn-primary-bottom: var(--c0-lo);
+  --btn-primary-top-hover: #4d84c8;
+  --btn-primary-bottom-hover: #1c5296;
+  --btn-primary-ink: #fdfaf2;
+  --focus-ring: var(--c4-lo);
+
+  --topbar-top: #fdfaf3;
+  --topbar-bottom: #f4ecdc;
+  --engine-top: #f6efe0;
+  --engine-bottom: #f1e8d5;
+  --badge-bg: var(--c0-wash);
+  --badge-edge: rgba(22, 80, 159, .28);
+  --toast-bg: #fffdf6;
+
+  --shadow-panel: 0 1px 0 #fffdf7 inset, 0 10px 26px -18px rgba(60, 44, 20, .55);
+  --shadow-tile: 0 2px 3px -1px rgba(48, 34, 14, .5);
+  --shadow-tile-raised: 0 6px 10px -4px rgba(48, 34, 14, .6);
+
+  /* ============================================================== geometry ==
+   * Not colour, but the same argument: one place to change it. */
+  --tile: 32px;
+  --radius: 3px;
+
+  --font-display: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  --font-body: "Avenir Next", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  --font-label: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+}
+
+/* ================================================================== skins ==
+ * A skin is this same list of properties, redeclared. Set it with
+ * `document.documentElement.dataset.skin = "dusk"`. THEMING.md walks through
+ * writing one; this is the worked example that proves the mechanism.
+ *
+ * "Dusk": the same factory, lit at the end of the day — a slate table, cooler
+ * plaster, and glazes fired one stop deeper. */
+:root[data-skin="dusk"] {
+  --linen: #3a3730;
+  --linen-dark: #2c2a24;
+  --linen-warm: #45413a;
+  --linen-thread: rgba(255, 255, 255, .05);
+
+  --plaster: #4a4640;
+  --plaster-hi: #565149;
+  --plaster-edge: #625c52;
+  --plaster-sunk: #423e38;
+
+  --grout: #6d6659;
+  --grout-deep: #575146;
+
+  --ink: #f2ece0;
+  --ink-soft: #c3b9a7;
+  --ink-faint: #978d7c;
+
+  --c0: #3d79cf; --c0-hi: #86aee6; --c0-lo: #1c4478; --c0-rim: #16375f; --c0-ink: #93b6e8;
+  --c1: #f0b53c; --c1-hi: #ffd67a; --c1-lo: #a2740f; --c1-rim: #7d590a; --c1-ink: #f3c463;
+  --c2: #d4573f; --c2-hi: #ec8b74; --c2-lo: #872c17; --c2-rim: #6a200f; --c2-ink: #e88b73;
+  --c3: #1b1f24; --c3-hi: #4c545f; --c3-lo: #06080a; --c3-rim: #000; --c3-ink: #9aa3b0;
+  --c4: #5fd3e8; --c4-hi: #a6ecf6; --c4-lo: #1d8ca3; --c4-rim: #146b7e; --c4-ink: #7fdcec;
+
+  --c0-wash: rgba(61, 121, 207, .2);
+  --c1-wash: rgba(240, 181, 60, .18);
+  --c2-wash: rgba(212, 87, 63, .18);
+  --c3-wash: rgba(27, 31, 36, .3);
+  --c4-wash: rgba(95, 211, 232, .18);
+
+  --slot: #37342e;
+  --slot-lo: #2b2823;
+  --slot-rim: #514b41;
+  --slot-shade: rgba(0, 0, 0, .5);
+  --slot-motif: .62;
+
+  --dish: #514c44;
+  --dish-hi: #605a50;
+  --dish-lo: #423e37;
+  --marker-face: #6a6459;
+  --marker-lo: #524d44;
+
+  --panel-top: #514c44;
+  --panel-bottom: var(--plaster);
+  --field-bg: #423e38;
+  --btn-top: #5a544a;
+  --btn-bottom: #48433c;
+  --btn-top-hover: #665f54;
+  --btn-bottom-hover: #524c44;
+  --btn-primary-top: #2f63b0;
+  --btn-primary-bottom: #16375f;
+  --btn-primary-top-hover: #3f76c6;
+  --btn-primary-bottom-hover: #102a4a;
+  --btn-primary-ink: #f4f8ff;
+
+  --topbar-top: #4f4a42;
+  --topbar-bottom: #423e38;
+  --engine-top: #494540;
+  --engine-bottom: #423e38;
+  --badge-bg: var(--c0-wash);
+  --badge-edge: rgba(61, 121, 207, .4);
+  --toast-bg: #514c44;
+
+  --grade-best: var(--c0-ink);
+  --grade-slip: var(--c1-ink);
+  --grade-blunder: var(--c2-ink);
+  --gain: var(--c4-ink);
+  --loss: var(--c2-ink);
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 10px 26px -18px rgba(0, 0, 0, .8);
+  --shadow-tile: 0 2px 3px -1px rgba(0, 0, 0, .6);
+  --shadow-tile-raised: 0 6px 10px -4px rgba(0, 0, 0, .7);
+}
