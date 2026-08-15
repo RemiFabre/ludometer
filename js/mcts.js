@@ -109,6 +109,9 @@ export class MCTS {
   async search(state, opts = {}) {
     const { timeLimitS = 0, onProgress = null, shouldStop = null } = opts;
     const root = this._newNode(state.clone());
+    // kept so a caller can read the root's edge statistics back out afterwards —
+    // that table is all coach mode is (see rootChildren)
+    this._root = root;
     if (root.isTerminal) throw new Error("cannot search a terminal state");
     const started = nowMs();
 
@@ -168,6 +171,30 @@ export class MCTS {
       best,
       forced: false,
     };
+  }
+
+  /**
+   * The last search's root edges — `{action, visits, q, prior}` per legal move.
+   *
+   * A port of `RootStatsMCTS.root_children()` in ludometer/gui/coach.py, and read
+   * for exactly the same reason: `q` is the search's own value estimate for that
+   * move, in the root player's frame. An edge the search never visited has no `q`
+   * at all and reports `null` — callers must not invent one.
+   */
+  rootChildren() {
+    const root = this._root;
+    if (!root || !root.expanded) return [];
+    const out = [];
+    for (let i = 0; i < root.legal.length; i++) {
+      const visits = root.visits[i];
+      out.push({
+        action: root.legal[i],
+        visits,
+        q: visits ? root.wins[i] / visits : null,
+        prior: root.priors ? root.priors[i] : 0,
+      });
+    }
+    return out;
   }
 
   /* --------------------------------------------------------------- internals */

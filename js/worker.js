@@ -11,12 +11,15 @@
  *                                            <- {type:"loading"} ... {type:"ready"} | {type:"error"}
  *   -> {type:"search", setup, budgetS}       <- {type:"progress"} ... {type:"result"}
  *   -> {type:"policy", setup}                <- {type:"result"}   (hint: no search)
+ *   -> {type:"rate", setup, actionId, budgetS}
+ *                                            <- {type:"progress"} ... {type:"result"} (coach)
  *   -> {type:"cancel"}
  */
 
 import { AzulState, Rng } from "./engine.js";
 import { MCTS, STALL_ROUNDS, selectAction } from "./mcts.js";
 import { OnnxEvaluator } from "./net.js";
+import { describeAction } from "./report.js";
 
 let ort = null;
 let evaluator = null;
@@ -106,6 +109,71 @@ async function search(msg) {
   };
 }
 
+/**
+ * Coach mode: rate one of *your* moves with the AI's own search.
+ *
+ * A port of ludometer/gui/coach.py, definition for definition. The same PUCT
+ * search the opponent plays with is run on your position and the root's edge
+ * statistics are read back out:
+ *
+ *     delta = Q(the move you played) − max over explored children Q
+ *
+ * `Q` is in the root player's frame — yours — on the net's [-1, 1] scale, so
+ * 0.00 means "the move the AI would have played" and −0.06 means the search
+ * values yours six hundredths of a win worse. A move the search never visited
+ * has no `Q` and is reported `unrated` rather than given an invented number.
+ */
+async function rate(msg) {
+  const state = AzulState.fromSetup(msg.setup, new Rng(rng.next()));
+  const action = msg.actionId;
+  const legal = state.legalActions();
+  const base = { budgetS: msg.budgetS, legal: legal.length, sims: 0, elapsedS: 0 };
+  if (legal.indexOf(action) === -1) {
+    return { coach: { ...base, unrated: true, reason: "that move is not legal" } };
+  }
+  if (legal.length === 1) {
+    return { coach: { ...base, delta: 0, forced: true } };
+  }
+
+  const mcts = new MCTS(evaluator, {}, new Rng(rng.next()));
+  const result = await mcts.search(state, {
+    timeLimitS: msg.budgetS,
+    onProgress: ({ sims, elapsedS }) => {
+      self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
+    },
+  });
+  base.sims = result.sims;
+  base.elapsedS = result.elapsedS;
+
+  const explored = mcts.rootChildren().filter((c) => c.visits && c.q !== null);
+  if (!explored.length) {
+    return {
+      coach: { ...base, unrated: true, reason: "the search had no time to explore this position" },
+    };
+  }
+  const best = explored.reduce((a, b) => (b.q > a.q ? b : a));
+  const mine = explored.find((c) => c.action === action);
+  if (!mine) {
+    return {
+      coach: { ...base, unrated: true, reason: "the search never explored this move" },
+    };
+  }
+  return {
+    coach: {
+      ...base,
+      // Q is already in your frame, so this can only be <= 0; clamp the float
+      // noise away rather than showing "+0.00"
+      delta: Math.min(0, mine.q - best.q),
+      your_q: mine.q,
+      best_q: best.q,
+      visits: mine.visits,
+      best_visits: best.visits,
+      best_text: describeAction(state, best.action).text,
+      explored: explored.length,
+    },
+  };
+}
+
 /** The policy head's own pick, no search — what the "Suggest a move" button asks. */
 async function policy(msg) {
   const state = AzulState.fromSetup(msg.setup, new Rng(rng.next()));
@@ -128,6 +196,7 @@ self.onmessage = async (event) => {
     if (msg.type === "init") payload = await init(msg);
     else if (msg.type === "search") payload = await search(msg);
     else if (msg.type === "policy") payload = await policy(msg);
+    else if (msg.type === "rate") payload = await rate(msg);
     else throw new Error(`unknown message type ${msg.type}`);
     self.postMessage({ type: msg.type === "init" ? "ready" : "result", id: msg.id, ...payload });
   } catch (err) {
