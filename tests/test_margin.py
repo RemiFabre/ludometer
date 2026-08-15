@@ -625,28 +625,57 @@ def test_shipped_run4_config_loads() -> None:
 
 
 def test_the_margin_head_costs_nothing_per_position() -> None:
-    """The self-play budget is what pays for 512 sims; the head must be free.
+    """The self-play budget is what pays for 512 sims; the head must be cheap.
 
-    It adds ~131k parameters (a 1024->128 Linear), but batch-1 CPU inference is
-    dispatch-bound rather than FLOP-bound, so the wall clock should not move. The
-    two nets are measured in one process, back to back, because the machine
-    usually shares itself with a training run — only the *ratio* means anything.
+    Two claims, one exact and one measured. The exact one: the head is a single
+    ``body -> value_hidden`` Linear plus a scalar readout, so it stays a small
+    fraction of a net whose body already costs a megaparameter. The measured one:
+    batch-1 CPU inference is dispatch-bound rather than FLOP-bound, so those
+    parameters should not show up on the clock at all — repeated runs on an idle
+    machine come out at 1.00-1.08x.
+
+    The bound is loose (1.5x) on purpose. This box normally shares itself with a
+    training run, and even timing the two nets **alternately** round by round —
+    so that a load spike hits both rather than whichever one was being measured —
+    leaves several percent of drift. A tight bound here would fail for reasons
+    that have nothing to do with the head; 1.5x still catches the regression that
+    matters, which is someone giving the margin its own trunk.
     """
-    from ludometer.train.benchmark import bench_inference
+    import time
 
     torch.set_num_threads(1)
-    run4 = TrainConfig.load(REPO / "configs" / "run4.json").net_config()
-    run3 = TrainConfig.load(REPO / "configs" / "run3.json").net_config()
-    with_head = bench_inference(make_net(run4), rounds=5, per_round=120)
-    without = bench_inference(make_net(run3), rounds=5, per_round=120)
-    ratio = with_head["ms"] / without["ms"]
+    state = a_mid_game_state(seed=5, moves=12)
+    legal = state.legal_actions()
+    nets = {
+        name: NetEvaluator(
+            make_net(
+                TrainConfig.load(REPO / "configs" / f"{name}.json").net_config()
+            ).eval()
+        )
+        for name in ("run3", "run4")
+    }
+    best = dict.fromkeys(nets, float("inf"))
+    for _round in range(6):
+        for name, evaluator in nets.items():
+            for _ in range(30):  # warm this net's caches back up
+                evaluator(state, legal)
+            started = time.perf_counter()
+            for _ in range(150):
+                evaluator(state, legal)
+            best[name] = min(best[name], (time.perf_counter() - started) / 150 * 1000)
+    ratio = best["run4"] / best["run3"]
     print(
-        f"\nmargin head: {with_head['ms']:.3f} vs {without['ms']:.3f} ms/position "
-        f"({ratio:.2f}x), {int(with_head['params']):,} vs "
-        f"{int(without['params']):,} params"
+        f"\nmargin head: {best['run4']:.3f} vs {best['run3']:.3f} ms/position "
+        f"({ratio:.2f}x), {nets['run4'].net.num_params:,} vs "
+        f"{nets['run3'].net.num_params:,} params"
     )
-    assert with_head["params"] > without["params"], "the head has to be in there"
-    assert ratio < 1.3, f"the margin head costs {ratio:.2f}x per position"
+    assert nets["run4"].net.has_margin and not nets["run3"].net.has_margin
+    extra = nets["run4"].net.num_params - nets["run3"].net.num_params
+    assert extra > 0, "the head has to be in there"
+    assert extra / nets["run3"].net.num_params < 0.10, (
+        f"the head added {extra:,} params"
+    )
+    assert ratio < 1.5, f"the margin head costs {ratio:.2f}x per position"
 
 
 def test_smoke4_runs_end_to_end_with_masked_pretraining(tmp_path: Path) -> None:

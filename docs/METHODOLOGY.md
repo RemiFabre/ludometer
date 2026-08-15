@@ -328,7 +328,8 @@ Two terms, added:
 ```
 loss_p = -sum(target_policy * log_softmax(logits))   # cross-entropy on the visit distribution
 loss_v = mse(value, target_value)
-loss   = loss_p + value_weight * loss_v              # value_weight = 1.0
+loss_m = masked_mse(margin, target_margin)           # run4 only, see below
+loss   = loss_p + value_weight * loss_v + margin_weight * loss_m
 ```
 
 The policy target is the MCTS visit distribution stored during self-play. The value
@@ -344,6 +345,19 @@ without letting margin-chasing override actually winning. It has a visible side
 effect, noted after a human game: with a win already decided, the AI plays "lazy"
 endgame moves, because at that point the outcome term is saturated and only a small
 margin term is still moving.
+
+**run4 stops blending and splits the question in two** (`"margin_head": true`, see
+docs/DESIGN.md). A third head predicts `m = tanh(score_difference / 20)` on its own,
+trained with a masked MSE at weight `margin_weight = 0.25`, and the value head goes
+back to a pure win/draw/loss target (`value_score_weight = 0`). The blend above was
+always a cheap approximation of that head, and one output cannot answer two
+questions well. The search is not affected — PUCT still descends on the win value
+alone, so the visit counts that become policy targets are unchanged — but MCTS now
+backs up the margin alongside the value, and the move actually *played* at
+temperature 0 is chosen lexicographically: of the root children within
+`decisive_eps = 0.03` of the best win-Q (and with at least a tenth of the top
+child's visits), play the one with the largest margin-Q. Winning stays first; the
+margin only ever breaks a tie. That is the direct answer to the lazy endgame.
 
 Gradients are clipped to norm 1.0. Adam, weight decay 1e-4.
 
