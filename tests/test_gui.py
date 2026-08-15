@@ -48,23 +48,31 @@ def start(client, **kwargs):
 
 
 # ------------------------------------------------------------------ page files
+UI_MODULES = (
+    "board.js",
+    "dom.js",
+    "animate.js",
+    "status.js",
+    "log.js",
+    "scoring.js",
+    "settings.js",
+    "history.js",
+)
+UI_STYLES = ("board.css", "theme.css")
+PLAYER_DIR = PLAY_DIR.parent / "player"
+
+
 def test_page_is_served(client):
     assert (PLAY_DIR / "index.html").is_file()
     page = client.get("/")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert "app.js" in html and "style.css" in html
-    for asset in (
-        "app.js",
-        "style.css",
-        "ui/board.css",
-        "ui/board.js",
-        "ui/dom.js",
-        "ui/animate.js",
-        "ui/status.js",
-        "ui/log.js",
-        "ui/scoring.js",
-    ):
+    # the two hosts the new controls hang off
+    assert 'id="settings"' in html and 'id="nav"' in html
+    for asset in ["app.js", "style.css"] + [
+        f"ui/{n}" for n in UI_MODULES + UI_STYLES
+    ]:
         r = client.get("/" + asset)
         assert r.status_code == 200, asset
         assert r.get_data()
@@ -73,33 +81,81 @@ def test_page_is_served(client):
 
 def test_the_shared_ui_modules_are_page_agnostic():
     """web/play/ui/ is meant to be lifted into the GitHub Pages player as-is."""
-    for name in (
-        "board.js",
-        "dom.js",
-        "animate.js",
-        "status.js",
-        "log.js",
-        "scoring.js",
-    ):
+    for name in UI_MODULES:
         text = (PLAY_DIR / "ui" / name).read_text()
         assert "/api/" not in text, f"{name} names a server endpoint"
         assert "fetch(" not in text, f"{name} talks to a server"
     assert (PLAY_DIR / "ui" / "PORTING.md").is_file()
+    assert (PLAY_DIR / "ui" / "THEMING.md").is_file()
+
+
+def test_the_two_copies_of_the_ui_kit_are_identical():
+    """web/player/ui/ is a copy of web/play/ui/ — implement once, wire twice.
+
+    The kit is the only reason the local GUI and the hosted player draw the same
+    table. Nothing keeps them in step except this check, so it compares bytes.
+    """
+    ours = sorted(p.name for p in (PLAY_DIR / "ui").iterdir() if p.is_file())
+    theirs = sorted(p.name for p in (PLAYER_DIR / "ui").iterdir() if p.is_file())
+    assert ours == theirs, "the two ui/ directories hold different files"
+    for name in ours:
+        a = (PLAY_DIR / "ui" / name).read_bytes()
+        b = (PLAYER_DIR / "ui" / name).read_bytes()
+        assert a == b, f"web/player/ui/{name} has drifted from web/play/ui/{name}"
+
+
+def test_every_game_colour_lives_in_the_theme_file():
+    """One file to restyle the table — see web/play/ui/THEMING.md.
+
+    A hex literal anywhere else is a colour a skin cannot reach, which is exactly
+    the failure mode the theme file exists to prevent.
+    """
+    theme = (PLAY_DIR / "ui" / "theme.css").read_text()
+    for token in ("--c0:", "--c4:", "--slot:", "--linen:", "--plaster:", "--grout:"):
+        assert token in theme, f"theme.css is missing {token}"
+    hexes = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+    for path in (
+        PLAY_DIR / "ui" / "board.css",
+        PLAY_DIR / "style.css",
+        PLAYER_DIR / "css" / "style.css",
+    ):
+        found = hexes.findall(path.read_text())
+        assert not found, f"{path.name} hard-codes {found[:5]} — add a token instead"
+
+
+def test_animations_are_not_gated_on_an_accessibility_flag():
+    """The bug this GUI shipped for weeks: OS "reduce motion" killed every flight.
+
+    macOS has "Reduce motion" switched on for a lot of people and the browsers
+    forward it, so those players watched tiles teleport with no way to ask for
+    the animation back. Motion is the settings panel's business now. `animate.js`
+    may still *read* the flag (the panel explains itself with it), but no other
+    module and no stylesheet may branch on it.
+    """
+    for name in UI_MODULES:
+        if name == "animate.js":
+            continue
+        text = (PLAY_DIR / "ui" / name).read_text()
+        assert "prefers-reduced-motion" not in text, f"{name} still gates on the OS flag"
+    for name in ("app.js", "style.css"):
+        text = (PLAY_DIR / name).read_text()
+        assert "prefers-reduced-motion" not in text, f"{name} still gates on the OS flag"
+    for path in (
+        PLAY_DIR / "ui" / "board.css",
+        PLAYER_DIR / "css" / "style.css",
+        PLAYER_DIR / "js" / "app.js",
+    ):
+        assert "prefers-reduced-motion" not in path.read_text(), path.name
+    # and the setting itself is real, with 1x the default
+    animate = (PLAY_DIR / "ui" / "animate.js").read_text()
+    assert "DEFAULT_SPEED = 1" in animate
+    assert "localStorage" in animate
 
 
 def test_page_has_no_external_resources():
     """The GUI must work offline: no CDN, no remote fonts or images."""
     names = ["index.html", "style.css", "app.js"] + [
-        f"ui/{n}"
-        for n in (
-            "board.css",
-            "board.js",
-            "dom.js",
-            "animate.js",
-            "status.js",
-            "log.js",
-            "scoring.js",
-        )
+        f"ui/{n}" for n in UI_MODULES + UI_STYLES
     ]
     for name in names:
         text = (PLAY_DIR / name).read_text()
@@ -647,6 +703,72 @@ def test_a_full_game_over_the_deferred_path(client):
         assert plies < MAX_PLIES
     assert data["final"] is not None
     assert client.post("/api/ai").status_code == 400
+
+
+def test_every_move_reports_the_position_it_was_played_from():
+    """``state_before`` is what the page animates from, exactly.
+
+    The page draws a move by flying tiles out of the position they were taken
+    from, which for the AI's *second* move across a round boundary is a table
+    that ``apply`` scored and refilled inside the first move — a position that
+    was never otherwise observable, and the reason the second move used to be
+    silently skipped. This replays every move on a shadow state and insists the
+    reported position matches it move for move.
+    """
+    doubles = 0
+    checked = 0
+    for seed in range(6):
+        session = GameSession("greedy", human_plays_first=seed % 2 == 0, seed=seed)
+        shadow = AzulState.new_game(seed=seed)
+        for move in session.last_ai_moves:  # the AI may have opened the game
+            assert move["state_before"] == shadow.to_json()
+            shadow.apply(move["action_id"])
+            checked += 1
+        while not session.state.is_terminal:
+            action = session.legal_for_human()[0]
+            payload = session.play_human(action, defer_ai=True)
+            assert payload["human_move"]["state_before"] == shadow.to_json()
+            shadow.apply(action)
+            checked += 1
+            assert shadow.to_json() == session.state.to_json()
+            if not payload["ai_pending"]:
+                continue
+            reply = session.ai_reply()
+            if len(reply["ai_moves"]) > 1:
+                doubles += 1
+            for move in reply["ai_moves"]:
+                assert move["state_before"] == shadow.to_json(), (
+                    seed,
+                    move["ply"],
+                )
+                shadow.apply(move["action_id"])
+                checked += 1
+            assert shadow.to_json() == session.state.to_json()
+    assert checked > 100
+    assert doubles, "no round boundary put the AI on move twice — nothing was proven"
+
+
+def test_move_log_entries_carry_what_the_pictographic_log_draws():
+    """The log draws tiles, not colour words, so the entries must say which."""
+    session = GameSession("greedy", human_plays_first=True, seed=3)
+    for _ in range(6):
+        if session.state.is_terminal:
+            break
+        session.play_human(session.legal_for_human()[0])
+    moves = [e for e in session.log if e["kind"] == "move"]
+    assert len(moves) >= 6
+    for entry in moves:
+        assert 0 <= entry["color"] <= 4
+        assert entry["count"] >= 1
+        assert 0 <= entry["source"] <= CENTER
+        assert 0 <= entry["dest"] <= FLOOR
+        assert isinstance(entry["took_marker"], bool)
+        assert entry["overflow"] >= 0
+        assert entry["ply"] >= 1
+    # every entry is placed on the timeline, so a history frame can filter by it
+    for entry in session.log:
+        if entry["kind"] != "start":
+            assert "ply" in entry, entry
 
 
 def test_defer_ai_must_be_a_boolean(client):

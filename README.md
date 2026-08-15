@@ -43,6 +43,12 @@ headless Chrome on an M-series Mac: **~3,300 positions/second on an idle machine
 the default 5 s**. A phone will do less; whatever your machine manages, the page tells you
 the real number rather than a claim.
 
+It is the same table as the local GUI, from the same modules: every tile movement animated
+in a straight line, a gear that sets the animation speed (`Off` / `0.5×` / `1×` / `2×`,
+remembered between visits), ← and → to walk back through the game, a pictographic
+newest-first move log, and a board where a filled square and an empty one cannot be
+confused. See the local-GUI section below for what each of those does.
+
 How it is put together, and why you can trust it:
 
 | piece | where | how it is checked |
@@ -50,7 +56,7 @@ How it is put together, and why you can trust it:
 | ONNX export of the best checkpoint | `ludometer/export/onnx_export.py` | 100 real positions through torch **and** onnxruntime, max abs diff < 1e-4 (`tests/test_export_onnx.py`) |
 | Azul rules, ported to JS | `web/player/js/engine.js` | 30 seeded Python games + 5 handcrafted edge positions replayed move by move — states, legal-action lists, all 182 encoding floats and outcomes must match exactly (`web/player/test/engine.test.mjs`) |
 | PUCT search, ported to JS | `web/player/js/mcts.js` | full JS-vs-JS games under node: every move legal, every game terminates, no tiles lost (`web/player/test/selfplay.test.mjs`) |
-| the page itself | `web/player/` | driven in headless Chrome: no console errors, a real human/AI exchange, no sideways scroll at 390 px (`web/player/test/browser.test.mjs`) |
+| the page itself | `web/player/` | driven in headless Chrome: no console errors, a real human/AI exchange, tiles that fly *with the OS asking for reduced motion*, no sideways scroll at 390 px (`web/player/test/browser.test.mjs`), plus the full table check in `web/play/test/gui.test.mjs --only player` |
 
 Run those four locally with:
 
@@ -126,15 +132,42 @@ pop-ups at all. A wide **status band** across the top always says what is happen
 factory 2 → row 4”*, *“You won 74–68”*) and keeps the running score; when the AI is
 searching, the band itself is the clock. Both boards sit **side by side, identical** — you
 on the left, the AI on the right, same size, same rows — laid out like the cardboard one,
-pattern line row *r* level with wall row *r*, in the base game's colours (cobalt, ochre,
-terracotta, charcoal, ice) with ghosted diamonds on the empty wall squares. Round scoring
-and the end-game bonus breakdown appear **inline under the boards**, so the final position
-stays there to be inspected. The move log sits below, every entry drawn the same way.
+pattern line row *r* level with wall row *r*. Round scoring and the end-game bonus breakdown
+appear **inline under the boards**, so the final position stays there to be inspected.
 
-Everything that moves is animated in a straight line, about half a second per group: tiles
-from a factory to your pattern line or floor (your own moves included), the factory's
-leftovers into the middle, full pattern lines onto the wall at round end, and the floor line
-into the lid. Input is locked only while the tiles are actually travelling.
+**Filled and empty are not alike.** The palette runs on one rule: *hue means occupied*. A
+tile that is on the board is saturated, rimmed and raised, in the base game's colours
+(cobalt, ochre, terracotta, charcoal, ice); every empty square — wall, pattern line, floor —
+is the same neutral, recessed well, with the wall's pattern kept as a thin outlined diamond
+in the tile's own ink. The board reads as holes with a few jewels in it, from across the
+room. Every colour lives in **one file**, `web/play/ui/theme.css`, and a skin is that file's
+list of properties redeclared under `[data-skin]` — see `web/play/ui/THEMING.md`.
+
+**Everything that moves is animated**, in a straight line, about half a second per group:
+the tiles you take travelling to your pattern line or floor, the rest of the factory falling
+into the middle, the first-player marker, full pattern lines onto the wall at round end, and
+the floor line into the lid. The AI's moves play out the same way — *both* of them when a
+round boundary puts it on move twice, since each move reports the position it was played
+from and the refilled table is drawn before the second one. Input is locked only while the
+tiles are actually travelling.
+
+The **gear** under the status band sets the pace: `Off`, `0.5×`, `1×` (default) or `2×`,
+remembered in `localStorage`. That switch is the *only* thing that governs motion. An OS
+“reduce motion” setting deliberately does not silence the animation any more — macOS ships
+it on for a lot of people, and it used to turn every flight into a teleport with no way to
+ask for the animation back.
+
+**Walk the game with ← and →.** Previous/next step through every position of the game, `End`
+(or the **Latest** button) returns to play, and the status band says *“Viewing move 12 of
+31”* while you look. It is pure client-side replay of positions the page already holds —
+no request, no re-search — and the live game is untouched: while browsing there is nothing
+to click, and jumping back to the latest position resumes play exactly where it was. It
+works on finished games too.
+
+The **move log** is pictographic and newest-first: the tiles that moved are drawn as tiles
+in the same glazes as the board — *▪▪▪ factory 3 → row 5* — with words kept only for the
+places. Every entry is drawn identically, including the newest one; the status band is where
+“what is happening now” lives.
 
 **Coach mode** (the toggle above the move log) scores *your* moves with the AI's own
 evaluation — not a metric of our own. Before your move is applied, the same PUCT search the
@@ -150,9 +183,20 @@ turn (a dedicated ~2 s budget, capped at 3 s even against a 10 s opponent) and t
 a *“rating your move”* clock while it thinks. It needs a searching opponent, so the toggle is
 disabled against the scripted baselines.
 
-The board, the animations, the status band, the log and the scoring panels live in
-`web/play/ui/` as framework-free modules that take state JSON and know nothing about the
-server — `web/play/ui/PORTING.md` explains how the GitHub Pages player adopts them.
+The board, the animations, the settings panel, the move navigator, the status band, the log
+and the scoring panels live in `web/play/ui/` as framework-free modules that take state JSON
+and know nothing about the server — `web/play/ui/PORTING.md` explains how the GitHub Pages
+player adopts them, and `web/player/ui/` is a byte-for-byte copy that `tests/test_gui.py`
+refuses to let drift. Both tables are driven in headless Chrome by
+
+```bash
+node web/play/test/gui.test.mjs        # --only play | --only player, --shots DIR
+```
+
+which checks — in **both** `prefers-reduced-motion` states, because that is the gap the
+animations fell through — that tiles actually fly and for how long, that the speed presets
+change it, that ← and → replay the game, that the log is drawn as tiles newest-first, and
+that a filled square and an empty one are not close in colour.
 
 Same thing without the browser (the GUI, the arena and the trainer share one registry):
 

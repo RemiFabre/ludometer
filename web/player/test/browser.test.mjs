@@ -306,11 +306,13 @@ async function main() {
     `);
     await until("a fresh deal", () => page.eval('return document.getElementById("matchup").textContent.includes("seed 424242");'), 20000);
 
-    // Headless Chrome asks for reduced motion by default, and the page honours
-    // that by not animating at all — so say we do want motion before checking
-    // that tiles actually fly.
+    // Ask for reduced motion — the state a lot of macOS machines are actually
+    // in. The page must animate anyway: motion is the settings panel's business,
+    // not the OS's. This exact line used to say `no-preference`, which is how a
+    // GUI that never animated on the author's machine passed every test.
+    // web/play/test/gui.test.mjs checks both states and both speeds in detail.
     await page.send("Emulation.setEmulatedMedia", {
-      features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+      features: [{ name: "prefers-reduced-motion", value: "reduce" }],
     });
 
     // count the tile flights the move sets off: a straight-line flight is a clone
@@ -369,14 +371,22 @@ async function main() {
     };`);
     console.log("after the exchange:", JSON.stringify(after));
     if (after.log < 3) errors.push("the move log did not fill in");
-    if (!after.flights) errors.push("no tiles flew: the flight layer stayed empty");
+    if (!after.flights) {
+      errors.push("no tiles flew under prefers-reduced-motion: the flight layer stayed empty");
+    }
 
-    // A whole game, at speed: reduced motion makes the flights return at once and
-    // "instant" gives the AI a single forward pass per move, so this plays out in
-    // a few seconds and lands on the *inline* final scoring panel.
-    await page.send("Emulation.setEmulatedMedia", {
-      features: [{ name: "prefers-reduced-motion", value: "reduce" }],
-    });
+    // A whole game, at speed. Turning the animation *off* is now something the
+    // page offers, so the test asks for it the way a player would rather than by
+    // lying to it about the OS; with "instant" the AI is a single forward pass
+    // per move, so this plays out in seconds and lands on the *inline* final
+    // scoring panel.
+    const speedOff = await page.eval(`
+      const b = document.querySelector('.speed[data-speed="0"]');
+      if (!b) return null;
+      b.click();
+      return document.body.dataset.anim;
+    `);
+    if (speedOff !== "off") errors.push("the settings panel could not turn the animation off");
     await page.eval(`
       const think = document.getElementById("think");
       think.value = "0";
