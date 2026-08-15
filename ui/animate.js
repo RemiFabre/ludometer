@@ -152,7 +152,10 @@ export function flyTiles(flights, options = {}) {
     ghost.style.width = a.width + "px";
     ghost.style.height = a.height + "px";
     ghost.style.transitionDuration = duration + "ms";
-    ghost.style.transitionDelay = i * stagger + "ms";
+    // the delay is per *airborne* clone, not per requested flight, so a skipped
+    // flight (source already gone) never leaves a clone waiting past `total`
+    const delay = airborne.length * stagger;
+    ghost.style.transitionDelay = delay + "ms";
     layer.appendChild(ghost);
     if (options.collect) options.collect.push(ghost);
     if (flight.hide !== false && flight.from && flight.from.style) {
@@ -166,16 +169,26 @@ export function flyTiles(flights, options = {}) {
     const scale = Math.max(0.6, Math.min(1.25, raw));
     const dx = b.left + (b.width - a.width * scale) / 2 - a.left;
     const dy = b.top + (b.height - a.height * scale) / 2 - a.top;
-    airborne.push([ghost, dx, dy, scale]);
+    airborne.push([ghost, dx, dy, scale, delay]);
   });
 
   if (!airborne.length) return Promise.resolve();
   const total = duration + (airborne.length - 1) * stagger + scaled(LAND_MS);
   return new Promise((done) => {
     requestAnimationFrame(() => {
-      airborne.forEach(([ghost, dx, dy, scale]) => {
+      // Commit every clone's starting position before any of them moves. The
+      // clones were styled and appended in the same task that is about to set
+      // their transforms; without a forced style flush the browser's first
+      // recalc would see only the final state, and whichever clone nothing
+      // else happened to flush — always the last one — would skip its
+      // transition and simply appear at the destination.
+      void layer.offsetWidth;
+      airborne.forEach(([ghost, dx, dy, scale, delay]) => {
         ghost.style.transform =
           "translate(" + dx + "px, " + dy + "px) scale(" + scale.toFixed(3) + ")";
+        // each tile seats the moment *it* lands — the raised in-flight shadow
+        // drops then, not when the whole group has finished arriving
+        setTimeout(() => ghost.classList.add("landed"), duration + delay);
       });
       setTimeout(() => {
         if (!options.keep) airborne.forEach(([ghost]) => ghost.remove());

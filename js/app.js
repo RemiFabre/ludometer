@@ -15,8 +15,11 @@
  *      to a small "hand" tray on the middle panel and the dish's leftovers fly to
  *      the centre — a preview of the move, undone the instant you change your
  *      mind (Escape, the Clear button, or another colour);
- *   2. you click a row and the held tiles continue from the hand to your board;
- *      nothing ever waits for the coach — with coach mode on, the rating runs in
+ *   2. you click a row and the held tiles continue from the hand to your board.
+ *      With confirm mode on (the default) they are only *placed*: the board
+ *      shows the position as it would stand, and the move plays when you press
+ *      "Play this move" — or comes back to your hand with "Take it back".
+ *      Nothing ever waits for the coach — with coach mode on, the rating runs in
  *      the background *after* the turn and fills in on the move's log entry;
  *   3. if that ended the round, full pattern lines fly to the wall — each tile
  *      popping the points it earns as it lands, the floor line popping its cost —
@@ -40,6 +43,7 @@
 
 import { animated, flyTiles, initSpeed, scaled, sleep } from "../ui/animate.js";
 import { createBoard, createMiddle } from "../ui/board.js";
+import { confirmOn } from "../ui/confirm.js";
 import { COLORS, CUM_PENALTY, FLOOR, node } from "../ui/dom.js";
 import { bindHistoryKeys, createHistory } from "../ui/history.js";
 import { renderLog } from "../ui/log.js";
@@ -61,6 +65,7 @@ const ui = {
   coachField: el("coach-field"), coachLegend: el("coach-legend"), supply: el("supply"),
   settings: el("settings"), nav: el("nav"),
   hand: el("hand"), handTiles: el("hand-tiles"), pops: el("pops"),
+  confirm: el("confirm"), park: el("park"),
 };
 
 let session = null;    // the GameSession that owns the rules
@@ -75,14 +80,15 @@ let coachOn = false;   // rate my moves with the AI's own search
 let notice = "";       // a passing message, shown in the band, never over the board
 let noticeTimer = null;
 let held = null;       // the acted-out selection: parked tile clones + hidden originals
+let proposal = null;   // {id, move} — a placed move waiting for "Play this move"
 let navToken = 0;      // invalidates a history-step animation when another step lands
 
 initSpeed(); // before anything can animate: the stored speed, or 1×
 const status = createStatus(el("status"));
-const settings = createSettings(ui.settings, { popups: true });
+const settings = createSettings(ui.settings, { popups: true, confirm: true });
 const middle = createMiddle(ui.middle, { onPick: pick });
 const boards = {
-  human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: play }),
+  human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: route }),
   ai: createBoard(el("board-ai"), { seat: 1 }),
 };
 const nav = createHistory(ui.nav, {
@@ -248,7 +254,7 @@ function aiLabel() {
 /** Fix the two boards' seats to this game's seating (you are always on the left). */
 function seatBoards() {
   boards.human = createBoard(el("board-human"), {
-    seat: S.human_seat, interactive: true, onPlay: play,
+    seat: S.human_seat, interactive: true, onPlay: route,
   });
   boards.ai = createBoard(el("board-ai"), { seat: S.ai_seat });
 }
@@ -263,7 +269,11 @@ function seatBoards() {
  */
 function render() {
   if (!S) return;
-  clearHeld(); // a redraw rebuilds the dishes, so any acted-out selection resets
+  // a redraw rebuilds the dishes, so any acted-out selection — placed or held —
+  // resets with it
+  proposal = null;
+  syncMoveButtons();
+  clearHeld();
   const frame = nav.frame();
   const live = !frame;
   const st = live ? S.state : frame.state;
@@ -340,6 +350,15 @@ function renderStatus(frame) {
     return;
   }
   if (S.your_turn) {
+    if (proposal) {
+      status.set({
+        headline: "Placed — play it, or take it back",
+        detail: "You " + proposal.move.text + " · " + turnDetail(),
+        tone: "you",
+      });
+      ui.prompt.textContent = "Nothing is final until you press Play this move.";
+      return;
+    }
     status.set({
       headline: sel
         ? "Your turn — pick a row for your " + COLORS[sel.color] + " tiles"
@@ -508,27 +527,32 @@ function holdSelection() {
   });
   ui.hand.hidden = false;
   const rest = middle.remainderTiles(source, color);
-  held = { source, color, taken: [], rest: [], hidden: taken.concat(rest) };
+  held = emptyHeld(source, color, taken.concat(rest));
   flyTiles(
     taken.map((from, i) => ({ from, to: slots[i], color })),
     { layer: ui.fly, keep: true, collect: held.taken }
   );
   if (rest.length) {
-    // the leftovers spread into a neat row at the centre of the dish they join
-    const centre = middle.centerEl().getBoundingClientRect();
-    const tw = rest[0].getBoundingClientRect().width || 32;
-    const gap = 4;
-    const x0 = centre.left + (centre.width - (rest.length * (tw + gap) - gap)) / 2;
-    const y = centre.top + (centre.height - tw) / 2;
-    flyTiles(
-      rest.map((from, i) => ({
-        from,
-        to: { left: x0 + i * (tw + gap), top: y, width: tw, height: tw },
-        color: Number(from.dataset.color),
-      })),
-      { layer: ui.fly, keep: true, collect: held.rest }
-    );
+    flyTiles(restFlights(rest), { layer: ui.fly, keep: true, collect: held.rest });
   }
+}
+
+function emptyHeld(source, color, hidden) {
+  return { source, color, taken: [], rest: [], extra: [], hidden, placed: false };
+}
+
+/** The leftovers spread into a neat row at the centre of the dish they join. */
+function restFlights(rest) {
+  const centre = middle.centerEl().getBoundingClientRect();
+  const tw = rest[0].getBoundingClientRect().width || 32;
+  const gap = 4;
+  const x0 = centre.left + (centre.width - (rest.length * (tw + gap) - gap)) / 2;
+  const y = centre.top + (centre.height - tw) / 2;
+  return rest.map((from, i) => ({
+    from,
+    to: { left: x0 + i * (tw + gap), top: y, width: tw, height: tw },
+    color: Number(from.dataset.color),
+  }));
 }
 
 /** Put the acted-out selection back: clones gone, originals visible, tray shut. */
@@ -537,8 +561,7 @@ function clearHeld() {
     ui.hand.hidden = true;
     return;
   }
-  held.taken.forEach((g) => g.remove());
-  held.rest.forEach((g) => g.remove());
+  held.taken.concat(held.rest, held.extra).forEach((g) => g.remove());
   held.hidden.forEach((elm) => {
     if (elm && elm.style) elm.style.visibility = "";
   });
@@ -549,14 +572,142 @@ function clearHeld() {
 
 /**
  * Hand the held selection to the move that commits it. The caller now owns the
- * clones (they become the move's flight sources), and render() will no longer
- * reset them.
+ * clones (they become the move's flight sources — or, for a placed move, the
+ * tiles already sitting where they land), and render() will no longer reset
+ * them.
  */
 function takeHeld() {
   const h = held;
   held = null;
   if (h) ui.hand.hidden = true;
   return h;
+}
+
+/* ------------------------------------------------------------- confirm mode */
+/**
+ * A row was clicked. With confirm mode off this *is* the move; with it on (the
+ * default) the tiles are placed on the board — clones over the real squares,
+ * the game state untouched — and two buttons appear: Play this move, Take it
+ * back. What she sees is exactly the position her move would leave.
+ */
+function route(id) {
+  if (busy || !session || !S || !S.your_turn || nav.browsing()) return;
+  if (!confirmOn()) {
+    play(id);
+    return;
+  }
+  propose(id);
+}
+
+/** Show/hide and label the two buttons a placed move answers to. */
+function syncMoveButtons() {
+  ui.confirm.classList.toggle("hidden", !proposal);
+  ui.cancel.textContent = proposal ? "Take it back" : "Clear selection";
+  if (proposal) ui.cancel.classList.remove("hidden");
+}
+
+/** A still clone at `target` — what a flight is when nothing may move. A tile
+ * stays a tile even when the target is a whole panel (the lid), so the clone
+ * is capped at tile size and centred in whatever it lands in. */
+function parkAt(target, color, collect) {
+  const r =
+    typeof target.getBoundingClientRect === "function"
+      ? target.getBoundingClientRect()
+      : target;
+  if (!r || (!r.width && !r.height)) return;
+  const size = Math.min(r.width, r.height, 44);
+  const g = document.createElement("div");
+  g.className = "fly-tile landed " + (color === "marker" ? "marker" : "tile");
+  if (color === "marker") g.textContent = "1";
+  else g.dataset.color = color;
+  g.style.left = r.left + (r.width - size) / 2 + "px";
+  g.style.top = r.top + (r.height - size) / 2 + "px";
+  g.style.width = size + "px";
+  g.style.height = size + "px";
+  ui.park.appendChild(g);
+  collect.push(g);
+}
+
+/** Fly when tiles fly today, appear in place when they do not. */
+function flyOrPark(flights, collect) {
+  if (animated()) {
+    flyTiles(flights, { layer: ui.fly, keep: true, collect });
+    return;
+  }
+  flights.forEach((f) => {
+    if (f.hide !== false && f.from && f.from.style) f.from.style.visibility = "hidden";
+    parkAt(f.to, f.color, collect);
+  });
+}
+
+/** Place the move on the board and wait for the player's word. */
+function propose(id) {
+  const move = describeAction(session.state, id);
+  const targets = travelTargets(boards.human, move);
+  let fromRects;
+  if (held && held.source === move.source && held.color === move.color && held.taken.length) {
+    // the tiles continue from wherever they are — the hand tray, or the row a
+    // previous placement put them on
+    fromRects = held.taken.map((g) => g.getBoundingClientRect());
+    held.taken.forEach((g) => g.remove());
+    held.taken = [];
+  } else {
+    // no acted-out selection (animation off, or a hint set it): rise from the dish
+    if (held) clearHeld();
+    const src = middle.sourceTiles(move.source, move.color, move.count);
+    const rest = middle.remainderTiles(move.source, move.color);
+    held = emptyHeld(move.source, move.color, src.concat(rest));
+    src.concat(rest).forEach((elm) => {
+      elm.style.visibility = "hidden";
+    });
+    fromRects = src.map((elm) => elm.getBoundingClientRect());
+    if (rest.length) flyOrPark(restFlights(rest), held.rest);
+  }
+  if (move.took_marker && !held.extra.length) {
+    const chip = middle.centerEl().querySelector(".marker");
+    const slot = boards.human.floorSlots()[0];
+    if (chip && slot) {
+      held.hidden.push(chip);
+      flyOrPark([{ from: chip, to: slot, color: "marker" }], held.extra);
+    }
+  }
+  flyOrPark(
+    fromRects.map((r, i) => ({ from: r, to: targets[i], color: move.color })),
+    held.taken
+  );
+  held.placed = true;
+  proposal = { id, move };
+  syncMoveButtons();
+  renderStatus(nav.frame());
+}
+
+/** Take a placed move back: the tiles return to the hand, the selection stays. */
+function cancelProposal() {
+  if (!proposal) return;
+  proposal = null;
+  if (held) {
+    // the marker goes home at once; its chip was only hidden
+    held.extra.forEach((g) => g.remove());
+    held.extra = [];
+    const chip = middle.centerEl().querySelector(".marker");
+    if (chip) chip.style.visibility = "";
+    held.placed = false;
+    if (animated() && ui.handTiles.children.length) {
+      const slots = [].slice.call(ui.handTiles.children);
+      const rects = held.taken.map((g) => g.getBoundingClientRect());
+      held.taken.forEach((g) => g.remove());
+      held.taken = [];
+      flyTiles(
+        rects.map((r, i) => ({ from: r, to: slots[i % slots.length], color: held.color })),
+        { layer: ui.fly, keep: true, collect: held.taken }
+      );
+    } else {
+      // animation off: the originals come back exactly where they were
+      clearHeld();
+    }
+  }
+  syncMoveButtons();
+  renderStatus(nav.frame());
 }
 
 /**
@@ -586,7 +737,7 @@ async function play(id) {
     adopt();
   } finally {
     // whatever happened, no clone may outlive the turn that owned it
-    if (carried) carried.taken.concat(carried.rest).forEach((g) => g.remove());
+    if (carried) carried.taken.concat(carried.rest, carried.extra).forEach((g) => g.remove());
     setBusy(false);
     resumeIfPending(); // a failed search leaves the AI owing a move
     flushRatings(); // now the table is quiet, let the coach think
@@ -681,9 +832,9 @@ async function playMoves(moves, board, reports, mover, carried) {
 async function settle(moves, board, reports, mover, carried) {
   await playMoves(moves, board, reports, mover, carried);
   adopt({ moves });
-  // the leftovers' parked clones bow out in the same paint that draws the real
-  // tiles they stood in for
-  if (carried) carried.rest.forEach((g) => g.remove());
+  // the parked clones bow out in the same paint that draws the real tiles they
+  // stood in for — the leftovers in the middle, and a placed move's whole take
+  if (carried) carried.taken.concat(carried.rest, carried.extra).forEach((g) => g.remove());
   if (reports.length) {
     const last = reports[reports.length - 1];
     flashWall(last);
@@ -828,16 +979,17 @@ async function animateTake(move, board, table, carried) {
   const handoff =
     carried && carried.source === move.source && carried.color === move.color;
   let flights;
-  if (handoff) {
+  if (handoff && carried.placed) {
+    // a confirmed placement: the clones already sit exactly where the tiles
+    // land, so nothing flies — the redrawn originals just have to stay out of
+    // sight until the real position is painted over them
+    hideOriginals(move, table);
+    flights = [];
+  } else if (handoff) {
     const rects = carried.taken.map((g) => g.getBoundingClientRect());
     carried.taken.forEach((g) => g.remove());
-    // what is visually in the hand and in the middle must not also sit in the dish
-    table.sourceTiles(move.source, move.color, move.count).forEach((elm) => {
-      elm.style.visibility = "hidden";
-    });
-    table.remainderTiles(move.source, move.color).forEach((elm) => {
-      elm.style.visibility = "hidden";
-    });
+    carried.taken = [];
+    hideOriginals(move, table);
     flights = rects.map((r, i) => ({ from: r, to: targets[i], color: move.color }));
   } else {
     const taken = table.sourceTiles(move.source, move.color, move.count);
@@ -848,8 +1000,9 @@ async function animateTake(move, board, table, carried) {
       flights.push({ from, to: centreEl, color: Number(from.dataset.color) });
     });
   }
-  // the marker, if taken, drops onto the floor
-  if (move.took_marker) {
+  // the marker, if taken, drops onto the floor — unless a placed move already
+  // shows it there
+  if (move.took_marker && !(handoff && carried.placed)) {
     const chip = table.centerEl().querySelector(".marker");
     const slot = board.floorSlots()[0];
     if (chip && slot) flights.push({ from: chip, to: slot, color: "marker" });
@@ -859,6 +1012,21 @@ async function animateTake(move, board, table, carried) {
   popFloorCost(move, board);
   if (dish) dish.classList.remove("picked");
   if (row) row.classList.remove("incoming");
+}
+
+/** What is visually in the hand and in the middle must not also sit in the dish:
+ * hide the freshly-redrawn originals a carried selection stands in for. */
+function hideOriginals(move, table) {
+  table.sourceTiles(move.source, move.color, move.count).forEach((elm) => {
+    elm.style.visibility = "hidden";
+  });
+  table.remainderTiles(move.source, move.color).forEach((elm) => {
+    elm.style.visibility = "hidden";
+  });
+  if (move.took_marker) {
+    const chip = table.centerEl().querySelector(".marker");
+    if (chip) chip.style.visibility = "hidden";
+  }
 }
 
 /** What this move just added to the floor bill, popped off the floor line. */
@@ -1013,7 +1181,20 @@ ui.think.addEventListener("change", () => {
   if (S) render();
 });
 ui.hint.addEventListener("click", askHint);
+ui.confirm.addEventListener("click", () => {
+  if (!proposal || busy) return;
+  const id = proposal.id;
+  proposal = null;
+  syncMoveButtons();
+  play(id);
+});
 ui.cancel.addEventListener("click", () => {
+  // during a placed move this button reads "Take it back": the tiles return to
+  // the hand and the selection stays, so another row is one click away
+  if (proposal) {
+    cancelProposal();
+    return;
+  }
   sel = null;
   suggestion = null;
   render();

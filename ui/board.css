@@ -750,6 +750,14 @@ body.viewing .middle-table { opacity: .93; }
   will-change: transform;
   box-shadow: 0 0 0 1px var(--rim), 0 1px 0 rgba(255, 255, 255, .45) inset, var(--shadow-tile-raised);
 }
+/* a clone that has arrived: the in-flight lift drops and it sits like a tile */
+.fly-tile.landed {
+  box-shadow:
+    0 0 0 1px var(--rim),
+    0 1px 0 rgba(255, 255, 255, .45) inset,
+    0 -2px 4px rgba(0, 0, 0, .28) inset,
+    var(--shadow-tile);
+}
 .fly-tile.marker { display: grid; place-items: center; }
 
 /* a completed line's tile arriving on the wall */
