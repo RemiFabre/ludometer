@@ -1,0 +1,11 @@
+{
+  "run": "run3",
+  "state": "running",
+  "started": "2026-08-15T09:57:30Z",
+  "updated": "2026-08-15T15:41:41Z",
+  "ended": null,
+  "error": null,
+  "games": 12288,
+  "steps": 3851,
+  "note": "iter 193: self-play 41/64 games"
+}
