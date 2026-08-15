@@ -115,23 +115,46 @@
         <div class="supply-rows" id="supply"></div>
       </section>
 
-      <section class="panel about" aria-labelledby="about-title">
-        <h2 class="panel-title" id="about-title">How this works</h2>
+      <section class="panel about" id="about" aria-labelledby="about-title">
+        <h2 class="panel-title" id="about-title">What this is</h2>
+        <p>Faïence began as a machine-learning experiment — Ludometer, a research
+        framework that measures how good a board game is from the shape of an
+        AI's learning curve. Somewhere along the way the experiment turned into
+        a genuinely pleasant opponent, so we are sharing the whole thing,
+        playable and free. Nobody earns a cent from this page: no ads, no
+        account, nothing to buy.</p>
         <p>The opponent is a policy + value network trained from scratch by
-        self-play, exported to ONNX. Your browser downloads it once, then runs the
-        same PUCT tree search the training loop used — on your machine, in a
-        background thread. Nothing is sent anywhere.</p>
+        self-play, exported to ONNX. Your browser downloads it once, then runs
+        the same PUCT tree search the training loop used — on your machine, in
+        a background thread.</p>
+        <p id="tally-note">The only thing that ever leaves your browser is an
+        anonymous, cookie-free tally of visits, games dealt, and how finished
+        games went — <a href="https://faience.goatcounter.com" target="_blank"
+        rel="noopener">it is public</a>, so you can read everything it
+        records.</p>
         <p class="about-meta" id="about-meta"></p>
         <p>Faïence is a free, open-source implementation of the rules of
         <em>Azul</em>, the tile-laying game by Michael Kiesling. It is a fan
         project for research, with its own code and artwork — not affiliated
         with or endorsed by the game's publishers.</p>
-        <p><a href="https://github.com/RemiFabre/ludometer">Source and training logs on GitHub</a></p>
+        <p>All of it is open source (MIT) —
+        <a href="https://github.com/RemiFabre/ludometer">code and training logs on GitHub</a>.
+        If a game made your day, a star there — or a hello in the issues — is
+        the whole tip jar.</p>
       </section>
     </div>
   </div>
 
 </main>
+
+<!-- the two round corner buttons: what is this, and the public tally -->
+<nav class="corner" aria-label="About and statistics">
+  <a class="corner-btn" id="corner-stats" href="https://faience.goatcounter.com"
+     target="_blank" rel="noopener" title="Public play statistics — everything this page records">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="10" width="3.4" height="7" rx="1"/><rect x="8.3" y="6" width="3.4" height="11" rx="1"/><rect x="13.6" y="3" width="3.4" height="14" rx="1"/></svg>
+  </a>
+  <button type="button" class="corner-btn" id="corner-about" title="What is this?">?</button>
+</nav>
 
 <div class="fly-layer" id="fly" aria-hidden="true"></div>
 <!-- score pop-ups get their own layer: a number is not a tile, and nothing that

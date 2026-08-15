@@ -1,16 +1,14 @@
-/* An honest, cookie-free tally of who plays — OFF until an endpoint is named.
+/* An honest, cookie-free tally of who plays.
  *
- * The page promises "nothing is sent anywhere", and while COUNT_URL below is
- * empty that stays literally true: this module produces zero network traffic
- * and the rest of the page never has to think about it.
- *
- * To switch it on, create a (free) GoatCounter account and put its count URL
- * here, e.g. "https://ludometer.goatcounter.com/count". GoatCounter is built
- * for exactly this arrangement: no cookies, no fingerprinting, no personal
- * data, nothing stored in the visitor's browser — so no consent banner is
- * needed — and the dashboard shows visits plus each named event below. When it
- * is on, app.js appends one sentence to the "How this works" panel saying so;
- * the page never claims silence it does not keep.
+ * GoatCounter is built for exactly this arrangement: no cookies, no
+ * fingerprinting, no personal data, nothing stored in the visitor's browser —
+ * so no consent banner is needed — and the dashboard is public, so a player
+ * can read everything the page records; the About panel links straight to it.
+ * The pings go to GoatCounter's /count endpoint directly (their count.js is
+ * never loaded: this page ships every byte it runs). Empty COUNT_URL and the
+ * module produces zero network traffic; app.js then also removes the About
+ * panel's tally note and the stats button, so the page never points at a
+ * tally it does not keep.
  *
  * What gets counted (each a single GET of a 1×1 gif, fired and forgotten):
  *   pageview                              the page was opened
@@ -24,7 +22,7 @@
  * automatically once COUNT_URL is set.
  */
 
-export const COUNT_URL = ""; // e.g. "https://ludometer.goatcounter.com/count"
+export const COUNT_URL = "https://faience.goatcounter.com/count";
 
 /** Whether the tally is on at all — the About panel reads this. */
 export const analyticsOn = () => !!COUNT_URL;
@@ -48,6 +46,10 @@ export function statsUrl() {
 export function track(name, extra) {
   if (!COUNT_URL) return;
   try {
+    // development and the headless test suite play thousands of games; none of
+    // them are players, and none of them may touch the public tally
+    const host = location.hostname;
+    if (host === "localhost" || host === "127.0.0.1" || host === "") return;
     const page = name === "pageview";
     const path = page ? location.pathname : name;
     const url =

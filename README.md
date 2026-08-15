@@ -29,6 +29,13 @@ widely considered excellent — then reuse the framework to evaluate new board g
 
 ### **→ [remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/) ←**
 
+The public game is called **Faïence** — a free, open-source implementation of the rules
+of Azul, with its own code and artwork. How many people play it, and how the games go,
+is counted by an anonymous, cookie-free tally that is
+**[public for anyone to read](https://faience.goatcounter.com)** — that link is also in
+the game itself, so players can see exactly what is recorded (visits, games dealt, and
+final results per net; nothing about anyone).
+
 The strongest trained net, playable by anyone, with **nothing running on a server**.
 Open the page and the tab downloads the exported net once (~16 MB over the wire, cached
 afterwards), then plays Azul against you entirely on your own machine — the same PUCT tree
@@ -211,3 +218,9 @@ training and the Elo ladder keep searching a fixed number of simulations per mov
 ## Status
 
 Work in progress — built autonomously by Claude. Progress notes in `NOTES_FOR_REMI.md`.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The trained model weights shipped with the browser player
+are covered by the same terms. Faïence implements the rules of *Azul* (Michael Kiesling)
+as a fan research project; it is not affiliated with or endorsed by the game's publishers.
