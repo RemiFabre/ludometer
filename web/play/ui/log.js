@@ -1,16 +1,47 @@
 /* The move log: every move of the game, in one flat list.
  *
- * Deliberately uniform — same type, same weight, same rule for every line,
- * newest at the bottom. A log entry is a record, not a headline, so nothing is
- * highlighted; the status band is where "what is happening now" lives.
+ * Newest at the **top**. You look at a log to check what just happened far more
+ * often than to read the game from the beginning, and putting the newest line
+ * where your eye already is saves a scroll on every single turn.
  *
- * An entry is `{n, kind, text, side?, coach?}`. `coach` (see `coachChip`) is the
- * verdict the search returned on one of your own moves.
+ * Deliberately uniform — same type, same weight, same rule for every line,
+ * including the newest one. A log entry is a record, not a headline; the status
+ * band is where "what is happening now" lives, and highlighting the top line
+ * would make this list compete with it.
+ *
+ * Moves are drawn **pictographically**: the tiles that moved are little tiles,
+ * in the same glazes they have on the board, so "took 3 ochre" is three ochre
+ * squares rather than a colour word you have to translate back into a colour.
+ * Only the places stay as words, because "factory 3" has no picture.
+ *
+ * An entry is `{n, kind, text, ply?, side?, coach?}`, and a move entry also
+ * carries `{count, color, source, dest, took_marker?, overflow?}` — with those
+ * missing, the entry falls back to its sentence, so any port that has not
+ * caught up still reads correctly.
  */
 
-import { node } from "./dom.js";
+import { CENTER, COLORS, FLOOR, node } from "./dom.js";
 
 const TAGS = { move: "", round: "round", end: "final", think: "search", start: "setup" };
+
+/** Short enough to sit next to the tiles: "factory 3", "middle", "row 5". */
+const shortSource = (source) => (source === CENTER ? "middle" : "factory " + (source + 1));
+const shortDest = (dest) => (dest === FLOOR ? "floor" : "row " + (dest + 1));
+
+/** One tile, at log size. */
+export function glyph(color) {
+  const g = node("i", "glyph");
+  g.dataset.color = color;
+  g.title = COLORS[color];
+  return g;
+}
+
+/** `count` tiles of `color`, as a row of little tiles. */
+export function glyphRun(color, count, cls) {
+  const wrap = node("span", "glyphs" + (cls ? " " + cls : ""));
+  for (let i = 0; i < count; i++) wrap.appendChild(glyph(color));
+  return wrap;
+}
 
 /** How the delta reads: at the AI's choice, a slip, or a real mistake. */
 export function grade(delta) {
@@ -53,19 +84,60 @@ export function coachChip(coach) {
   return chip;
 }
 
-/** Draw the whole log into `host` (a `<ol>`), oldest first, scrolled to the end. */
+/** Whether an entry carries enough to be drawn as pictures. */
+function isPictorial(entry) {
+  return (
+    entry.kind === "move" &&
+    typeof entry.color === "number" &&
+    typeof entry.count === "number" &&
+    typeof entry.source === "number" &&
+    typeof entry.dest === "number"
+  );
+}
+
+/** The body of one move entry: tiles, then where from and where to. */
+function moveBody(entry) {
+  const body = node("span", "log-text");
+  body.appendChild(glyphRun(entry.color, entry.count));
+  if (entry.took_marker) {
+    const wrap = node("span", "glyphs");
+    const chip = node("i", "glyph marker-glyph", "1");
+    chip.title = "and the first-player marker";
+    wrap.appendChild(chip);
+    body.appendChild(wrap);
+  }
+  body.appendChild(node("span", "log-where", shortSource(entry.source)));
+  body.appendChild(node("span", "log-arrow", "→"));
+  body.appendChild(node("span", "log-where", shortDest(entry.dest)));
+  if (entry.overflow) {
+    body.appendChild(
+      node("span", "log-aside", " · " + entry.overflow + " to the floor")
+    );
+  }
+  body.title = entry.text || "";
+  return body;
+}
+
+/**
+ * Draw the whole log into `host` (an `<ol>`), **newest first**.
+ *
+ * `entries` stays in play order — the reversing happens here, so callers never
+ * have to think about it and the ply numbers keep meaning what they say.
+ */
 export function renderLog(host, entries) {
   host.innerHTML = "";
-  (entries || []).forEach((entry) => {
+  const list = (entries || []).slice().reverse();
+  list.forEach((entry) => {
     const li = node("li", "log-entry");
     li.dataset.kind = entry.kind;
     if (entry.side) li.dataset.side = entry.side;
+    if (entry.ply !== undefined) li.dataset.ply = entry.ply;
     const tag = entry.kind === "move" ? entry.side || "" : TAGS[entry.kind] || entry.kind;
     li.appendChild(node("span", "log-tag", tag === "human" ? "you" : tag));
-    const body = node("span", "log-text", entry.text);
+    const body = isPictorial(entry) ? moveBody(entry) : node("span", "log-text", entry.text);
     if (entry.coach) body.appendChild(coachChip(entry.coach));
     li.appendChild(body);
     host.appendChild(li);
   });
-  host.scrollTop = host.scrollHeight;
+  host.scrollTop = 0; // the newest line is at the top, so that is where we look
 }
