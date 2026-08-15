@@ -64,7 +64,7 @@ import { popScore } from "../ui/popups.js";
 import { clearScoring, renderFinalPanel, renderRoundPanel } from "../ui/scoring.js";
 import { createSettings } from "../ui/settings.js";
 import { createStatus } from "../ui/status.js";
-import { analyticsOn, track } from "./analytics.js";
+import { analyticsOn, statsUrl, track } from "./analytics.js";
 import { GameSession } from "./game.js";
 import { describeAction } from "./report.js";
 
@@ -95,6 +95,7 @@ let notice = "";       // a passing message, shown in the band, never over the b
 let noticeTimer = null;
 let proposal = null;   // {id, move} — a placed move waiting for "Play this move"
 let committing = null; // the move whose held view stays up while its tiles fly
+let analysis = null;   // the coach reading the position while you think (see below)
 let navToken = 0;      // invalidates a history-step animation when another step lands
 
 initSpeed(); // before anything can animate: the stored speed, or 1×
@@ -118,8 +119,8 @@ const COACH_THINK_S = 2;
 const COACH_MAX_THINK_S = 3;
 const COACH_LEGEND =
   "Coach mode rates your move with the AI's own search: 0.00 = the move it would " +
-  "have played, −1 ≈ a whole win thrown away. Your move lands at once; the " +
-  "verdict fills in on its log entry when the search finishes.";
+  "have played, −1 ≈ a whole win thrown away. The coach reads the position while " +
+  "you think, so the verdict usually lands with your move.";
 
 /* ------------------------------------------------------------------ plumbing */
 /** A passing message. It goes in the status band's detail line — never a pop-up. */
@@ -335,6 +336,7 @@ function render() {
       setTimeout(() => dish.classList.remove("picked"), 1600);
     }
   }
+  startAnalysis(); // with coach mode on and your turn, the coach starts reading
 }
 
 /** Draw one position and nothing else — a history frame, or a step in a turn. */
@@ -690,13 +692,15 @@ function route(id) {
   propose(id);
 }
 
-/** The banner a placed move answers to. */
+/** The banner a placed move answers to. It swaps in for the action row's usual
+ * controls (see board.css), so showing it never moves the page. */
 function syncBanner() {
   const on = !!proposal && !busy;
   ui.confirmBar.hidden = !on;
+  ui.confirmBar.parentElement.classList.toggle("placing", on);
   if (on) {
     ui.confirmDetail.textContent =
-      "You " + proposal.move.text + ". Nothing is final until you play it.";
+      "You " + proposal.move.text + " — nothing is final until you play it.";
   }
 }
 
@@ -764,8 +768,26 @@ async function play(id) {
   clearScoring(ui.scoring);
   try {
     const setupBefore = coachOn ? session.state.toSetup() : null;
+    // the coach's head start covers exactly this position: stop it where it
+    // stands (the opponent needs the worker) and grade from what it read.
+    // Cancelled even if coach mode was switched off meanwhile — a stale
+    // analysis must never keep the opponent waiting.
+    const reading =
+      analysis && analysis.forSession === session && analysis.ply === S.ply
+        ? analysis
+        : null;
+    if (reading) worker.postMessage({ type: "cancel" });
+    const headStart = coachOn ? reading : null;
     const { move: applied, reports } = session.playHuman(id);
-    if (setupBefore) queueRating(setupBefore, id, session.log[applied.log_n]);
+    const entry = session.log[applied.log_n];
+    if (setupBefore && entry) {
+      if (headStart) {
+        entry.coach = { pending: true };
+        finishFromAnalysis(headStart, id, entry, setupBefore);
+      } else {
+        queueRating(setupBefore, id, entry);
+      }
+    }
     const takeoff = committed
       ? { skip: true }
       : handRects
@@ -880,13 +902,20 @@ async function settle(moves, board, reports, mover, takeoff) {
   }
   if (S.state.is_terminal && S.final) {
     renderFinalPanel(ui.scoring, S.final, sides());
-    track(
+    // one coarse path per net and outcome (so the dashboard can show win
+    // rates per model), with the score line as the hit's detail
+    const model = meta ? meta.run + "-" + meta.checkpoint : "unknown";
+    const result =
       S.final.winner_side === "human"
-        ? "game-win"
+        ? "human-wins"
         : S.final.winner_side === "ai"
-          ? "game-loss"
-          : "game-draw"
-    );
+          ? "net-wins"
+          : "draw";
+    track("game-end/" + model + "/" + result, {
+      title:
+        S.state.scores[S.human_seat] + "–" + S.state.scores[S.ai_seat] +
+        " in " + S.final.rounds_played + " rounds",
+    });
   } else if (mover === "ai" && S.last_ai_move) {
     // let the AI's own move stand as the headline for a beat before your turn
     status.set({ headline: "AI " + S.last_ai_move.text, detail: turnDetail(), tone: "ai" });
@@ -943,6 +972,64 @@ async function flushRatings() {
   } finally {
     ratingNow = false;
   }
+}
+
+/* The coach's head start. The rating search runs on the position *before* your
+ * move and only reads the played move out of the finished tree afterwards — so
+ * it can run while you are still choosing. `startAnalysis` kicks it off the
+ * moment it is your turn (idempotent per position); when you move, the search
+ * is cancelled where it stands, the opponent gets the worker back, and the
+ * verdict is read from whatever tree had grown. A tree too thin to be honest
+ * (you moved within a fraction of a second) falls back to the old post-move
+ * rating, so the verdict is never worse than it used to be. */
+const ANALYSIS_MIN_SIMS = 400;
+
+function startAnalysis() {
+  if (!coachOn || !engineReady || busy || !session || !S || !S.your_turn) return;
+  if (analysis && analysis.forSession === session && analysis.ply === S.ply) return;
+  const job = { forSession: session, ply: S.ply, budgetS: coachBudget() };
+  job.promise = ask({ type: "analyze", setup: session.state.toSetup(), budgetS: job.budgetS })
+    .then((reply) => reply.analysis)
+    .catch(() => null);
+  analysis = job;
+}
+
+/** The verdict `rate` would have given, read out of an analyzed tree. */
+function verdictFrom(a, budgetS, actionId) {
+  const base = { budgetS, legal: a.legal, sims: a.sims, elapsedS: a.elapsedS };
+  if (a.forced) return { ...base, delta: 0, forced: true };
+  const explored = a.children || [];
+  if (!explored.length) {
+    return { ...base, unrated: true, reason: "the search had no time to explore this position" };
+  }
+  const best = explored.reduce((x, y) => (y.q > x.q ? y : x));
+  const mine = explored.find((c) => c.action === actionId);
+  if (!mine) {
+    return { ...base, unrated: true, reason: "the search never explored this move" };
+  }
+  return {
+    ...base,
+    delta: Math.min(0, mine.q - best.q),
+    your_q: mine.q,
+    best_q: best.q,
+    visits: mine.visits,
+    best_visits: best.visits,
+    best_text: a.best_text,
+    explored: explored.length,
+  };
+}
+
+/** Settle a move's verdict from the head-start analysis — or fall back. */
+async function finishFromAnalysis(job, actionId, entry, setup) {
+  const a = await job.promise;
+  if (!a || (!a.forced && a.sims < ANALYSIS_MIN_SIMS)) {
+    // the move came faster than the coach could read: judge it the old way
+    queueRating(setup, actionId, entry);
+    flushRatings();
+    return;
+  }
+  entry.coach = verdictFrom(a, job.budgetS, actionId);
+  if (job.forSession === session && S && !busy) render();
 }
 
 function syncCoach() {
@@ -1219,6 +1306,7 @@ ui.cancel.addEventListener("click", () => {
 ui.coach.addEventListener("change", () => {
   coachOn = ui.coach.checked;
   syncCoach();
+  startAnalysis(); // switched on mid-turn: start reading this position now
   say(
     coachOn
       ? "coach mode on — your moves are scored by the AI's own search"
@@ -1245,16 +1333,20 @@ document.addEventListener("keydown", (event) => {
 bindHistoryKeys(nav, { enabled: () => !busy });
 
 // The tally is off until analytics.js names an endpoint. When it is on, the
-// About panel must stop claiming a silence the page no longer keeps.
+// About panel must stop claiming a silence the page no longer keeps — and it
+// links to the public dashboard, so anyone can see exactly what is recorded.
 if (analyticsOn()) {
-  ui.aboutMeta.before(
-    node(
-      "p",
-      null,
-      "One anonymous, cookie-free counter ping records that a game was played " +
-        "and how it ended — nothing else, and nothing about you."
-    )
+  const disclosure = node(
+    "p",
+    null,
+    "One anonymous, cookie-free ping counts each visit, each game dealt, and " +
+      "how finished games ended (score and which net was playing) — nothing " +
+      "else, and nothing about you. "
   );
+  const link = node("a", null, "The tally is public");
+  link.href = statsUrl();
+  disclosure.append(link, node("span", null, ", so you can see everything it records."));
+  ui.aboutMeta.before(disclosure);
   track("pageview");
 }
 
