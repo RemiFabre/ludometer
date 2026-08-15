@@ -39,94 +39,69 @@
   </form>
 </header>
 
+<!-- the net is a 13 MB download: its state gets its own strip, never a pop-up -->
 <div class="engine-bar" id="engine-bar">
   <span class="engine-dot" id="engine-dot" aria-hidden="true"></span>
   <span class="engine-text" id="engine-text">Loading the net…</span>
   <span class="engine-badge">runs entirely in your browser</span>
 </div>
 
-<main id="table" class="table">
+<main class="table">
 
-  <section class="panel middle" aria-labelledby="middle-title">
-    <h2 class="panel-title" id="middle-title">The middle of the table</h2>
-    <div class="factories" id="factories"></div>
-    <div class="center-dish" id="center"></div>
-    <p class="turn-line" id="turn"></p>
-    <div class="thinking hidden" id="thinking" aria-live="polite">
-      <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="thinking-text" id="thinking-text">The AI is thinking</span>
+  <!-- one glance = whole game state; nothing on this page ever covers the board -->
+  <section id="status"></section>
+
+  <section class="panel">
+    <h2 class="panel-title">The middle of the table</h2>
+    <div id="middle"></div>
+    <div class="middle-actions">
+      <span class="brand-sub" id="prompt">Loading the net — the tiles will be dealt in a moment.</span>
+      <button type="button" class="btn" id="hint" disabled>Suggest a move</button>
+      <button type="button" class="btn hidden" id="cancel">Clear selection</button>
     </div>
   </section>
 
-  <aside class="side">
-    <section class="panel scoreline" aria-label="Scores">
-      <div class="score" id="score-human">
-        <span class="score-who">You</span>
-        <span class="score-value">0</span>
-        <span class="score-note"></span>
+  <div class="boards">
+    <section id="board-human" aria-label="Your board"></section>
+    <section id="board-ai" aria-label="The AI's board"></section>
+  </div>
+
+  <section id="scoring" hidden aria-live="polite"></section>
+
+  <div class="below">
+    <section class="panel">
+      <div class="board-head">
+        <h2 class="panel-title" id="log-title">Move log</h2>
+        <label class="check coach off" id="coach-field" title="Score your moves with the AI's own search">
+          <input type="checkbox" id="coach">
+          <span>Coach mode</span>
+        </label>
       </div>
-      <div class="score" id="score-ai">
-        <span class="score-who">AI</span>
-        <span class="score-value">0</span>
-        <span class="score-note"></span>
-      </div>
+      <p class="coach-legend" id="coach-legend" hidden></p>
+      <ol class="log" id="log" aria-labelledby="log-title"></ol>
     </section>
 
-    <section class="panel board-panel small" aria-labelledby="ai-board-title">
-      <h2 class="panel-title" id="ai-board-title">Opponent’s board</h2>
-      <div class="board" id="board-ai"></div>
-    </section>
+    <div class="below-side">
+      <section class="panel">
+        <h2 class="panel-title">Supply</h2>
+        <div class="supply-rows" id="supply"></div>
+      </section>
 
-    <section class="panel narration" aria-labelledby="log-title">
-      <h2 class="panel-title" id="log-title">Table talk</h2>
-      <p class="last-move" id="last-move" aria-live="polite">Loading the net — the board will be dealt in a moment.</p>
-      <p class="facing hidden" id="facing"></p>
-      <ol class="log" id="log"></ol>
-    </section>
-
-    <section class="panel supply" aria-labelledby="supply-title">
-      <h2 class="panel-title" id="supply-title">Supply</h2>
-      <div class="supply-rows" id="supply"></div>
-    </section>
-
-    <section class="panel about" aria-labelledby="about-title">
-      <h2 class="panel-title" id="about-title">How this works</h2>
-      <p>The opponent is a policy + value network trained from scratch by
-      self-play, exported to ONNX. Your browser downloads it once, then runs the
-      same PUCT tree search the training loop used — on your machine, in a
-      background thread. Nothing is sent anywhere.</p>
-      <p class="about-meta" id="about-meta"></p>
-      <p><a href="https://github.com/RemiFabre/ludometer">Source and training logs on GitHub</a></p>
-    </section>
-  </aside>
-
-  <section class="panel board-panel mine" aria-labelledby="my-board-title">
-    <div class="mine-head">
-      <h2 class="panel-title" id="my-board-title">Your board</h2>
-      <div class="mine-actions">
-        <span class="prompt" id="prompt">Pick a colour from a factory or the middle.</span>
-        <button type="button" class="btn btn-ghost" id="hint" disabled>Suggest a move</button>
-        <button type="button" class="btn btn-ghost hidden" id="cancel">Clear selection</button>
-      </div>
+      <section class="panel about" aria-labelledby="about-title">
+        <h2 class="panel-title" id="about-title">How this works</h2>
+        <p>The opponent is a policy + value network trained from scratch by
+        self-play, exported to ONNX. Your browser downloads it once, then runs the
+        same PUCT tree search the training loop used — on your machine, in a
+        background thread. Nothing is sent anywhere.</p>
+        <p class="about-meta" id="about-meta"></p>
+        <p><a href="https://github.com/RemiFabre/ludometer">Source and training logs on GitHub</a></p>
+      </section>
     </div>
-    <div class="board" id="board-human"></div>
-  </section>
+  </div>
 
 </main>
 
-<div class="overlay hidden" id="overlay" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
-  <div class="sheet">
-    <h2 class="sheet-title" id="overlay-title"></h2>
-    <div class="sheet-body" id="overlay-body"></div>
-    <div class="sheet-foot">
-      <button type="button" class="btn btn-primary" id="overlay-ok">Carry on</button>
-    </div>
-  </div>
-</div>
-
 <div class="fly-layer" id="fly" aria-hidden="true"></div>
-
-<div class="toasts" id="toasts" aria-live="assertive"></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

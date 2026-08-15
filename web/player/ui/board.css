@@ -1,0 +1,559 @@
+/* Azul board kit — the portable half of the page.
+ *
+ * Direction: glazed azulejo ceramic on a linen table. Everything a player
+ * touches is a tile with a bevelled glaze and a pinwheel motif; the wall starts
+ * as unglazed bisque and glazes over as tiles land on it. The palette is the
+ * five tile glazes and nothing else, so no accent colour is invented.
+ *
+ * Scope: tokens, tiles, the two player boards, the middle of the table, the
+ * status band, the move log, the inline scoring panels and the flight layer.
+ * Nothing in here knows about a server, a form or a page shell — this file plus
+ * ui/*.js is what another page needs to draw the same table.
+ */
+
+:root {
+  /* table & plaster */
+  --linen: #e6dbc6;
+  --linen-dark: #d8c9ae;
+  --plaster: #faf6ec;
+  --plaster-edge: #e6dcc6;
+  --bisque: #eae0cb;
+  --grout: #cfc0a4;
+  --ink: #2c2722;
+  --ink-soft: #6d6153;
+  --ink-faint: #9b8d7a;
+
+  /* The five glazes, matched to the base-game tiles you hold in your hand:
+   * deep cobalt, mustard ochre, brick terracotta, charcoal, and the pale one —
+   * "ice", a bright cyan-turquoise that must read lighter than the cobalt at a
+   * glance. Ghosts are the same glaze fired thin, for the empty wall squares. */
+  --c0: #17509e; --c0-hi: #4a80c8; --c0-lo: #0e3568; --c0-ghost: #b9cce6;
+  --c1: #d99a12; --c1-hi: #f2c445; --c1-lo: #9b6c06; --c1-ghost: #ecd8a2;
+  --c2: #b23a26; --c2-hi: #d46e57; --c2-lo: #7c2213; --c2-ghost: #e7c4b8;
+  --c3: #23272d; --c3-hi: #565e69; --c3-lo: #0d1014; --c3-ghost: #c4c7cb;
+  --c4: #31b8d1; --c4-hi: #7ddcea; --c4-lo: #1a7f94; --c4-ghost: #b6e0e9;
+
+  --tile: 32px;
+  --radius: 3px;
+  --shadow-panel: 0 1px 0 #fffdf7 inset, 0 10px 26px -18px rgba(60, 44, 20, .55);
+  --font-display: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  --font-body: "Avenir Next", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  --font-label: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+}
+
+.panel {
+  padding: 14px 16px 16px;
+  background: linear-gradient(#fdfbf5, var(--plaster));
+  border: 1px solid var(--plaster-edge);
+  border-radius: 4px;
+  box-shadow: var(--shadow-panel);
+}
+.panel-title {
+  margin: 0 0 10px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ============================================================== status band ==
+ * The signature: one wide plaster cartouche that says what is happening, keeps
+ * the score, and turns into the AI's clock when it is thinking. Because it
+ * always holds the answer, nothing ever has to cover the board to ask you to
+ * wait — there is not a single overlay in this page. */
+.status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 3vw, 40px);
+  padding: 14px clamp(16px, 2.4vw, 26px) 16px;
+  overflow: hidden;
+  background: linear-gradient(#fffdf7, #f6efe0);
+  border: 1px solid var(--plaster-edge);
+  border-left: 5px solid var(--grout);
+  border-radius: 4px;
+  box-shadow: var(--shadow-panel);
+}
+.status[data-tone="you"] { border-left-color: var(--c4); }
+.status[data-tone="ai"] { border-left-color: var(--c0); }
+.status[data-tone="scoring"] { border-left-color: var(--c1); }
+.status[data-tone="end"] { border-left-color: var(--c2); }
+
+.status-text { flex: 1; min-width: 0; }
+.status-headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(21px, 2.5vw, 31px);
+  line-height: 1.15;
+  letter-spacing: .005em;
+}
+.status-detail {
+  margin: 4px 0 0;
+  font-family: var(--font-label);
+  font-size: 12.5px;
+  letter-spacing: .08em;
+  color: var(--ink-soft);
+  min-height: 15px;
+}
+
+.status-score { display: flex; align-items: center; gap: 10px; }
+.status-dash { color: var(--ink-faint); font-family: var(--font-display); font-size: 22px; }
+.status-side { display: flex; flex-direction: column; align-items: center; min-width: 62px; }
+.status-side-score {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+.status-side.leading .status-side-score { color: var(--ink); }
+.status-side-name {
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* the clock: a glaze bar drawn along the foot of the band */
+.status-bar {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: rgba(207, 192, 164, .5);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.status.ticking .status-bar { opacity: 1; }
+.status-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--c0-hi), var(--c0));
+  transition: width .12s linear;
+}
+.status.indeterminate .status-fill {
+  width: 34% !important;
+  animation: glaze-sweep-bar 1.1s ease-in-out infinite alternate;
+}
+@keyframes glaze-sweep-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+/* ==================================================================== tile == */
+.tile {
+  position: relative;
+  width: var(--tile);
+  height: var(--tile);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background-image:
+    radial-gradient(circle at 31% 24%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 58%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .22) 0 17%, rgba(255, 255, 255, 0) 18%),
+    conic-gradient(from 45deg at 50% 50%,
+      rgba(255, 255, 255, .13) 0 25%, rgba(0, 0, 0, .07) 0 50%,
+      rgba(255, 255, 255, .13) 0 75%, rgba(0, 0, 0, .07) 0),
+    linear-gradient(158deg, var(--hi), var(--base) 52%, var(--lo));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .4) inset,
+    0 -2px 4px rgba(0, 0, 0, .3) inset,
+    0 1px 2px rgba(60, 44, 20, .4);
+}
+.tile[data-color="0"] { --base: var(--c0); --hi: var(--c0-hi); --lo: var(--c0-lo); }
+.tile[data-color="1"] { --base: var(--c1); --hi: var(--c1-hi); --lo: var(--c1-lo); }
+.tile[data-color="2"] { --base: var(--c2); --hi: var(--c2-hi); --lo: var(--c2-lo); }
+.tile[data-color="3"] { --base: var(--c3); --hi: var(--c3-hi); --lo: var(--c3-lo); }
+.tile[data-color="4"] { --base: var(--c4); --hi: var(--c4-hi); --lo: var(--c4-lo); }
+.tile.mini { width: 22px; height: 22px; }
+
+button.tile { cursor: pointer; transition: transform .13s ease, box-shadow .13s ease; }
+button.tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .4) inset, 0 -2px 4px rgba(0, 0, 0, .3) inset,
+    0 5px 9px -3px rgba(60, 44, 20, .55);
+}
+button.tile.taken { transform: translateY(-4px) scale(1.04); }
+button.tile.taken::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  opacity: .85;
+}
+button.tile.dimmed { opacity: .38; }
+button.tile:disabled { cursor: default; }
+
+.marker {
+  width: var(--tile);
+  height: var(--tile);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: linear-gradient(#fffdf4, #ece0c6);
+  box-shadow: 0 0 0 1px var(--grout) inset, 0 1px 2px rgba(60, 44, 20, .35);
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--ink-soft);
+}
+.marker.tiny { width: calc(var(--tile) - 4px); height: calc(var(--tile) - 4px); font-size: 12px; }
+
+/* ================================================= middle of the table == */
+.factories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  justify-content: center;
+  padding: 4px 0 2px;
+}
+.factory {
+  --dish: calc(var(--tile) * 2 + 32px);
+  position: relative;
+  width: var(--dish);
+  height: var(--dish);
+  display: grid;
+  grid-template-columns: repeat(2, var(--tile));
+  grid-auto-rows: var(--tile);
+  gap: 5px;
+  place-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #fffdf6, #efe4cd 62%, #dccdb0);
+  box-shadow:
+    0 0 0 1px var(--grout) inset,
+    0 3px 0 -1px rgba(255, 255, 255, .7) inset,
+    0 -6px 10px -6px rgba(90, 66, 30, .45) inset,
+    0 6px 14px -8px rgba(80, 58, 26, .55);
+}
+.factory:nth-child(odd) { transform: rotate(-1.1deg); }
+.factory:nth-child(even) { transform: rotate(1.3deg); }
+.factory .fac-id {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: .12em;
+  color: var(--ink-faint);
+}
+.factory.empty { opacity: .62; }
+.factory .empty-note { grid-column: 1 / -1; text-align: center; }
+
+.center-dish {
+  margin: 14px auto 0;
+  min-height: calc(var(--tile) + 24px);
+  max-width: 680px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  background: radial-gradient(120% 160% at 50% 0%, #fffdf6, #f0e6d1 60%, #ddceb1);
+  box-shadow:
+    0 0 0 1px var(--grout) inset,
+    0 3px 0 -1px rgba(255, 255, 255, .7) inset,
+    0 -8px 14px -8px rgba(90, 66, 30, .4) inset,
+    0 8px 18px -12px rgba(80, 58, 26, .5);
+}
+.center-dish .empty-note, .factory .empty-note {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.group { display: flex; gap: 4px; }
+
+/* the dish a move is drawing from, while it draws */
+.factory.picked, .center-dish.picked {
+  box-shadow:
+    0 0 0 2px var(--c0) inset,
+    0 3px 0 -1px rgba(255, 255, 255, .7) inset,
+    0 0 0 4px rgba(23, 80, 158, .14),
+    0 6px 14px -8px rgba(80, 58, 26, .55);
+}
+
+/* ================================================================= board == */
+/* Both boards are this component with `interactive` flipped, so the human's and
+ * the AI's are the same size, the same rows, the same everything. */
+.board {
+  /* both boards share this: identical size is the point of the twin layout */
+  --tile: clamp(20px, 2.5vw, 42px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  padding: 12px 14px 14px;
+  background: linear-gradient(#fdfbf5, var(--plaster));
+  border: 1px solid var(--plaster-edge);
+  border-radius: 4px;
+  box-shadow: var(--shadow-panel);
+}
+.board.to-move { border-color: var(--grout); box-shadow: var(--shadow-panel), 0 0 0 2px rgba(49, 184, 209, .3); }
+
+.board-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--plaster-edge);
+}
+.board-who {
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.board-score { font-family: var(--font-display); font-size: 30px; line-height: 1; text-align: right; }
+.board-notes {
+  grid-column: 1 / -1;
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+  min-height: 14px;
+}
+
+/* The board's spine: pattern line r and wall row r are ONE grid row, exactly as
+ * on the cardboard, so a full line visibly slides into the row beside it. */
+.board-grid {
+  --row-h: calc(var(--tile) + 6px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-auto-rows: var(--row-h);
+  column-gap: clamp(8px, 1vw, 18px);
+  row-gap: 0;
+}
+.line {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  text-align: right;
+}
+.line .slot, .floor .slot {
+  width: var(--tile);
+  height: var(--tile);
+  border-radius: var(--radius);
+  background: var(--bisque);
+  box-shadow: 0 0 0 1px var(--grout) inset, 0 2px 3px -2px rgba(90, 66, 30, .5) inset;
+}
+button.line { cursor: default; font: inherit; color: inherit; }
+button.line.open {
+  cursor: pointer;
+  border-color: var(--c4-lo);
+  background: rgba(49, 184, 209, .12);
+  box-shadow: 0 0 0 3px rgba(49, 184, 209, .16);
+}
+button.line.open:hover { background: rgba(49, 184, 209, .22); }
+button.line.blocked { cursor: not-allowed; opacity: .55; }
+.line .row-note {
+  flex: 1;
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+}
+.line.open .row-note { color: var(--c4-lo); }
+.line.incoming { border-color: var(--c0); background: rgba(23, 80, 158, .1); }
+
+/* One grouted strip per wall row; stacked with no row gap they read as one
+ * mortared panel, and each strip stays level with its pattern line. */
+.wall-row {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(5, var(--tile));
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0 5px;
+  background: var(--grout);
+  box-shadow: 0 2px 6px -3px rgba(90, 66, 30, .7) inset;
+}
+.wall-row.top { border-radius: 4px 4px 0 0; }
+.wall-row.bottom { border-radius: 0 0 4px 4px; }
+.cell { width: var(--tile); height: var(--tile); border-radius: var(--radius); }
+/* An empty wall square is bisque waiting for its glaze: pale ground plus a
+ * diamond in the true colour, so the wall's pattern reads at a glance. */
+.cell.bisque {
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(140, 120, 90, .35) inset, 0 -1px 2px rgba(90, 66, 30, .18) inset;
+}
+.cell.bisque::after {
+  content: "";
+  position: absolute;
+  inset: 27%;
+  border-radius: 1px;
+  transform: rotate(45deg);
+  background: var(--ghost-ink);
+  opacity: .55;
+}
+.cell.bisque[data-color="0"] { background-color: var(--c0-ghost); --ghost-ink: var(--c0); }
+.cell.bisque[data-color="1"] { background-color: var(--c1-ghost); --ghost-ink: var(--c1); }
+.cell.bisque[data-color="2"] { background-color: var(--c2-ghost); --ghost-ink: var(--c2); }
+.cell.bisque[data-color="3"] { background-color: var(--c3-ghost); --ghost-ink: var(--c3); }
+.cell.bisque[data-color="4"] { background-color: var(--c4-ghost); --ghost-ink: var(--c4); }
+
+.floor {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+}
+.floor .cellwrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.floor .pen { font-family: var(--font-label); font-size: 10px; letter-spacing: .06em; color: var(--ink-faint); }
+button.floor.open {
+  cursor: pointer;
+  border-color: var(--c2);
+  background: rgba(178, 58, 38, .1);
+  box-shadow: 0 0 0 3px rgba(178, 58, 38, .14);
+}
+button.floor.open:hover { background: rgba(178, 58, 38, .18); }
+.floor-wrap { display: flex; flex-direction: column; gap: 4px; }
+.floor-note { font-family: var(--font-label); font-size: 11px; color: var(--ink-faint); }
+.floor-note.warn { color: var(--c2-lo); }
+
+/* ============================================================== move log == */
+.log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+}
+/* Every entry, always, is drawn the same: a log is a record, not a headline. */
+.log-entry {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--plaster-edge);
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+.log-entry:first-child { border-top: 0; }
+.log-tag {
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 3px;
+}
+.log-text { min-width: 0; }
+
+.coach-chip { display: inline-flex; align-items: baseline; gap: 7px; margin-left: 8px; vertical-align: baseline; }
+.coach-delta {
+  padding: 1px 7px 2px;
+  border-radius: 2px;
+  background: var(--bisque);
+  box-shadow: 0 0 0 1px var(--grout) inset;
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.coach-chip[data-grade="best"] .coach-delta { color: var(--c0-lo); box-shadow: 0 0 0 1px var(--c0-ghost) inset; background: rgba(23, 80, 158, .08); }
+.coach-chip[data-grade="slip"] .coach-delta { color: var(--c1-lo); box-shadow: 0 0 0 1px var(--c1-ghost) inset; background: rgba(217, 154, 18, .12); }
+.coach-chip[data-grade="blunder"] .coach-delta { color: var(--c2-lo); box-shadow: 0 0 0 1px var(--c2-ghost) inset; background: rgba(178, 58, 38, .12); }
+.coach-chip[data-grade="pending"] .coach-delta { font-style: italic; }
+.coach-why { font-family: var(--font-label); font-size: 11.5px; letter-spacing: .03em; color: var(--ink-faint); }
+.coach-legend {
+  margin: 0 0 8px;
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+}
+
+/* ========================================================= inline scoring == */
+.scoring {
+  padding: 14px 16px 16px;
+  background: linear-gradient(#fffdf7, #f7f0e2);
+  border: 1px solid var(--plaster-edge);
+  border-left: 5px solid var(--c1);
+  border-radius: 4px;
+  box-shadow: var(--shadow-panel);
+}
+.scoring.final { border-left-color: var(--c2); }
+.scoring[hidden] { display: none; }
+.scoring-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 12px; }
+.scoring-title { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 400; }
+.scoring-note { font-family: var(--font-label); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.scoring-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(12px, 1.6vw, 20px); }
+.score-card { padding: 12px 14px; border-radius: 4px; background: var(--bisque); box-shadow: 0 0 0 1px var(--grout) inset; }
+.score-card-who {
+  margin: 0 0 6px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.score-delta { margin: 0 0 8px; font-family: var(--font-display); font-size: 24px; }
+.score-delta.big { font-size: 38px; line-height: 1; }
+.score-delta.up { color: var(--c0-lo); }
+.score-delta.down { color: var(--c2-lo); }
+.score-delta.won { color: var(--c0); }
+.score-tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.score-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.score-tile .pts { font-family: var(--font-display); font-size: 14px; }
+.score-tile .where { font-family: var(--font-label); font-size: 9.5px; letter-spacing: .06em; color: var(--ink-faint); }
+.score-line { margin: 2px 0 0; font-size: 13px; color: var(--ink-soft); }
+.bonus-list { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 0; font-size: 13px; }
+.bonus-list dt { color: var(--ink-soft); }
+.bonus-list dd { margin: 0; text-align: right; font-family: var(--font-label); letter-spacing: .04em; }
+.bonus-list dt.sum, .bonus-list dd.sum { padding-top: 5px; border-top: 1px solid var(--grout); color: var(--ink); }
+
+/* =============================================================== flights == */
+.fly-layer { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+/* Straight line, constant speed: a tile is being moved by a hand, not thrown. */
+.fly-tile {
+  position: fixed;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(.36, .62, .38, 1);
+  will-change: transform;
+}
+.fly-tile.marker { display: grid; place-items: center; }
+
+/* a completed line's tile arriving on the wall */
+@keyframes glaze-land {
+  0% { transform: scale(1.3); opacity: 0; }
+  60% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.tile.placed.landing { animation: glaze-land .42s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

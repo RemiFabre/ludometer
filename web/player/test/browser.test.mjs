@@ -9,9 +9,15 @@
  *   - no console errors and no uncaught exceptions, start to finish;
  *   - the board actually rendered (5 factories, both player boards, a legal move
  *     available);
- *   - a human move is accepted and the AI replies within its budget;
+ *   - the redesigned table's invariants: a status band instead of pop-ups (no
+ *     overlay, dialog, sheet or toast anywhere in the DOM) and twin boards, side
+ *     by side and the same size to the pixel;
+ *   - a human move is accepted, its tiles actually fly, and the AI replies within
+ *     its budget;
  *   - the AI's own "searched N positions in T s" line, which is the honest
- *     in-browser rate and is printed at the end.
+ *     in-browser rate and is printed at the end;
+ *   - a whole game, played out with reduced motion and no search, reaches the
+ *     *inline* final scoring panel with the board still on screen behind it.
  *
  * No puppeteer: CDP is a WebSocket and node has one built in.
  *
@@ -174,14 +180,17 @@ async function main() {
     await rm(profile, { recursive: true, force: true }).catch(() => {});
   };
 
+  // collected out here so a failure part-way through can still report what the
+  // page was saying when it stopped
+  const errors = [];
+  const consoleLines = [];
+
   try {
     await until("chrome to start", async () => devtoolsUrl, 20000);
     const browser = await Cdp.connect(devtoolsUrl);
     const { targetId } = await browser.send("Target.createTarget", { url: "about:blank" });
     const page = await Cdp.connect(devtoolsUrl.replace(/\/devtools\/browser\/.*/, `/devtools/page/${targetId}`));
 
-    const errors = [];
-    const consoleLines = [];
     page.on((msg) => {
       if (msg.method === "Runtime.consoleAPICalled") {
         const text = (msg.params.args || []).map((a) => a.value ?? a.description ?? "").join(" ");
@@ -208,17 +217,44 @@ async function main() {
     console.log("engine bar:", engineText);
 
     // the board should be dealt automatically once the net is ready
-    await until("the board", () => page.eval('return document.querySelectorAll("#factories .factory").length === 5;'), 20000);
+    await until("the board", () => page.eval('return document.querySelectorAll("#middle .factory").length === 5;'), 20000);
     const shape = await page.eval(`return {
-      factories: document.querySelectorAll("#factories .factory").length,
-      tiles: document.querySelectorAll("#factories button.tile").length,
+      factories: document.querySelectorAll("#middle .factory").length,
+      tiles: document.querySelectorAll("#middle button.tile").length,
       humanRows: document.querySelectorAll("#board-human .wall-row").length,
       aiRows: document.querySelectorAll("#board-ai .wall-row").length,
+      status: !!document.querySelector("#status .status-headline"),
       title: document.title,
     };`);
     console.log("board:", JSON.stringify(shape));
     if (shape.factories !== 5 || shape.humanRows !== 5 || shape.aiRows !== 5 || shape.tiles < 10) {
       errors.push("the board did not render as expected: " + JSON.stringify(shape));
+    }
+    if (!shape.status) errors.push("the status band did not render");
+
+    // The redesign's two structural promises: nothing ever covers the board, and
+    // the two boards are the same component, so they cannot drift apart in size.
+    const layout = await page.eval(`return {
+      overlays: [...document.querySelectorAll(".overlay, .sheet, .toast, .toasts, [role='dialog'], [aria-modal='true']")]
+        .map((n) => n.tagName + "." + (n.className || "").toString().split(" ")[0]),
+      boards: (() => {
+        const a = document.getElementById("board-human").getBoundingClientRect();
+        const b = document.getElementById("board-ai").getBoundingClientRect();
+        return {
+          sideBySide: a.right <= b.left + 1 && Math.abs(a.top - b.top) < 2,
+          sameWidth: Math.abs(a.width - b.width) < 1,
+          sameHeight: Math.abs(a.height - b.height) < 1,
+          width: Math.round(a.width) + "x" + Math.round(b.width),
+        };
+      })(),
+    };`);
+    console.log("layout:", JSON.stringify(layout));
+    if (layout.overlays.length) {
+      errors.push("this page must have no pop-ups, found: " + layout.overlays.join(", "));
+    }
+    if (!layout.boards.sideBySide) errors.push("the boards are not side by side");
+    if (!layout.boards.sameWidth || !layout.boards.sameHeight) {
+      errors.push("the two boards are not the same size: " + JSON.stringify(layout.boards));
     }
 
     // Phone check: at 390 CSS px nothing may push the page sideways, and the
@@ -255,6 +291,13 @@ async function main() {
     // set the thinking budget, deal a fresh game, then play like a person would
     await page.eval(`
       const think = document.getElementById("think");
+      // the page only offers a few budgets; --budget 0.5 is for this test's benefit
+      if (![...think.options].some((o) => o.value === "${BUDGET}")) {
+        const opt = document.createElement("option");
+        opt.value = "${BUDGET}";
+        opt.textContent = "${BUDGET} seconds";
+        think.appendChild(opt);
+      }
       think.value = "${BUDGET}";
       think.dispatchEvent(new Event("change"));
       document.getElementById("seed").value = "424242";
@@ -263,8 +306,25 @@ async function main() {
     `);
     await until("a fresh deal", () => page.eval('return document.getElementById("matchup").textContent.includes("seed 424242");'), 20000);
 
+    // Headless Chrome asks for reduced motion by default, and the page honours
+    // that by not animating at all — so say we do want motion before checking
+    // that tiles actually fly.
+    await page.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+    });
+
+    // count the tile flights the move sets off: a straight-line flight is a clone
+    // appended to the flight layer, so watching that layer is watching the animation
+    await page.eval(`
+      window.__flights = 0;
+      new MutationObserver((records) => {
+        records.forEach((r) => { window.__flights += r.addedNodes.length; });
+      }).observe(document.getElementById("fly"), { childList: true });
+      return true;
+    `);
+
     const picked = await page.eval(`
-      const tile = document.querySelector("#factories button.tile:not([disabled])");
+      const tile = document.querySelector("#middle button.tile:not([disabled])");
       if (!tile) return null;
       tile.click();
       return {source: tile.dataset.source, color: tile.dataset.color};
@@ -282,10 +342,14 @@ async function main() {
     if (dropped === null) throw new Error("no legal destination lit up after picking a colour");
     console.log("dropped into row:", dropped);
 
-    // the AI now spends its budget; the search note is written when it lands
+    // the AI now spends its budget; its search line is logged when the move lands
     const note = await until(
       "the AI to reply",
-      () => page.eval('const n = document.querySelector("#last-move .search-note"); return n ? n.textContent : null;'),
+      () =>
+        page.eval(
+          'const rows = document.querySelectorAll(\'#log .log-entry[data-kind="think"] .log-text\');' +
+            "return rows.length ? rows[rows.length - 1].textContent : null;"
+        ),
       Math.max(60000, BUDGET * 8000)
     );
     console.log("AI:", note);
@@ -298,12 +362,78 @@ async function main() {
     }
 
     const after = await page.eval(`return {
-      scores: [...document.querySelectorAll(".score-value")].map((n) => n.textContent),
-      turn: document.getElementById("turn").textContent,
+      scores: [...document.querySelectorAll(".status-side-score")].map((n) => n.textContent),
+      headline: document.querySelector("#status .status-headline").textContent,
       log: document.querySelectorAll("#log li").length,
+      flights: window.__flights,
     };`);
     console.log("after the exchange:", JSON.stringify(after));
-    if (after.log < 3) errors.push("the table talk log did not fill in");
+    if (after.log < 3) errors.push("the move log did not fill in");
+    if (!after.flights) errors.push("no tiles flew: the flight layer stayed empty");
+
+    // A whole game, at speed: reduced motion makes the flights return at once and
+    // "instant" gives the AI a single forward pass per move, so this plays out in
+    // a few seconds and lands on the *inline* final scoring panel.
+    await page.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+    });
+    await page.eval(`
+      const think = document.getElementById("think");
+      think.value = "0";
+      think.dispatchEvent(new Event("change"));
+      document.getElementById("seed").value = "20260815";
+      document.getElementById("setup").dispatchEvent(new Event("submit", {cancelable: true}));
+      return true;
+    `);
+    await until("a fresh deal", () => page.eval('return document.getElementById("matchup").textContent.includes("seed 20260815");'), 20000);
+
+    // click a colour, then the first destination it lights up — a person's two taps
+    const playOne = `
+      const tile = document.querySelector("#middle button.tile:not([disabled])");
+      if (!tile) return "wait";
+      tile.click();
+      const row = document.querySelector("#board-human .line.open") ||
+                  document.querySelector("#board-human .floor.open");
+      if (!row) { document.getElementById("cancel").click(); return "blocked"; }
+      row.click();
+      return "played";
+    `;
+    let played = 0;
+    const deadline = Date.now() + 180000;
+    for (;;) {
+      const done = await page.eval('return !!document.querySelector("#scoring.final");');
+      if (done) break;
+      if (Date.now() > deadline) {
+        errors.push(`the full game did not finish (${played} moves played)`);
+        break;
+      }
+      const outcome = await page.eval(playOne);
+      if (outcome === "played") played += 1;
+      await sleep(outcome === "played" ? 120 : 250);
+    }
+
+    const ending = await page.eval(`
+      const panel = document.getElementById("scoring");
+      const board = document.getElementById("board-human").getBoundingClientRect();
+      return {
+        final: panel.classList.contains("final"),
+        hidden: panel.hidden,
+        title: (panel.querySelector(".scoring-title") || {}).textContent || "",
+        cards: panel.querySelectorAll(".score-card").length,
+        bonusRows: panel.querySelectorAll(".bonus-list dt").length,
+        boardStillDrawn: board.width > 0 && board.height > 0,
+        overlays: document.querySelectorAll(".overlay, .sheet, .toast, [role='dialog']").length,
+        headline: document.querySelector("#status .status-headline").textContent,
+        scoreboard: [...document.querySelectorAll(".status-side-score")].map((n) => n.textContent),
+      };
+    `);
+    console.log(`full game: ${played} moves ->`, JSON.stringify(ending));
+    if (!ending.final || ending.hidden) errors.push("the inline final scoring panel never appeared");
+    if (ending.cards !== 2 || ending.bonusRows < 8) {
+      errors.push("the final scoring panel is not the two-column bonus breakdown");
+    }
+    if (!ending.boardStillDrawn) errors.push("the board vanished at the end of the game");
+    if (ending.overlays) errors.push("an overlay appeared at the end of the game");
 
     await cleanup();
 
@@ -321,6 +451,8 @@ async function main() {
   } catch (err) {
     await cleanup();
     console.error("FAIL —", err.message);
+    // whatever the page said on its way down is usually the real story
+    consoleLines.slice(-12).forEach((line) => console.error("  page: " + line));
     return 1;
   }
 }

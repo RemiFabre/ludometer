@@ -4,6 +4,46 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-15 — Public player now matches the new GUI, and serves a **run3** checkpoint
+
+<https://remifabre.github.io/ludometer/> is redeployed with the redesigned table **and** a
+stronger opponent.
+
+- **Now serving `run3/ckpt-001024`, +2185 Elo** (was `run2/ckpt-023040`, +2020). The structured
+  net is also much smaller: **6.8 MB of ONNX, 1.68 M parameters** (was 13.3 MB / 3.32 M), so
+  the first-visit download roughly halved. Live `model_meta.json` confirms it; browser parity
+  re-checked at export (policy 1.03e-5, value 1.40e-6, tol 1e-4).
+- **The `web/play/ui/` kit was lifted in as-is** — the seven files are byte-identical copies in
+  `web/player/ui/` (gh-pages has to be self-contained), and the page's own glue
+  (`web/player/js/app.js`) is now only the in-browser back end: it owns the `GameSession`, asks
+  the Web Worker for moves, and tells the status band what to say. +60 KB of payload on a 19 MB
+  site.
+- So the hosted page now has exactly what the local GUI has: **no pop-ups at all** (the
+  overlay/sheet *and* the toasts are gone — messages go into the status band's detail line),
+  the big status band with its filling clock (*"AI is thinking — 2.1s of 5s · 12,300
+  positions"* — it counts your own CPU's work), **twin identical boards** side by side, the
+  flat move log below them, straight-line tile flights for **both** players plus round-end
+  tiling, and **inline** round/final scoring under the boards.
+- **Coach mode made it in.** `mcts.js` grew one accessor (`rootChildren()`, the port of
+  `RootStatsMCTS.root_children`) and the worker a `rate` message, so the delta is the *same*
+  definition as the local GUI: `Q(your move) − max Q over explored children` at the root of a
+  fresh search, capped at 3 s (2 s default), `unrated` when the search never visited your move.
+  It is off by default and needs no server, so it works on the hosted page too.
+- **Kept**: the model-download progress strip, the think-time selector, the
+  "runs entirely in your browser" badge, the hint button and the "how this works" panel.
+
+Gates, all green: `engine.test.mjs` (9,384 assertions), `parity.test.mjs` against the new
+checkpoint, `selfplay.test.mjs`, and `browser.test.mjs` — which I extended to assert the
+redesign's promises: **zero** overlay/dialog/sheet/toast nodes in the DOM, the two boards side
+by side and identical to the pixel, tiles actually flying (it counts clones in the flight
+layer), and a **whole game** played out to the inline final scoring panel with the board still
+on screen. It passes both locally and with `--live`.
+
+Two things worth knowing: headless Chrome asks for reduced motion by default, so the test now
+emulates `no-preference` before checking that anything animates; and the same known gap as the
+local GUI remains — when the AI moves twice across a round boundary, only its first move is
+animated.
+
 ## 2026-08-15 — Local GUI redesigned: no pop-ups, twin boards, inline scoring, **coach mode**
 
 `uv run ludometer-gui` looks quite different, from your notes after playing more games.
