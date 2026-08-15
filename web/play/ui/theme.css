@@ -81,6 +81,14 @@
   --c2-motif: var(--c2);
   --c3-motif: var(--c3);
   --c4-motif: var(--c4);
+  /* the motif's body: the same glaze thinned to a matte wash, as if a drop of
+   * it had sunk into the plaster. Flat and translucent on purpose — a tile is
+   * glossy, raised and opaque, and this must never be mistaken for one. */
+  --c0-ghost: rgba(22, 80, 159, .34);
+  --c1-ghost: rgba(226, 164, 31, .38);
+  --c2-ghost: rgba(184, 64, 44, .34);
+  --c3-ghost: rgba(38, 43, 49, .30);
+  --c4-ghost: rgba(76, 195, 216, .38);
 
   /* ============================================================== fixtures ==
    * The bowls the tiles sit in, the marker chip, the lid. */
@@ -193,6 +201,11 @@
   /* charcoal's glaze is darker than the dusk slot it sits in, so its motif is
    * drawn in the charcoal *ink* instead — same hue, readable at night */
   --c3-motif: var(--c3-ink);
+  --c0-ghost: rgba(61, 121, 207, .34);
+  --c1-ghost: rgba(240, 181, 60, .34);
+  --c2-ghost: rgba(212, 87, 63, .34);
+  --c3-ghost: rgba(154, 163, 176, .26);
+  --c4-ghost: rgba(95, 211, 232, .32);
 
   --dish: #514c44;
   --dish-hi: #605a50;

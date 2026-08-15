@@ -233,8 +233,8 @@ const PLAY_ONE = `
   if (!row) { document.getElementById("cancel").click(); return "blocked"; }
   row.click();
   // confirm mode (on by default on pages that have it): press "Play this move"
-  const confirm = document.getElementById("confirm");
-  if (confirm && !confirm.classList.contains("hidden")) confirm.click();
+  const bar = document.getElementById("confirm-bar");
+  if (bar && !bar.hidden) document.getElementById("confirm").click();
   return "played";
 `;
 
@@ -594,29 +594,35 @@ async function checkHeldPreview(page, label, errors) {
     document.querySelector("#middle button.tile:not([disabled])").click();
     return true;
   `);
-  await sleep(150); // the flight counter is fed by a MutationObserver (a microtask)
+  await sleep(900); // let the transient flight land and its clones remove themselves
   const out = await page.eval(`
     return {
       flights: window.__anim.flights,
       hand: !document.getElementById("hand").hidden,
-      slots: document.querySelectorAll("#hand-tiles .slot").length,
+      tiles: document.querySelectorAll("#hand-tiles .tile").length,
+      ghosts: document.querySelectorAll("#fly .fly-tile").length,
     };
   `);
   if (!out.flights) errors.push(`${label}: picking a colour flew nothing`);
-  if (!out.hand || !out.slots) errors.push(`${label}: the hand tray did not open on pick`);
-  const back = await page.eval(`
+  if (!out.hand || !out.tiles) errors.push(`${label}: the hand tray did not fill on pick`);
+  if (out.ghosts) errors.push(`${label}: flight clones outlived the flight — a fixed clone scrolls apart from the table`);
+  await page.eval(`
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    return true;
+  `);
+  await sleep(120);
+  const back = await page.eval(`
     return {
       hand: !document.getElementById("hand").hidden,
-      ghosts: document.querySelectorAll("#fly .fly-tile").length,
       hidden: [...document.querySelectorAll("#middle .tile")]
         .filter((t) => t.style.visibility === "hidden").length,
+      pickable: document.querySelectorAll("#middle button.tile:not([disabled])").length,
     };
   `);
   if (back.hand) errors.push(`${label}: Escape left the hand tray open`);
-  if (back.ghosts) errors.push(`${label}: Escape left parked tile clones behind`);
   if (back.hidden) errors.push(`${label}: Escape left dish tiles hidden`);
-  console.log(`    ${label}: pick acted out ${out.flights} tiles into the tray; Escape reset it`);
+  if (!back.pickable) errors.push(`${label}: Escape did not restore the dishes`);
+  console.log(`    ${label}: pick flew ${out.flights} tiles into the tray (${out.tiles} held); Escape reset it`);
 }
 
 /** With coach mode on, the move must land at once — the verdict follows. */
@@ -736,10 +742,11 @@ async function checkNavAnimation(page, label, errors) {
   console.log(`    ${label}: history steps flew ${forward} tiles (${back} back, ${forward - back} forward)`);
 }
 
-/** Confirm mode: a clicked row only *places* the move; Play commits, Take it
- * back returns the tiles with the selection intact. */
+/** Confirm mode: a clicked row draws the position the move would leave — real
+ * tiles, the new ones glowing, a banner asking for the word. Play commits;
+ * Cancel goes all the way back to before the pick. */
 async function checkConfirmMove(page, label, errors) {
-  if (!(await page.eval('return !!document.getElementById("confirm");'))) {
+  if (!(await page.eval('return !!document.getElementById("confirm-bar");'))) {
     console.log(`    ${label}: no confirm mode on this page — skipped`);
     return;
   }
@@ -756,37 +763,49 @@ async function checkConfirmMove(page, label, errors) {
     row.click();
     return {
       logBefore,
-      confirmShown: !document.getElementById("confirm").classList.contains("hidden"),
-      cancelText: document.getElementById("cancel").textContent,
+      barShown: !document.getElementById("confirm-bar").hidden,
+      glowing: document.querySelectorAll("#board-human .proposed").length,
+      openRows: document.querySelectorAll("#board-human .line.open, #board-human .floor.open").length,
       locked: document.body.classList.contains("locked"),
     };
   `);
   if (!placed) return errors.push(`${label}: no open row to place a move on`);
-  if (!placed.confirmShown) errors.push(`${label}: placing a move offered no confirm button`);
+  if (!placed.barShown) errors.push(`${label}: placing a move raised no confirm banner`);
+  if (!placed.glowing) errors.push(`${label}: the placed tiles do not glow`);
+  if (placed.openRows) errors.push(`${label}: rows are still clickable under a placed move`);
   if (placed.locked) errors.push(`${label}: the move committed without confirmation`);
-  if (!/take it back/i.test(placed.cancelText)) {
-    errors.push(`${label}: no way back from a placed move (button says "${placed.cancelText}")`);
-  }
-  await sleep(800); // let the placement flight land
+  await sleep(900); // let the placement flight land and its clones go
   const shown = await page.eval(`return {
     log: document.querySelectorAll('#log .log-entry[data-kind="move"]').length,
-    ghosts: document.querySelectorAll("#fly .fly-tile, #park .fly-tile").length,
+    ghosts: document.querySelectorAll("#fly .fly-tile").length,
+    hidden: [...document.querySelectorAll("#board-human .tile, #middle .tile")]
+      .filter((t) => t.style.visibility === "hidden").length,
   };`);
   if (shown.log > placed.logBefore) errors.push(`${label}: a placed move reached the log early`);
-  if (!shown.ghosts) errors.push(`${label}: a placed move shows nothing on the board`);
-  await page.eval('document.getElementById("cancel").click(); return true;');
-  await sleep(800);
+  if (shown.ghosts) errors.push(`${label}: a placed move left clones parked over the board`);
+  if (shown.hidden) errors.push(`${label}: a placed move left real tiles hidden`);
+  // Cancel: all the way back, as if nothing had been picked
+  await page.eval('document.getElementById("confirm-cancel").click(); return true;');
+  await sleep(200);
   const back = await page.eval(`return {
-    confirmShown: !document.getElementById("confirm").classList.contains("hidden"),
-    log: document.querySelectorAll('#log .log-entry[data-kind="move"]').length,
+    barShown: !document.getElementById("confirm-bar").hidden,
+    glowing: document.querySelectorAll("#board-human .proposed").length,
     openRows: document.querySelectorAll("#board-human .line.open, #board-human .floor.open").length,
+    hand: !document.getElementById("hand").hidden,
+    pickable: document.querySelectorAll("#middle button.tile:not([disabled])").length,
+    log: document.querySelectorAll('#log .log-entry[data-kind="move"]').length,
   };`);
-  if (back.confirmShown) errors.push(`${label}: taking a move back left the confirm button up`);
-  if (back.log > placed.logBefore) errors.push(`${label}: taking a move back still played it`);
-  if (!back.openRows) errors.push(`${label}: taking a move back lost the selection`);
+  if (back.barShown) errors.push(`${label}: Cancel left the banner up`);
+  if (back.glowing) errors.push(`${label}: Cancel left tiles glowing`);
+  if (back.openRows || back.hand) errors.push(`${label}: Cancel did not go all the way back`);
+  if (!back.pickable) errors.push(`${label}: Cancel did not restore the dishes`);
+  if (back.log > placed.logBefore) errors.push(`${label}: Cancel still played the move`);
+  // place again, and this time play it
   const committed = await page.eval(`
+    document.querySelector("#middle button.tile:not([disabled])").click();
     const row = document.querySelector("#board-human .line.open") ||
                 document.querySelector("#board-human .floor.open");
+    if (!row) return false;
     row.click();
     document.getElementById("confirm").click();
     return document.body.classList.contains("locked");
@@ -814,15 +833,15 @@ async function checkConfirmMove(page, label, errors) {
     row.click();
     return {
       locked: document.body.classList.contains("locked"),
-      confirmShown: !document.getElementById("confirm").classList.contains("hidden"),
+      barShown: !document.getElementById("confirm-bar").hidden,
     };
   `);
   if (direct && !direct.locked) errors.push(`${label}: with confirm off, the row click did not play`);
-  if (direct && direct.confirmShown) errors.push(`${label}: with confirm off, the confirm button appeared`);
+  if (direct && direct.barShown) errors.push(`${label}: with confirm off, the banner appeared`);
   await until("the direct turn to finish", () =>
     page.eval('return !document.body.classList.contains("locked");'), 90000);
   await page.eval('document.querySelector(\'.flag[data-confirm="true"]\').click(); return true;');
-  console.log(`    ${label}: place → take back → place → confirm all behaved; off-switch commits at once`);
+  console.log(`    ${label}: place → cancel-all → place → confirm behaved; off-switch commits at once`);
 }
 
 /* ------------------------------------------------------------------- the pages */
