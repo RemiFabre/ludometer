@@ -46,7 +46,7 @@ from ludometer.train.mcts import (
     MCTSConfig,
     select_action,
 )
-from ludometer.train.net import NetConfig, NetEvaluator, PolicyValueNet
+from ludometer.train.net import NetEvaluator, make_net
 
 SCORE_SCALE = 20.0  # points that saturate the score-margin part of the value
 
@@ -147,6 +147,10 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
             )
         policies.append(policy)
         state.apply(action)
+        # Keep the chosen child's subtree for the next move (no-op unless
+        # `mcts.tree_reuse` is on). One search drives both seats here, so one
+        # `advance` per played move is exactly one ply down the tree.
+        mcts.advance(action)
         move += 1
 
     truncated = not state.is_terminal
@@ -172,8 +176,8 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
 class InlineSelfPlay:
     """Single-process self-play with the same API as :class:`SelfPlayPool`."""
 
-    def __init__(self, net_config: NetConfig, config: SelfPlayConfig) -> None:
-        self.net = PolicyValueNet(net_config)
+    def __init__(self, net_config: Any, config: SelfPlayConfig) -> None:
+        self.net = make_net(net_config)
         self.net.eval()
         self.evaluator = NetEvaluator(self.net, device="cpu")
         self.config = config
@@ -216,7 +220,7 @@ class InlineSelfPlay:
 # ------------------------------------------------------------------- processes
 def _worker_loop(
     worker_id: int,
-    net_config: NetConfig,
+    net_config: Any,
     config: SelfPlayConfig,
     cmd_q: Any,
     result_q: Any,
@@ -226,7 +230,7 @@ def _worker_loop(
     import torch
 
     torch.set_num_threads(1)
-    net = PolicyValueNet(net_config)
+    net = make_net(net_config)
     net.eval()
     evaluator = NetEvaluator(net, device="cpu")
     while True:
@@ -253,7 +257,7 @@ class SelfPlayPool:
 
     def __init__(
         self,
-        net_config: NetConfig,
+        net_config: Any,
         config: SelfPlayConfig,
         workers: int = 8,
         poll: float = 1.0,
@@ -371,7 +375,7 @@ class SelfPlayPool:
 
 
 def make_selfplay(
-    net_config: NetConfig, config: SelfPlayConfig, workers: int
+    net_config: Any, config: SelfPlayConfig, workers: int
 ) -> SelfPlayPool | InlineSelfPlay:
     """``workers <= 1`` runs in-process (tests, debugging); otherwise a pool."""
     if workers <= 1:

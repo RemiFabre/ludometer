@@ -79,10 +79,34 @@ Common interface: `act(state) -> action_id`. Baselines:
 
 ## Training (`ludometer/train/`)
 
-AlphaZero-lite: policy+value MLP/ResNet on encoded state, MCTS with action masking (PUCT),
+AlphaZero-lite: policy+value network on the encoded state, MCTS with action masking (PUCT),
 self-play with Dirichlet noise at root and temperature schedule, replay buffer, train on MPS.
 At round-boundary chance nodes in MCTS, sample refills from the known bag distribution
 (bag+lid contents are public information).
+
+**Architectures** are selected by `"arch"` in the config and recorded inside every
+checkpoint (`net_config["arch"]`), so `load_net` / `MCTSAgent.from_checkpoint` / the GUI
+load any run's checkpoints without knowing which net produced them:
+
+- `"mlp"` (default, run1/run2) — `net.py`: residual MLP on the flat 182 vector.
+- `"structured"` (run3) — `net2.py`: the same encoding sliced by the `OFF_*` constants into
+  22 entity tokens (6 tile sources, 2x5 pattern rows each carrying its wall row, 2 wall
+  summaries, 2 floors, supply, globals), embedded by weight-shared per-type MLPs, mixed by
+  self-attention, read out by a factorised source x colour x destination policy head and a
+  tanh value head.
+
+**Tree reuse** (`"tree_reuse": true`) keeps the chosen child's subtree as the next self-play
+search root and tops it up to `sims` total visits; it is dropped across refill (chance)
+boundaries and re-mixes Dirichlet noise at the new root. Self-play only — see `mcts.py`.
+
+**Pretraining** (`--pretrain <replay.npz>`, `pretrain_epochs`) fits a fresh net to an earlier
+run's replay buffer (policy CE on the stored visit distributions + value MSE) before any
+self-play, and keeps those positions in the buffer as a warm start. Its epochs are logged to
+`train.jsonl` with `"phase": "pretrain"` (self-play lines have no `phase` field).
+
+**Measuring the cost** of an architecture: `python -m ludometer.train.benchmark --config
+configs/<run>.json --games 2` reports single-thread CPU ms/position (against a reference MLP,
+because the machine is usually busy) and self-play throughput with and without tree reuse.
 
 ## Evaluation (`ludometer/eval/`)
 
@@ -90,6 +114,11 @@ Fixed anchor pool: Random (anchored 0 Elo), Greedy, Heuristic, and frozen checkp
 Each new checkpoint plays N games (alternating first player) vs the pool; ratings fit by
 maximum likelihood (Bradley-Terry) with anchors held fixed. Results appended as JSONL to
 `runs/<run>/elo.jsonl`. This makes curves comparable across the run and across runs.
+
+`ludometer/eval/gauntlet.py` answers the other question — which of several *finished* agents
+plays better at play-time settings. It takes `[label=]spec` agents (including `?sims=n` and
+`?think=<seconds>` budgets), plays a round robin and prints a cross table plus a
+Bradley-Terry fit with optional `--anchor NAME=ELO`. It runs niced by default.
 
 ## Logging & dashboard
 

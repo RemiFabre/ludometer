@@ -34,8 +34,36 @@ determinizations**:
   determinizations uniformly at random, which keeps the subtree deep enough to be
   useful while the edge's ``Q`` stays an average over sampled refills.
 
-Tree reuse between moves is not implemented (optional per the design): every
-``search`` call starts from a fresh root.
+Tree reuse (opt-in: ``MCTSConfig.tree_reuse``)
+---------------------------------------------
+With ``tree_reuse`` off (the default, and what run1/run2 did) every ``search``
+starts from a fresh root. With it on, the caller plays a move and calls
+:meth:`MCTS.advance`; the chosen child then becomes the next search root, so the
+work already spent below it is kept:
+
+* only a **deterministic** edge is followed. If the move triggered a refill the
+  edge is a chance node (a dict of determinizations, none of which is *the*
+  position the game actually dealt), so reuse is dropped — that is the safe
+  boundary and the reason the flag never lets the search inherit a bag order it
+  is not entitled to;
+* a cheap fingerprint of the reused node's state is compared with the state the
+  next ``search`` is given; anything unexpected falls back to a fresh root, so a
+  caller that forgets an ``advance`` loses speed, never correctness;
+* the budget is a **total**: the reused root already has ``N`` visits, so only
+  ``sims - N`` new simulations are run. Same tree size per move, fewer network
+  evaluations — that is where the throughput gain comes from;
+* **Dirichlet noise is re-mixed at the new root**, and that is exact rather than
+  approximate: noise is only ever applied to a root's own priors, so the reused
+  child's priors are still the raw network priors and mixing fresh noise into
+  them is identical to what a fresh search would have done. Nothing has to be
+  un-mixed. Visit counts inherited from below the old root were produced under
+  the old root's noise only through *which* child was explored, which is the
+  intended effect of noise, not a bias in the target.
+
+Only self-play uses it: one :class:`MCTS` drives both seats there, so advancing
+one ply per move is exactly right. A tournament agent sees the position again
+only after the opponent has replied, which would need a second descent, so
+:class:`~ludometer.train.mcts_agent.MCTSAgent` deliberately leaves it off.
 
 Time budget (opt-in, GUI only)
 ------------------------------
@@ -100,6 +128,7 @@ class MCTSConfig:
     dirichlet_eps: float = 0.25
     chance_children: int = 4
     fpu: float = 0.0  # Q assumed for an unvisited edge (parent's frame)
+    tree_reuse: bool = False  # keep the chosen child's subtree between moves
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> MCTSConfig:
@@ -111,6 +140,7 @@ class MCTSConfig:
             "dirichlet_eps",
             "chance_children",
             "fpu",
+            "tree_reuse",
         )
         kwargs: dict[str, Any] = {}
         for key in keys:
@@ -250,6 +280,56 @@ class MCTS:
         self._np_rng = np.random.default_rng(self._seed)
         self._rng = random.Random(self._seed)
         self._counter = 0
+        self.reset_tree()
+
+    # ------------------------------------------------------------- tree reuse
+    def reset_tree(self) -> None:
+        """Forget the kept subtree (a new game, or a caller that lost track)."""
+        self._root: Node | None = None
+        self._reuse_root: Node | None = None
+        self._reuse_fp: tuple[Any, ...] | None = None
+        self.reused_visits = 0  # visits inherited by the last search
+
+    @staticmethod
+    def _fingerprint(state: AzulState) -> tuple[Any, ...]:
+        """Cheap near-unique identity of a position (guards a stale reuse)."""
+        return (
+            state.current_player,
+            state.round_index,
+            state.tiles_left,
+            state.marker_in_center,
+            tuple(state.scores),
+            tuple(state.pl_count[0]),
+            tuple(state.pl_count[1]),
+            tuple(state.pl_color[0]),
+            tuple(state.pl_color[1]),
+            sum(state.walls[0]),
+            sum(state.walls[1]),
+            MCTS._chance_key(state),
+        )
+
+    def advance(self, action: int) -> bool:
+        """Follow ``action`` from the current root; keep its subtree if we can.
+
+        Call it once per move actually played. Returns whether a subtree
+        survived — ``False`` at a refill boundary (the edge is a chance node),
+        for an edge the search never expanded, or with reuse switched off.
+        """
+        node = self._root
+        self._root = self._reuse_root = None
+        self._reuse_fp = None
+        if node is None or not self.config.tree_reuse or not node.expanded:
+            return False
+        try:
+            index = node.legal.index(action)
+        except ValueError:  # pragma: no cover - defensive
+            return False
+        child = node.children[index]
+        if type(child) is not Node:  # chance table, or never expanded
+            return False
+        self._root = self._reuse_root = child
+        self._reuse_fp = self._fingerprint(child.state)
+        return True
 
     @property
     def rng(self) -> random.Random:
@@ -270,18 +350,27 @@ class MCTS:
         never passes it, so training behaviour is unchanged.
         """
         noise = self.add_noise if add_noise is None else add_noise
-        root = self._new_node(state.clone())
-        if root.is_terminal:
-            raise ValueError("cannot search a terminal state")
         started = time.perf_counter()
-        value = self._expand(root)
+        root = self._reuse_for(state)
+        self.reused_visits = root.n_visits if root is not None else 0
+        value = 0.0
+        if root is None:
+            root = self._new_node(state.clone())
+            if root.is_terminal:
+                raise ValueError("cannot search a terminal state")
+            value = self._expand(root)
+        self._root = root
         if len(root.legal) == 1:
             policy = np.zeros(ACTION_SPACE, dtype=np.float32)
             policy[root.legal[0]] = 1.0
-            return SearchResult(policy, value, {root.legal[0]: 1}, 0, 0.0)
+            if root.n_visits:
+                value = sum(root.wins) / root.n_visits
+            return SearchResult(policy, float(value), {root.legal[0]: 1}, 0, 0.0)
         if noise:
             self._apply_noise(root)
-        cap = self.config.sims
+        # A reused root keeps its visits, so the budget is a total: the tree ends
+        # up the same size as a fresh search would have made it, for fewer evals.
+        cap = max(0, self.config.sims - root.n_visits)
         budget = None if time_limit_s is None else float(time_limit_s)
         if budget is None or budget <= 0.0:
             for _ in range(cap):
@@ -310,6 +399,20 @@ class MCTS:
         return SearchResult(policy, float(root_value), visits, total, float(elapsed))
 
     # ------------------------------------------------------------------ guts
+    def _reuse_for(self, state: AzulState) -> Node | None:
+        """The kept subtree if it really is ``state``'s node, else ``None``."""
+        root = self._reuse_root
+        self._reuse_root = None
+        fingerprint = self._reuse_fp
+        self._reuse_fp = None
+        if root is None or not self.config.tree_reuse:
+            return None
+        if root.is_terminal or not root.expanded or not root.legal:
+            return None
+        if fingerprint != self._fingerprint(state):  # pragma: no cover - defensive
+            return None
+        return root
+
     def _new_node(self, state: AzulState) -> Node:
         self.nodes_created += 1
         return Node(state)

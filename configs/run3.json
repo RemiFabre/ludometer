@@ -1,0 +1,75 @@
+{
+  "run": "run3",
+  "note": "structured entity net (22 tokens, 1 attention layer), 512 sims with tree reuse, warm-started from run2's replay buffer",
+  "seed": 20260816,
+  "device": "auto",
+  "workers": 8,
+
+  "_note_arch": "arch=structured selects ludometer/train/net2.py: the 182-dim encoding is sliced into 6 tile-source tokens, 10 pattern-row tokens (each carrying its matching wall row), 2 wall-set tokens, 2 floor tokens, supply and globals; shared embedders per entity type, self-attention over the 22 tokens, factorised source x colour x destination policy head. Size was chosen by measurement, not by taste: 0.20 ms/position single-thread on a quiet machine (budget 0.45) and 0.66 ms with 8 workers competing, against 0.78 ms for run2's 5x768 MLP in the same 8-way test. With tree reuse turning 512 sims into ~320 evaluations per move that lands run3 at run2's self-play throughput while searching twice as deep. Re-run `python -m ludometer.train.benchmark --config configs/run3.json --games 2` before widening anything: embed=128 costs +20% and a second attention layer another +15%.",
+  "arch": "structured",
+  "embed": 96,
+  "layers": 1,
+  "heads": 4,
+  "ffn_mult": 2,
+  "body": 1024,
+  "body_blocks": 1,
+  "value_hidden": 128,
+  "policy_rank": 32,
+  "policy_global": true,
+
+  "sims": 512,
+  "tree_reuse": true,
+  "c_puct": 1.4,
+  "dirichlet_alpha_scale": 10.0,
+  "dirichlet_eps": 0.25,
+  "chance_children": 4,
+  "temp_moves": 12,
+  "temperature": 1.0,
+  "stall_rounds": 16,
+  "max_game_moves": 400,
+  "value_score_weight": 0.15,
+
+  "_note_pretrain": "pass --pretrain runs/run2/checkpoints/replay.npz on the command line (or set \"pretrain\" here). The fresh structured net is fitted to run2's stored visit distributions and value targets for `pretrain_epochs` passes before any self-play, and those positions stay in the replay buffer, so iteration 1 already trains on 500k good positions instead of on noise. pretrain_lr is deliberately higher than `lr`: this phase is plain supervised learning on a large fixed dataset.",
+  "pretrain_epochs": 3,
+  "pretrain_lr": 0.001,
+  "pretrain_keep_buffer": true,
+
+  "games_per_iter": 64,
+  "total_games": 60000,
+  "min_buffer": 5000,
+  "batch_size": 256,
+  "steps_per_position": 1.5,
+  "chunk_steps": 25,
+
+  "_note_lr": "60000 games x ~55 positions x 1.5 replays / 256 per batch = ~19.3k self-play steps, so lr_total_steps=20000 makes the cosine land on lr_min exactly at the end of the game budget. Peak lr is 6e-4 rather than run2's 1e-3 because the net starts pretrained: a full-size peak would undo the warm start in the first few hundred steps. lr_min 5e-5 keeps late self-play data useful without churning the weights.",
+  "lr": 0.0006,
+  "lr_min": 0.00005,
+  "lr_schedule": "cosine",
+  "lr_total_steps": 20000,
+  "weight_decay": 0.0001,
+  "value_weight": 1.0,
+  "grad_clip": 1.0,
+
+  "replay_capacity": 500000,
+  "save_buffer": true,
+
+  "_note_anchors": "run1's best (+2014) is pinned so run3's curve shares run1's and run2's scale. ADD RUN2'S FINAL BEST HERE when run2 finishes: append \"mcts:runs/run2/checkpoints/ckpt-XXXXXX.pt?sims=100\" to eval_anchors and the same string with run2's final Elo to anchor_elos (take both from the last line of runs/run2/elo.jsonl). Until then run3 is anchored on run1 only, which is enough to keep the scale but wastes the strongest available reference.",
+  "eval_every_games": 512,
+  "eval_games": 40,
+  "eval_sims": 100,
+  "eval_workers": 8,
+  "eval_anchors": [
+    "random",
+    "greedy",
+    "heuristic",
+    "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100"
+  ],
+  "eval_frozen": 2,
+  "anchor_elos": {
+    "random": 0.0,
+    "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100": 2014.0
+  },
+  "eval_at_start": true,
+
+  "heartbeat": 20.0
+}

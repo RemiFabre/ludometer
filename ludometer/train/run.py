@@ -5,8 +5,10 @@
 
 Extra knobs (all optional): ``--max-games`` stops at an absolute game count (handy
 for smoke tests and for extending a finished run), ``--run NAME`` overrides the
-run name from the config, ``--runs-dir DIR`` moves the run root, and
-``--device/--workers`` override the config for a one-off run.
+run name from the config, ``--runs-dir DIR`` moves the run root,
+``--device/--workers`` override the config for a one-off run, and
+``--pretrain runs/<run>/checkpoints/replay.npz`` warm-starts a fresh net on an
+earlier run's replay buffer before any self-play happens.
 
 The process is ``spawn``-safe: the self-play pool and the arena both fork fresh
 interpreters, so all of the work happens under ``if __name__ == "__main__"``.
@@ -40,6 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-games",
         type=int,
         help="stop at this total number of self-play games (absolute, not extra)",
+    )
+    parser.add_argument(
+        "--pretrain",
+        type=Path,
+        help="replay.npz to warm-start from before self-play (see Trainer.pretrain)",
+    )
+    parser.add_argument(
+        "--pretrain-epochs", type=int, help="passes over the pretraining buffer"
     )
     parser.add_argument("--device", help="training device (auto|mps|cpu|cuda)")
     parser.add_argument("--workers", type=int, help="self-play worker processes")
@@ -79,6 +89,12 @@ def _load_config(args: argparse.Namespace) -> tuple[TrainConfig, Path, bool]:
         cfg.seed = args.seed
     if args.note:
         cfg.note = args.note
+    if args.pretrain is not None:
+        cfg.pretrain = str(args.pretrain)
+        if not cfg.pretrain_epochs:
+            cfg.pretrain_epochs = 1
+    if args.pretrain_epochs is not None:
+        cfg.pretrain_epochs = args.pretrain_epochs
     cfg.validate()
     return cfg, run_dir, resume
 

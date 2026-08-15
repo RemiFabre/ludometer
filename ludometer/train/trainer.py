@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 
 from ludometer.eval.arena import play_match
@@ -38,9 +39,9 @@ from ludometer.eval.elo import PairResult, fit_elo
 from ludometer.train.mcts import MAX_GAME_MOVES, STALL_ROUNDS, MCTSConfig
 from ludometer.train.mcts_agent import MCTSAgentSpec
 from ludometer.train.net import (
-    NetConfig,
-    PolicyValueNet,
     load_checkpoint,
+    make_net,
+    net_config_from_dict,
     save_checkpoint,
 )
 from ludometer.train.replay import ReplayBuffer
@@ -98,10 +99,20 @@ class TrainConfig:
     workers: int = 8
     note: str = ""
 
-    # net
+    # net: "mlp" (run1/run2) uses hidden/blocks; "structured" (net2.py) uses the
+    # embed/layers/... block below. Both share `value_hidden`.
+    arch: str = "mlp"
     hidden: int = 512
     blocks: int = 3
     value_hidden: int = 64
+    embed: int = 96
+    layers: int = 1
+    heads: int = 4
+    ffn_mult: int = 2
+    body: int = 1024
+    body_blocks: int = 1
+    policy_rank: int = 32
+    policy_global: bool = True
 
     # self-play search
     sims: int = 160
@@ -109,6 +120,7 @@ class TrainConfig:
     dirichlet_alpha_scale: float = 10.0
     dirichlet_eps: float = 0.25
     chance_children: int = 4
+    tree_reuse: bool = False
     temp_moves: int = 12
     temperature: float = 1.0
     stall_rounds: int = STALL_ROUNDS
@@ -137,6 +149,12 @@ class TrainConfig:
     replay_capacity: int = 300_000
     save_buffer: bool = True
 
+    # pretraining on an existing replay buffer (warm start; see Trainer.pretrain)
+    pretrain: str = ""  # path to a replay.npz, "" = off
+    pretrain_epochs: int = 0
+    pretrain_lr: float = 0.0  # 0 -> use `lr`
+    pretrain_keep_buffer: bool = True  # keep the loaded positions for self-play
+
     # evaluation
     eval_every_games: int = 512
     eval_games: int = 40
@@ -152,7 +170,10 @@ class TrainConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TrainConfig:
         known = {f.name for f in fields(cls)}
-        unknown = sorted(set(data) - known - {"started"})
+        # JSON has no comments: any key starting with "_" is one (configs/run3.json
+        # uses `_note` to leave instructions for whoever launches the run).
+        comments = {k for k in data if k.startswith("_")}
+        unknown = sorted(set(data) - known - comments - {"started"})
         if unknown:
             raise ValueError(f"unknown config keys: {unknown}")
         payload = {k: v for k, v in data.items() if k in known}
@@ -173,15 +194,17 @@ class TrainConfig:
             raise ValueError(f"unknown lr_schedule {self.lr_schedule!r}")
         if self.replay_capacity < self.batch_size:
             raise ValueError("replay_capacity must be >= batch_size")
+        if self.pretrain and self.pretrain_epochs < 1:
+            raise ValueError("pretrain needs pretrain_epochs >= 1")
+        self.net_config()  # architecture keys are validated by the net configs
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     # ------------------------------------------------------------ sub-configs
-    def net_config(self) -> NetConfig:
-        return NetConfig(
-            hidden=self.hidden, blocks=self.blocks, value_hidden=self.value_hidden
-        )
+    def net_config(self) -> Any:
+        """``NetConfig`` or ``StructuredConfig``, per :attr:`arch`."""
+        return net_config_from_dict(self.to_dict())
 
     def selfplay_config(self) -> SelfPlayConfig:
         return SelfPlayConfig(
@@ -191,6 +214,7 @@ class TrainConfig:
                 dirichlet_alpha_scale=self.dirichlet_alpha_scale,
                 dirichlet_eps=self.dirichlet_eps,
                 chance_children=self.chance_children,
+                tree_reuse=self.tree_reuse,
             ),
             temp_moves=self.temp_moves,
             temperature=self.temperature,
@@ -235,7 +259,8 @@ class Trainer:
         self._error: str | None = None
         self._note: str = config.note
 
-        self.net = PolicyValueNet(config.net_config()).to(self.device)
+        self.pretrain_steps = 0
+        self.net = make_net(config.net_config()).to(self.device)
         self.optimizer = torch.optim.Adam(
             self.net.parameters(), lr=config.lr, weight_decay=config.weight_decay
         )
@@ -287,6 +312,7 @@ class Trainer:
                 self._log(f"could not restore optimizer state: {exc}")
         self.games = int(payload.get("games", 0))
         self.steps = int(payload.get("steps", 0))
+        self.pretrain_steps = int(payload.get("pretrain_steps", 0))
         self.iteration = int(payload.get("iteration", 0))
         self.elapsed = float(payload.get("elapsed", 0.0))
         self.positions = int(payload.get("positions", 0))
@@ -350,12 +376,21 @@ class Trainer:
         self.install_signal_handlers()
         code = 0
         try:
-            self.selfplay.start(self.net.cpu_state_dict())
+            shape = (
+                f"{cfg.layers}L{cfg.embed}+{cfg.body_blocks}x{cfg.body}"
+                if cfg.arch == "structured"
+                else f"{cfg.blocks}x{cfg.hidden}"
+            )
             self._log(
                 f"run {cfg.run}: device={self.device} workers={cfg.workers} "
-                f"net={cfg.blocks}x{cfg.hidden} params={self.net.num_params:,} "
+                f"arch={cfg.arch} net={shape} params={self.net.num_params:,} "
                 f"target={target} games"
             )
+            # Warm start before the workers get their first weights, so the very
+            # first self-play games (and the games=0 Elo point) already use it.
+            if cfg.pretrain and not self.resume and self.pretrain_steps == 0:
+                self.pretrain(cfg.pretrain)
+            self.selfplay.start(self.net.cpu_state_dict())
             if not self.resume and cfg.eval_at_start and self.games == 0:
                 self._checkpoint_and_eval()
             while self.games < target and not self._stop:
@@ -459,6 +494,115 @@ class Trainer:
         if not self._stop:
             self.selfplay.set_weights(self.net.cpu_state_dict())
 
+    # ------------------------------------------------------------- pretraining
+    def pretrain(self, path: str | os.PathLike[str], epochs: int | None = None) -> int:
+        """Fit the fresh net to an existing replay buffer before any self-play.
+
+        This is the warm start: run2 spent a night filling ``replay.npz`` with
+        (state, visit distribution, value) triples, and a new architecture can
+        learn most of what that data has to say in minutes of supervised
+        training — policy cross-entropy against the stored MCTS visit counts plus
+        value MSE, i.e. exactly the loss :meth:`_train` uses, only over shuffled
+        full passes instead of random minibatches.
+
+        The positions are loaded straight into the run's own replay buffer (it is
+        capacity-bounded, so a bigger file keeps its newest positions), and by
+        default they stay there: early self-play then trains on a mix of its own
+        fresh games and the inherited ones instead of on a nearly empty buffer.
+
+        Returns the number of optimizer steps taken. These do **not** advance
+        ``self.steps``: the self-play learning-rate schedule is meant to start at
+        its peak when self-play starts.
+        """
+        cfg = self.config
+        epochs = cfg.pretrain_epochs if epochs is None else int(epochs)
+        if epochs < 1:
+            return 0
+        target = Path(path)
+        if not target.exists():
+            raise FileNotFoundError(f"pretrain buffer not found: {target}")
+        self._write_status(note=f"pretrain: loading {target}", force=True)
+        n = self.buffer.load(target)
+        self._log(f"pretrain: loaded {n:,} positions from {target}")
+        if n < cfg.batch_size:
+            raise ValueError(f"pretrain buffer has only {n} positions")
+
+        lr = cfg.pretrain_lr or cfg.lr
+        device = self.device
+        net = self.net
+        rng = np.random.default_rng(cfg.seed ^ 0xB00C)
+        steps_per_epoch = n // cfg.batch_size
+        t_start = time.monotonic()
+        for epoch in range(1, epochs + 1):
+            net.train()
+            order = rng.permutation(n)
+            sum_p = sum_v = 0.0
+            for i in range(steps_per_epoch):
+                idx = np.sort(order[i * cfg.batch_size : (i + 1) * cfg.batch_size])
+                x = torch.from_numpy(self.buffer.states[idx]).to(device)
+                target_p = torch.from_numpy(self.buffer.policies[idx]).to(device)
+                target_v = torch.from_numpy(self.buffer.values[idx]).to(device)
+                logits, value = net(x)
+                logp = torch.log_softmax(logits, dim=-1)
+                loss_p = -(target_p * logp).sum(dim=1).mean()
+                loss_v = torch.nn.functional.mse_loss(value, target_v)
+                loss = loss_p + cfg.value_weight * loss_v
+                for group in self.optimizer.param_groups:
+                    group["lr"] = lr
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                if cfg.grad_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(net.parameters(), cfg.grad_clip)
+                self.optimizer.step()
+                sum_p += float(loss_p.detach())
+                sum_v += float(loss_v.detach())
+                self.pretrain_steps += 1
+                if (i + 1) % max(1, cfg.chunk_steps) == 0:
+                    self.heartbeat(
+                        f"pretrain: epoch {epoch}/{epochs} "
+                        f"step {i + 1}/{steps_per_epoch}"
+                    )
+                if self._stop:
+                    break
+            net.eval()
+            done = max(1, steps_per_epoch)
+            append_jsonl(
+                self.run_dir / "train.jsonl",
+                {
+                    "phase": "pretrain",
+                    "t": round(self.t, 1),
+                    "games": self.games,
+                    "steps": self.steps,
+                    "epoch": epoch,
+                    "pretrain_steps": self.pretrain_steps,
+                    "loss": round(sum_p / done + sum_v / done, 4),
+                    "loss_p": round(sum_p / done, 4),
+                    "loss_v": round(sum_v / done, 4),
+                    "buffer": len(self.buffer),
+                    "lr": lr,
+                },
+            )
+            self._log(
+                f"pretrain epoch {epoch}/{epochs}: "
+                f"loss {sum_p / done + sum_v / done:.4f} "
+                f"(p {sum_p / done:.4f} v {sum_v / done:.4f}) "
+                f"in {time.monotonic() - t_start:.0f}s"
+            )
+            if self._stop:
+                break
+        if not cfg.pretrain_keep_buffer:
+            self.buffer = ReplayBuffer(
+                capacity=cfg.replay_capacity, seed=cfg.seed ^ 0x5EED
+            )
+        # the self-play schedule starts fresh: reset the LR the optimizer holds
+        for group in self.optimizer.param_groups:
+            group["lr"] = self._lr_at(self.steps)
+        self._save_state()
+        self._write_status(
+            note=f"pretrained {self.pretrain_steps} steps on {n} positions", force=True
+        )
+        return self.pretrain_steps
+
     # ---------------------------------------------------------------- training
     def _steps_for(self, positions_added: int) -> int:
         cfg = self.config
@@ -531,6 +675,7 @@ class Trainer:
         extra = {
             "games": self.games,
             "steps": self.steps,
+            "pretrain_steps": self.pretrain_steps,
             "iteration": self.iteration,
             "elapsed": self.t,
             "positions": self.positions,
