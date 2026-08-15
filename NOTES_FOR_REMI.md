@@ -23,13 +23,14 @@ branch and waits for the site to answer 200. It writes that branch through a tem
 index — **it never checks anything out, so it is safe to run while run2 is writing into
 `runs/`** (I ran it that way today).
 
-**Speed, measured not guessed.** In headless Chrome on this Mac: **16,384 positions in 5.0 s
-= ~3,300 positions/second**. The page reports the true number every move in the table talk,
-so a visitor on a slow phone sees their own figure rather than my marketing. For scale, the
-ladder rates checkpoints at 100 sims/move, so the default 5 s budget is ~160× more search
-than the rating was measured at — same "the Elo is a floor" story as the local GUI. When
-run2 was hammering all the cores, node measured ~1,000/s instead, i.e. the number roughly
-tracks how busy the machine is.
+**Speed, measured not guessed.** Headless Chrome against the live URL, twice, hours apart:
+**16,384 positions in 5.0 s (~3,300/s)** while the machine was quiet, and **5,179 in 5.0 s
+(~1,000/s)** with run2 back on all the cores. So call it **5,000–16,000 positions per move
+at the default 5 s on this Mac**, tracking how busy the machine is; a phone will be lower
+still. The page reports the true count every move in the table talk, so a visitor sees their
+own figure rather than my marketing. For scale, the ladder rates checkpoints at 100
+sims/move, so even the pessimistic end is ~50× more search than the rating was measured at
+— the same "the Elo is a floor" story as the local GUI.
 
 **Payload.** 26.9 MB on disk, **~15.9 MB over the wire** (GitHub Pages gzips both big
 files): 13.3 MB ONNX → 12.4 MB, 13.5 MB onnxruntime wasm → 3.5 MB, plus ~150 KB of my own

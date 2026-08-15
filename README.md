@@ -37,9 +37,11 @@ account, no upload, works offline once loaded, and fine on a phone.
 
 The header names which checkpoint you are facing and its internal Elo; **AI thinks for**
 (instant / 3 / 5 / 10 s) is the same strength dial as the local GUI, and the table talk
-reports the true count every move — *“searched 16,384 positions in 5.0s”*. On an M-series
-Mac that is **~3,300 positions/second**, i.e. **~16,000 per move at the default 5 s**; a
-slower laptop or a phone will do less, and the page will tell you exactly how much.
+reports the true count every move — *“searched 16,384 positions in 5.0s”*. Measured in
+headless Chrome on an M-series Mac: **~3,300 positions/second on an idle machine and
+~1,000/s with a training run eating the cores**, i.e. **5,000–16,000 positions per move at
+the default 5 s**. A phone will do less; whatever your machine manages, the page tells you
+the real number rather than a claim.
 
 How it is put together, and why you can trust it:
 
