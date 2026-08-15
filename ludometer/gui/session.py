@@ -20,6 +20,14 @@ once.
 than by a sim count, and each AI move carries a ``search`` block saying how many
 positions it actually visited.
 
+Every move the session reports carries ``state_before``, the position it was
+played from. That is what lets the page animate *both* of the AI's moves when it
+moves twice across a round boundary: the second one starts from a refilled table
+that ``apply`` produced inside the first, and which the page would otherwise
+never see. It also gives the page a free move history — position ``k`` is the
+``state_before`` of ply ``k + 1`` — which is what the ← / → move navigator
+replays, with no request and no re-search.
+
 ``play_human(..., coach=True)`` turns on **coach mode**: before the move is
 applied, the opponent's own search rates it (see :mod:`ludometer.gui.coach`) and
 the verdict is attached to the move's log entry as ``coach``. The rating happens
@@ -192,6 +200,11 @@ class GameSession:
         move["label"] = self.label_of(player)
         before = state.clone()
         round_before = state.round_index
+        # The position this move was played from. The page animates from it: when
+        # the AI moves twice across a round boundary its second move starts from a
+        # refilled table nobody ever saw, and without this the page could only
+        # animate the first of the two.
+        move["state_before"] = before.to_json()
         state.apply(action_id)
         self.ply += 1
         move["ply"] = self.ply
@@ -208,6 +221,13 @@ class GameSession:
             player=player,
             action_id=action_id,
             ply=self.ply,
+            # what the log draws as little tiles instead of colour words
+            color=move["color"],
+            count=move["count"],
+            source=move["source"],
+            dest=move["dest"],
+            overflow=move["overflow"],
+            took_marker=move["took_marker"],
             **extra,
         )
         move["log_n"] = entry["n"]
@@ -232,6 +252,9 @@ class GameSession:
                 f"AI {ai['delta']:+d} → {ai['score_after']}.",
                 round=report["round"],
                 report_n=len(self.round_reports) - 1,
+                # every entry carries the ply it belongs to, so the move navigator
+                # can show the log as it stood at any point in the game
+                ply=self.ply,
             )
             if state.is_terminal:
                 final = final_report(state, self.human_seat) or {}
@@ -240,6 +263,7 @@ class GameSession:
                     f"{final.get('headline', 'Game over.')} "
                     f"Final score {state.scores[self.human_seat]}"
                     f"–{state.scores[self.ai_seat]}.",
+                    ply=self.ply,
                 )
         return move
 

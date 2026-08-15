@@ -15,18 +15,26 @@
  *   3. if that ended the round, full pattern lines fly to the wall and the
  *      floor line flies to the lid, and the round's scoring appears *inline*
  *      under the boards;
- *   4. the AI thinks against the clock in the status band, then its move plays
- *      out on the right-hand board exactly the same way.
+ *   4. the AI thinks against the clock in the status band, then *every* move it
+ *      makes plays out on the right-hand board the same way — including the
+ *      second of a double move across a round boundary, which starts from the
+ *      refilled table the server reports as that move's `state_before`.
  *
  * Input is locked from the moment a move is sent until the last tile lands, and
  * for no longer than that.
+ *
+ * ← and → walk back through the game. That is pure replay of positions this
+ * page has already been handed (see ui/history.js): no request, no re-search,
+ * and the live game is not touched while you look.
  */
 
-import { flyTiles, prefersReducedMotion, sleep } from "./ui/animate.js";
+import { flyTiles, initSpeed, sleep } from "./ui/animate.js";
 import { createBoard, createMiddle } from "./ui/board.js";
-import { COLORS, FLOOR, node, preview } from "./ui/dom.js";
+import { COLORS, FLOOR, node } from "./ui/dom.js";
+import { bindHistoryKeys, createHistory } from "./ui/history.js";
 import { renderLog } from "./ui/log.js";
 import { clearScoring, renderFinalPanel, renderRoundPanel } from "./ui/scoring.js";
+import { createSettings } from "./ui/settings.js";
 import { createStatus } from "./ui/status.js";
 
 const el = (id) => document.getElementById(id);
@@ -38,13 +46,7 @@ const ui = {
   hint: el("hint"), cancel: el("cancel"), fly: el("fly"), scoring: el("scoring"),
   log: el("log"), coach: el("coach"), coachField: el("coach-field"),
   coachLegend: el("coach-legend"), supply: el("supply"), toasts: el("toasts"),
-};
-
-const status = createStatus(el("status"));
-const middle = createMiddle(ui.middle, { onPick: pick });
-const boards = {
-  human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: play }),
-  ai: createBoard(el("board-ai"), { seat: 1, interactive: false }),
+  settings: el("settings"), nav: el("nav"),
 };
 
 let S = null;           // last server snapshot
@@ -54,6 +56,20 @@ let busy = false;       // a request is in flight, or tiles are still moving
 let bestInfo = null;    // /api/agents "best": which checkpoint is strongest
 let thinkSeconds = 0;   // the AI's per-move budget
 let coachOn = false;    // rate my moves with the AI's own search
+
+initSpeed(); // before anything can animate: the stored speed, or 1×
+const status = createStatus(el("status"));
+const settings = createSettings(ui.settings);
+const middle = createMiddle(ui.middle, { onPick: pick });
+const boards = {
+  human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: play }),
+  ai: createBoard(el("board-ai"), { seat: 1, interactive: false }),
+};
+const nav = createHistory(ui.nav, {
+  log: () => (S && S.log) || [],
+  enabled: () => !busy,
+  onChange: () => render(),
+});
 
 const COACH_LEGEND =
   "Coach mode rates your move with the AI's own search: 0.00 = the move it would " +
@@ -91,6 +107,7 @@ function setBusy(on) {
   document.body.classList.toggle("locked", on);
   ui.deal.disabled = on;
   ui.hint.disabled = on || !S || !S.your_turn;
+  nav.draw(); // browsing the history is off while tiles are in the air
   // the tiles you may pick up depend on this, and unlocking has to give them
   // back — the redraw is safe here because tiles only ever fly while busy
   if (changed && S) render();
@@ -105,41 +122,60 @@ function aiLabel() {
   return S && S.agent_name ? "AI · " + S.agent_name : "AI";
 }
 
+/**
+ * Draw the page.
+ *
+ * There are two things it can be showing: the live game, or a position out of
+ * the history. Browsing is read-only by construction — the board is drawn from
+ * the frame with no legal actions and no selection, so there is nothing to
+ * click even before the buttons are disabled.
+ */
 function render() {
   if (!S) return;
-  const st = S.state;
-  renderStatus();
+  const frame = nav.frame();
+  const live = !frame;
+  const st = live ? S.state : frame.state;
+  renderStatus(frame);
   middle.render({
     state: st,
-    legalActions: S.human_legal_actions,
-    canPick: S.your_turn && !st.is_terminal && !busy,
-    selection: sel,
+    legalActions: live ? S.human_legal_actions : [],
+    canPick: live && S.your_turn && !st.is_terminal && !busy,
+    selection: live ? sel : null,
   });
   boards.human.render({
     state: st,
-    legalActions: S.human_legal_actions,
-    selection: sel,
+    legalActions: live ? S.human_legal_actions : [],
+    selection: live ? sel : null,
     title: "You",
-    toMove: !st.is_terminal && st.current_player === S.human_seat,
-    highlightRow: suggestion ? suggestion.dest : undefined,
+    toMove: live && !st.is_terminal && st.current_player === S.human_seat,
+    highlightRow: live && suggestion ? suggestion.dest : undefined,
   });
   boards.ai.render({
     state: st,
     title: aiLabel(),
-    toMove: !st.is_terminal && st.current_player === S.ai_seat,
+    toMove: live && !st.is_terminal && st.current_player === S.ai_seat,
   });
-  renderSupply();
-  renderLog(ui.log, S.log || []);
-  ui.cancel.classList.toggle("hidden", !sel);
-  ui.hint.disabled = busy || !S.your_turn;
+  renderSupply(st);
+  renderLog(ui.log, (live ? S.log : frame.log) || []);
+  ui.cancel.classList.toggle("hidden", !live || !sel);
+  ui.hint.disabled = busy || !live || !S.your_turn;
   syncCoachAvailability();
-  if (suggestion) {
+  if (live && suggestion) {
     const dish = middle.sourceEl(suggestion.source);
     if (dish) {
       dish.classList.add("picked");
       setTimeout(() => dish.classList.remove("picked"), 1600);
     }
   }
+}
+
+/** Draw one position and nothing else — a history frame, or a step in a turn. */
+function drawPosition(st) {
+  if (!st) return;
+  middle.render({ state: st, legalActions: [], canPick: false, selection: null });
+  boards.human.render({ state: st, title: "You", toMove: false });
+  boards.ai.render({ state: st, title: aiLabel(), toMove: false });
+  renderSupply(st);
 }
 
 /** Fix the two boards' seats to this game's seating (you are always on the left). */
@@ -151,12 +187,22 @@ function seatBoards() {
   boards.ai = createBoard(el("board-ai"), { seat: seats.ai, interactive: false });
 }
 
-function renderStatus() {
-  const st = S.state;
+function renderStatus(frame) {
+  const st = frame ? frame.state : S.state;
   const info = S.opponent_info || {};
   const rating = typeof info.elo === "number" ? " (" + Math.round(info.elo) + " Elo)" : "";
   ui.matchup.textContent = "you versus " + S.agent_name + rating + " · seed " + S.seed;
   status.setScore(st.scores[S.human_seat], st.scores[S.ai_seat], "You", "AI");
+
+  if (frame) {
+    status.set({
+      headline: "Viewing move " + frame.ply + " of " + frame.of,
+      detail: "← and → step through the game · End, or Latest, returns to play",
+      tone: "history",
+    });
+    ui.prompt.textContent = "This is a recorded position. The live game is untouched.";
+    return;
+  }
 
   if (st.is_terminal) {
     const mine = st.scores[S.human_seat];
@@ -199,8 +245,7 @@ function turnDetail() {
   return bits.join(" · ");
 }
 
-function renderSupply() {
-  const st = S.state;
+function renderSupply(st) {
   ui.supply.innerHTML = "";
   [["Bag", st.bag, null], ["Lid", st.lid, "lid-row"]].forEach(([label, counts, id]) => {
     const row = node("div", "supply-row");
@@ -272,8 +317,31 @@ function adopt(snapshot, options) {
   S = snapshot;
   sel = null;
   suggestion = null;
-  if (first) seatBoards();
+  if (first) {
+    seatBoards();
+    nav.reset();
+  }
+  noteFrames(snapshot);
   render();
+}
+
+/**
+ * File this payload's positions into the move history.
+ *
+ * Every move carries the position it was played from, and the position a move
+ * was played from is the position *after* the move before it — so ply k's frame
+ * is ply k+1's `state_before`, and the tail of the list is the snapshot itself.
+ * Nothing is recomputed and nothing is fetched.
+ */
+function noteFrames(payload) {
+  const moves = [];
+  if (payload.human_move) moves.push(payload.human_move);
+  (payload.ai_moves || []).forEach((m) => moves.push(m));
+  (payload.last_ai_moves || []).forEach((m) => moves.push(m));
+  moves.forEach((m) => {
+    if (m && m.state_before && typeof m.ply === "number") nav.note(m.ply - 1, m.state_before);
+  });
+  nav.note(payload.ply, payload.state);
 }
 
 async function refresh() {
@@ -286,7 +354,7 @@ async function refresh() {
 }
 
 function pick(source, color) {
-  if (busy || !S || !S.your_turn) return;
+  if (busy || !S || !S.your_turn || nav.browsing()) return;
   sel = sel && sel.source === source && sel.color === color ? null : { source, color };
   suggestion = null;
   render();
@@ -298,8 +366,7 @@ function pick(source, color) {
  * adopted, so what you see leaving the dish is what actually left it.
  */
 async function play(id) {
-  if (busy || !S || !S.your_turn) return;
-  const move = localMove(id);
+  if (busy || !S || !S.your_turn || nav.browsing()) return;
   sel = null;
   setBusy(true);
   clearScoring(ui.scoring);
@@ -308,8 +375,7 @@ async function play(id) {
       action_id: id, defer_ai: true, coach: coachOn && !!S.coach_available,
     });
     const mine = await awaitMove(request);
-    await animateTake(move, boards.human, middle);
-    await settle(mine, "human");
+    await settle(mine, mine.human_move ? [mine.human_move] : [], boards.human, "human");
     if (!mine.ai_pending) return;
     await runAiTurn();
   } catch (err) {
@@ -377,33 +443,58 @@ async function runAiTurn() {
   } finally {
     status.stopClock();
   }
-  const moves = theirs.ai_moves || [];
-  if (moves.length) {
-    const first = moves[0];
-    status.set({
-      headline: "AI " + first.text,
-      detail: first.search_text || turnDetail(),
-      tone: "ai",
-    });
-    await animateTake(first, boards.ai, middle);
-  }
-  await settle(theirs, "ai");
+  await settle(theirs, theirs.ai_moves || [], boards.ai, "ai");
 }
 
 /**
- * Adopt a snapshot: run the round-end animations first (wall tiling, floor to
- * the lid), then show the new position and the inline scoring for the round.
+ * Play a list of moves out on the table, one after another.
+ *
+ * The AI can move twice in a row — a round boundary is resolved inside the
+ * engine's `apply`, and the next round is opened by whoever holds the marker.
+ * Its second move is therefore played on a table that was scored and refilled
+ * inside the first one, and which this page had never drawn. Each move carries
+ * the position it was played from, so we draw that first and then animate: both
+ * moves are shown, in order, from the right board.
  */
-async function settle(payload, mover) {
-  const reports = payload.round_reports || [];
-  if (reports.length) {
-    status.set({
-      headline: "Round " + (reports[0].round + 1) + " scoring",
-      detail: "full lines move to the wall, the floor line goes to the lid",
-      tone: "scoring",
-    });
-    await animateTiling(reports);
+async function playMoves(moves, board, reports, mover) {
+  let taken = 0;
+  for (let i = 0; i < moves.length; i++) {
+    const move = moves[i];
+    if (i > 0 && move.state_before) {
+      drawPosition(move.state_before);
+      await sleep(420); // a beat, so the refilled table registers as a new one
+    }
+    if (mover === "ai") {
+      status.set({
+        headline: "AI " + move.text,
+        detail: move.search_text || turnDetail(),
+        tone: "ai",
+      });
+    }
+    await animateTake(move, board, middle);
+    // an observability hook, so a test can prove that *every* move animates —
+    // including the second of the AI's double move across a round boundary
+    document.dispatchEvent(
+      new CustomEvent("azul:animated", { detail: { ply: move.ply, side: move.side } })
+    );
+    if (move.ended_round && reports[taken]) {
+      const report = reports[taken++];
+      status.set({
+        headline: "Round " + (report.round + 1) + " scoring",
+        detail: "full lines move to the wall, the floor line goes to the lid",
+        tone: "scoring",
+      });
+      await animateTiling(report);
+    }
   }
+}
+
+/**
+ * Play out `moves`, then adopt the snapshot they led to and show the scoring.
+ */
+async function settle(payload, moves, board, mover) {
+  const reports = payload.round_reports || [];
+  await playMoves(moves, board, reports, mover);
   adopt(payload);
   if (reports.length) {
     const last = reports[reports.length - 1];
@@ -412,9 +503,9 @@ async function settle(payload, mover) {
   }
   if (payload.state.is_terminal && payload.final) {
     renderFinalPanel(ui.scoring, payload.final, sides());
-  } else if (mover === "ai" && payload.ai_moves && payload.ai_moves.length) {
+  } else if (mover === "ai" && moves.length) {
     // let the AI's own move stand as the headline for a beat before your turn
-    const last = payload.ai_moves[payload.ai_moves.length - 1];
+    const last = moves[moves.length - 1];
     status.set({ headline: "AI " + last.text, detail: turnDetail(), tone: "ai" });
     await sleep(500);
   }
@@ -426,18 +517,6 @@ function sides() {
 }
 
 /* ----------------------------------------------------------------- animation */
-/** What your click is about to do, worked out from the position on screen. */
-function localMove(id) {
-  const source = Math.floor(id / 30);
-  const color = Math.floor((id % 30) / 6);
-  const dest = id % 6;
-  const p = preview(S.state, S.human_seat, source, color, dest);
-  return {
-    source, color, dest,
-    count: p.count, placed: p.placed, overflow: p.overflow, took_marker: p.takesMarker,
-  };
-}
-
 function lidTarget() {
   return document.getElementById("lid-row") || ui.supply;
 }
@@ -459,9 +538,14 @@ function travelTargets(board, move) {
   return targets;
 }
 
-/** Tiles leave a dish; the dish's other colours are pushed into the middle. */
+/**
+ * Tiles leave a dish; everything else in that dish is pushed into the middle.
+ *
+ * Both halves matter: the tiles you took travel to your board, and the dish's
+ * *remainder* travels to the centre. Watching the leftovers arrive in the
+ * middle is how you learn what the next player can take.
+ */
 async function animateTake(move, board, table) {
-  if (prefersReducedMotion()) return;
   const dish = table.sourceEl(move.source);
   const row = board.lineRow(move.dest);
   if (dish) dish.classList.add("picked");
@@ -488,9 +572,8 @@ async function animateTake(move, board, table) {
 }
 
 /** Round end: full lines travel to the wall, the floor line travels to the lid. */
-async function animateTiling(reports) {
-  if (prefersReducedMotion() || !reports.length) return;
-  const report = reports[reports.length - 1];
+async function animateTiling(report) {
+  if (!report) return;
   const wall = [];
   const lid = [];
   const lidEl = lidTarget();
@@ -517,7 +600,6 @@ async function animateTiling(reports) {
 
 /** The tiles that just reached the wall glaze over as they land. */
 function flashWall(report) {
-  if (prefersReducedMotion()) return;
   [[S.human_seat, boards.human], [S.ai_seat, boards.ai]].forEach(([seat, board]) => {
     const player = report.players[seat];
     if (!player) return;
@@ -532,7 +614,7 @@ function flashWall(report) {
 
 /* --------------------------------------------------------------------- hints */
 async function askHint() {
-  if (!S || !S.your_turn || busy) return;
+  if (!S || !S.your_turn || busy || nav.browsing()) return;
   setBusy(true);
   try {
     const data = await api("/api/hint");
@@ -628,8 +710,13 @@ ui.coach.addEventListener("change", () => {
   if (coachOn) toast("Coach mode on — your moves are scored by the AI's own search.", "good");
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && sel) { sel = null; suggestion = null; render(); }
+  if (event.key === "Escape") {
+    if (nav.browsing()) { nav.toLatest(); return; }
+    if (sel) { sel = null; suggestion = null; render(); }
+  }
 });
+// ← / → / End walk the game, exactly as they do in a chess client
+bindHistoryKeys(nav, { enabled: () => !busy });
 
 status.set({ headline: "Dealing…", detail: "picking up the tiles", tone: "idle" });
 syncCoachAvailability();

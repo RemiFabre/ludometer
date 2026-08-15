@@ -59,11 +59,16 @@
   <!-- one glance = whole game state; nothing on this page ever covers the board -->
   <section id="status"></section>
 
+  <!-- the panel opens inline and pushes the table down; this page has no pop-ups -->
+  <section id="settings" aria-label="Settings"></section>
+
   <section class="panel">
     <h2 class="panel-title">The middle of the table</h2>
     <div id="middle"></div>
     <div class="middle-actions">
       <span class="brand-sub" id="prompt">Deal the tiles to begin.</span>
+      <!-- move navigation: pure replay of positions the page already has -->
+      <div id="nav" aria-label="Move navigation"></div>
       <button type="button" class="btn" id="hint">Suggest a move</button>
       <button type="button" class="btn hidden" id="cancel">Clear selection</button>
     </div>
