@@ -6,16 +6,9 @@
  * blocks — the board stays interactive and the "thinking" clock keeps ticking
  * while the search runs.
  *
- * Backends. Two onnxruntime-web builds are vendored and exactly one is
- * downloaded: the WebGPU one when the browser can run it (`navigator.gpu` plus
- * JSPI), the pure-WASM one otherwise. The choice is made here rather than on the
- * page so that a WebGPU session that fails to create can quietly fall back to
- * WASM before the page has been told anything. See js/net.js for the measured
- * reason the two differ — and why the batch size differs with them.
- *
  * Protocol (all messages carry an `id` that is echoed back):
- *   -> {type:"init", backends, modelUrl}
- *                                            <- {type:"loading"} ... {type:"ready", backend, batch, margin} | {type:"error"}
+ *   -> {type:"init", ortUrl, wasmUrl, modelUrl}
+ *                                            <- {type:"loading"} ... {type:"ready"} | {type:"error"}
  *   -> {type:"search", setup, budgetS}       <- {type:"progress"} ... {type:"result"}
  *   -> {type:"policy", setup}                <- {type:"result"}   (hint: no search)
  *   -> {type:"rate", setup, actionId, budgetS}
@@ -26,28 +19,11 @@
 
 import { AzulState, Rng } from "./engine.js";
 import { MCTS, STALL_ROUNDS, selectAction } from "./mcts.js";
-import { OnnxEvaluator, webgpuLikely } from "./net.js";
+import { OnnxEvaluator } from "./net.js";
 import { describeAction } from "./report.js";
-
-/**
- * Leaves per forward pass, per backend.
- *
- * Measured on this laptop (Chrome, Apple M3 Pro), raw `session.run` throughput:
- *
- *   backend   batch 1     batch 16    batch 64    batch 256
- *   wasm      2.1 k/s     4.0 k/s     4.2 k/s     4.1 k/s
- *   webgpu    0.25 k/s    4.6 k/s     16.5 k/s    50 k/s
- *
- * WASM saturates by 16, so there is nothing to buy past it and a bigger batch
- * only blurs the search. A GPU dispatch costs ~4 ms whatever it carries, so
- * WebGPU is *worse* than WASM until about batch 8 and only then starts winning;
- * 64 is where the tree still stays sharp enough to be worth the extra breadth.
- */
-export const BATCH_BY_BACKEND = { wasm: 16, webgpu: 64 };
 
 let ort = null;
 let evaluator = null;
-let searchConfig = {};
 let cancelled = false;
 const rng = new Rng((Date.now() ^ 0x5eed) >>> 0);
 
