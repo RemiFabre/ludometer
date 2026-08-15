@@ -75,6 +75,17 @@ layout, not a shrunk one**. His starting points, to be refined with him:
   fine to run during training). The script tests, stages, pushes `gh-pages`,
   and waits for the live URL. CDN freshness lags ~10–60 s; verify with
   `curl "…/index.html?v=$RANDOM"`.
+- **The deploy script stages the WORKING TREE, not the git index.** Parallel
+  agent sessions edit this repo (it happened on 2026-08-16 and shipped someone
+  else's in-progress worker to production). Before deploying, check
+  `git status` for files you did not touch; if the tree is not clean-yours,
+  deploy from committed state instead (`git archive <commit> web/player | tar
+  -x -C tmp`, then the script's commit-tree steps — see the gh-pages commit
+  "Deploy … from committed main 6ed766e" for the exact recipe).
+- After any deploy, `node web/player/test/browser.test.mjs --live` plays a
+  full game on the production site (it clicks through confirm mode). Note it
+  fires real GoatCounter beacons — a couple of test games in the public tally
+  are the accepted cost of proving the pipeline.
 
 ## Rémi's working preferences
 
