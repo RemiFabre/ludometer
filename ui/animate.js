@@ -121,14 +121,10 @@ export function rectOf(target) {
  * rectangles, `color` is 0..4 (or "marker"), `hide` defaults to true and hides
  * the source element while its clone is in the air.
  *
- * `options`: `{layer, duration, stagger, scale, keep, collect}` — `duration`
- * and `stagger` are 1× milliseconds and are scaled by the speed setting here.
- * With `keep: true` the clones are left parked at their destination instead of
- * removed — the caller owns them from then on (a held selection uses this; see
- * the player page). `collect`, an array, receives each clone the moment it is
- * created, so a caller can find its clones even while they are still in the
- * air. Returns a promise that always resolves (never rejects) so a caller can
- * `await` it in a turn sequence.
+ * `options`: `{layer, duration, stagger, scale}` — `duration` and `stagger` are
+ * 1× milliseconds and are scaled by the speed setting here. Returns a promise
+ * that always resolves (never rejects) so a caller can `await` it in a turn
+ * sequence.
  */
 export function flyTiles(flights, options = {}) {
   const layer = options.layer;
@@ -157,7 +153,6 @@ export function flyTiles(flights, options = {}) {
     const delay = airborne.length * stagger;
     ghost.style.transitionDelay = delay + "ms";
     layer.appendChild(ghost);
-    if (options.collect) options.collect.push(ghost);
     if (flight.hide !== false && flight.from && flight.from.style) {
       flight.from.style.visibility = "hidden";
     }
@@ -191,8 +186,8 @@ export function flyTiles(flights, options = {}) {
         setTimeout(() => ghost.classList.add("landed"), duration + delay);
       });
       setTimeout(() => {
-        if (!options.keep) airborne.forEach(([ghost]) => ghost.remove());
-        done(options.keep ? airborne.map(([ghost]) => ghost) : undefined);
+        airborne.forEach(([ghost]) => ghost.remove());
+        done();
       }, total);
     });
   });

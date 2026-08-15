@@ -16,11 +16,15 @@
  *      the centre — a preview of the move, undone the instant you change your
  *      mind (Escape, the Clear button, or another colour);
  *   2. you click a row and the held tiles continue from the hand to your board.
- *      With confirm mode on (the default) they are only *placed*: the board
- *      shows the position as it would stand, and the move plays when you press
- *      "Play this move" — or comes back to your hand with "Take it back".
- *      Nothing ever waits for the coach — with coach mode on, the rating runs in
- *      the background *after* the turn and fills in on the move's log entry;
+ *      With confirm mode on (the default) the page simply draws the position the
+ *      move would leave — real tiles in their real places, the new ones glowing —
+ *      and a banner under the middle asks for the word: "Play this move" commits
+ *      it, Cancel goes all the way back to before the pick. The page is never
+ *      *between* positions: every view is a fully drawn state, and the flights
+ *      are transient garnish over it (a lesson learned from floating clones that
+ *      scrolled apart from the table). Nothing ever waits for the coach — with
+ *      coach mode on, the rating runs in the background *after* the turn and
+ *      fills in on the move's log entry;
  *   3. if that ended the round, full pattern lines fly to the wall — each tile
  *      popping the points it earns as it lands, the floor line popping its cost —
  *      and the round's scoring appears *inline* under the boards;
@@ -44,7 +48,16 @@
 import { animated, flyTiles, initSpeed, scaled, sleep } from "../ui/animate.js";
 import { createBoard, createMiddle } from "../ui/board.js";
 import { confirmOn } from "../ui/confirm.js";
-import { COLORS, CUM_PENALTY, FLOOR, node } from "../ui/dom.js";
+import {
+  CENTER,
+  COLORS,
+  CUM_PENALTY,
+  FLOOR,
+  markerChip,
+  node,
+  poolCount,
+  tileEl,
+} from "../ui/dom.js";
 import { bindHistoryKeys, createHistory } from "../ui/history.js";
 import { renderLog } from "../ui/log.js";
 import { popScore } from "../ui/popups.js";
@@ -65,7 +78,8 @@ const ui = {
   coachField: el("coach-field"), coachLegend: el("coach-legend"), supply: el("supply"),
   settings: el("settings"), nav: el("nav"),
   hand: el("hand"), handTiles: el("hand-tiles"), pops: el("pops"),
-  confirm: el("confirm"), park: el("park"),
+  confirm: el("confirm"), confirmBar: el("confirm-bar"),
+  confirmDetail: el("confirm-detail"), confirmCancel: el("confirm-cancel"),
 };
 
 let session = null;    // the GameSession that owns the rules
@@ -79,8 +93,8 @@ let liveSims = 0;      // positions the current search has visited
 let coachOn = false;   // rate my moves with the AI's own search
 let notice = "";       // a passing message, shown in the band, never over the board
 let noticeTimer = null;
-let held = null;       // the acted-out selection: parked tile clones + hidden originals
 let proposal = null;   // {id, move} — a placed move waiting for "Play this move"
+let committing = null; // the move whose held view stays up while its tiles fly
 let navToken = 0;      // invalidates a history-step animation when another step lands
 
 initSpeed(); // before anything can animate: the stored speed, or 1×
@@ -267,42 +281,54 @@ function seatBoards() {
  * the frame with no legal actions and no selection, so there is nothing to
  * click even before the buttons are disabled.
  */
+/**
+ * Draw the page. The page is *always* a fully drawn position — never a limbo of
+ * floating clones (those scrolled apart from the table and collided with real
+ * tiles; see the hand tray and confirm mode below). Three positions can be on
+ * show: the live game; the live game with the selection lifted into the hand
+ * tray (`heldView`); or, in confirm mode, the position the placed move would
+ * leave (`placedView`), its new tiles glowing until you validate or cancel.
+ * Browsing the history is read-only by construction, as before.
+ */
 function render() {
   if (!S) return;
-  // a redraw rebuilds the dishes, so any acted-out selection — placed or held —
-  // resets with it
-  proposal = null;
-  syncMoveButtons();
-  clearHeld();
   const frame = nav.frame();
   const live = !frame;
-  const st = live ? S.state : frame.state;
+  if (!live && proposal) proposal = null; // browsing abandons a placed move
+  const placed = live && proposal ? proposal.move : null;
+  const heldInfo = placed || !live ? null : sel ? pickInfo(sel.source, sel.color) : committing;
+  const base = live ? S.state : frame.state;
+  const st = placed ? placedView(placed) : base;
+  const mid = placed ? st : heldInfo ? heldView(heldInfo) : base;
   renderStatus(frame);
+  syncBanner();
   middle.render({
-    state: st,
-    legalActions: live ? S.human_legal_actions : [],
-    canPick: live && S.your_turn && !st.is_terminal && !busy,
-    selection: live ? sel : null,
+    state: mid,
+    legalActions: live && !placed ? S.human_legal_actions : [],
+    canPick: live && S.your_turn && !base.is_terminal && !busy && !placed,
+    selection: null, // the hand tray *is* the selection; dimming forty tiles says less
   });
+  renderHand(heldInfo);
   boards.human.render({
     state: st,
-    legalActions: live ? S.human_legal_actions : [],
-    selection: live ? sel : null,
+    legalActions: live && !placed ? S.human_legal_actions : [],
+    selection: live && !placed ? sel : null,
     title: "You",
-    toMove: live && !st.is_terminal && st.current_player === S.human_seat,
+    toMove: live && !base.is_terminal && base.current_player === S.human_seat,
     highlightRow: live && suggestion ? suggestion.dest : undefined,
   });
+  if (placed) glowPlacement(placed);
   boards.ai.render({
     state: st,
     title: aiLabel(),
-    toMove: live && !st.is_terminal && st.current_player === S.ai_seat,
+    toMove: live && !base.is_terminal && base.current_player === S.ai_seat,
   });
   renderSupply(st);
   renderLog(ui.log, (live ? S.log : frame.log) || []);
-  ui.cancel.classList.toggle("hidden", !live || !sel);
-  ui.hint.disabled = busy || !engineReady || !live || !S.your_turn;
+  ui.cancel.classList.toggle("hidden", !live || !sel || !!placed);
+  ui.hint.disabled = busy || !engineReady || !live || !S.your_turn || !!placed;
   syncCoach();
-  if (live && suggestion) {
+  if (live && !placed && suggestion) {
     const dish = middle.sourceEl(suggestion.source);
     if (dish) {
       dish.classList.add("picked");
@@ -352,11 +378,11 @@ function renderStatus(frame) {
   if (S.your_turn) {
     if (proposal) {
       status.set({
-        headline: "Placed — play it, or take it back",
-        detail: "You " + proposal.move.text + " · " + turnDetail(),
+        headline: "Your move is placed",
+        detail: "This is the position it would leave — validate or cancel below.",
         tone: "you",
       });
-      ui.prompt.textContent = "Nothing is final until you press Play this move.";
+      ui.prompt.textContent = "";
       return;
     }
     status.set({
@@ -475,6 +501,8 @@ function adopt(options) {
   S = session.snapshot();
   sel = null;
   suggestion = null;
+  proposal = null;
+  committing = null; // the real position takes over from any derived view
   if (first) {
     seatBoards();
     nav.reset();
@@ -499,99 +527,162 @@ function noteFrames(moves) {
 }
 
 function pick(source, color) {
-  if (busy || !S || !S.your_turn || nav.browsing()) return;
-  sel = sel && sel.source === source && sel.color === color ? null : { source, color };
+  if (busy || !S || !S.your_turn || nav.browsing() || proposal) return;
   suggestion = null;
-  render();
-  if (sel) holdSelection();
-}
-
-/* ------------------------------------------------------- the held selection */
-/**
- * Act the selection out, immediately: the tiles you clicked fly to the hand
- * tray on the middle panel, and the dish's leftovers fly to the centre — the
- * table as it *will* look if you commit. It is pure picture: parked clones
- * over hidden originals, with the game state untouched, so any redraw (another
- * colour, Escape, browsing the history) puts everything back at once.
- */
-function holdSelection() {
-  if (!sel || !animated() || !S) return;
-  const { source, color } = sel;
-  const taken = middle.sourceTiles(source, color);
-  if (!taken.length) return;
-  ui.handTiles.innerHTML = "";
-  const slots = taken.map(() => {
-    const s = node("div", "slot");
-    ui.handTiles.appendChild(s);
-    return s;
-  });
-  ui.hand.hidden = false;
-  const rest = middle.remainderTiles(source, color);
-  held = emptyHeld(source, color, taken.concat(rest));
-  flyTiles(
-    taken.map((from, i) => ({ from, to: slots[i], color })),
-    { layer: ui.fly, keep: true, collect: held.taken }
-  );
-  if (rest.length) {
-    flyTiles(restFlights(rest), { layer: ui.fly, keep: true, collect: held.rest });
+  if (sel && sel.source === source && sel.color === color) {
+    sel = null; // putting tiles back is instant and unambiguous
+    render();
+    return;
   }
+  // capture the outgoing dish before the held view replaces it
+  const takenRects = middle.sourceTiles(source, color).map((t) => t.getBoundingClientRect());
+  const chip =
+    source === CENTER && S.state.marker_in_center
+      ? middle.centerEl().querySelector(".marker")
+      : null;
+  const markerRect = chip ? chip.getBoundingClientRect() : null;
+  const restRects = {};
+  if (source !== CENTER) {
+    middle.remainderTiles(source, color).forEach((t) => {
+      (restRects[t.dataset.color] = restRects[t.dataset.color] || []).push(
+        t.getBoundingClientRect()
+      );
+    });
+  }
+  sel = { source, color };
+  flyInto(() => {
+    const plan = [];
+    const handTiles = [].slice.call(ui.handTiles.querySelectorAll(".tile"));
+    takenRects.forEach((r, i) => plan.push([r, handTiles[i], color]));
+    if (markerRect) plan.push([markerRect, ui.handTiles.querySelector(".marker"), "marker"]);
+    Object.keys(restRects).forEach((c) => {
+      const now = middle.centerEl().querySelectorAll('.tile[data-color="' + c + '"]');
+      const olds = restRects[c];
+      olds.forEach((r, i) => plan.push([r, now[now.length - olds.length + i], Number(c)]));
+    });
+    return plan;
+  });
 }
 
-function emptyHeld(source, color, hidden) {
-  return { source, color, taken: [], rest: [], extra: [], hidden, placed: false };
+/* ---------------------------------------------------------- derived positions */
+/** What a pick moves, before it has a destination. */
+function pickInfo(source, color) {
+  return {
+    source,
+    color,
+    count: poolCount(S.state, source, color),
+    took_marker: source === CENTER && S.state.marker_in_center,
+  };
 }
 
-/** The leftovers spread into a neat row at the centre of the dish they join. */
-function restFlights(rest) {
-  const centre = middle.centerEl().getBoundingClientRect();
-  const tw = rest[0].getBoundingClientRect().width || 32;
-  const gap = 4;
-  const x0 = centre.left + (centre.width - (rest.length * (tw + gap) - gap)) / 2;
-  const y = centre.top + (centre.height - tw) / 2;
-  return rest.map((from, i) => ({
-    from,
-    to: { left: x0 + i * (tw + gap), top: y, width: tw, height: tw },
-    color: Number(from.dataset.color),
-  }));
+/** The live position with the selection lifted into the hand: the source pool
+ * emptied, a factory's leftovers pushed to the middle, a taken marker in hand. */
+function heldView(info) {
+  const st = structuredClone(S.state);
+  if (info.source === CENTER) {
+    st.center[info.color] = 0;
+    if (info.took_marker) st.marker_in_center = false;
+  } else {
+    const dish = st.factories[info.source];
+    dish[info.color] = 0;
+    for (let c = 0; c < COLORS.length; c++) {
+      st.center[c] += dish[c];
+      dish[c] = 0;
+    }
+  }
+  return st;
 }
 
-/** Put the acted-out selection back: clones gone, originals visible, tray shut. */
-function clearHeld() {
-  if (!held) {
+/** The position `move` would leave — what confirm mode draws while it waits. */
+function placedView(move) {
+  const st = heldView(move);
+  const me = st.players[S.human_seat];
+  if (move.dest !== FLOOR && move.placed) {
+    const line = me.pattern_lines[move.dest];
+    line.color = move.color;
+    line.count += move.placed;
+  }
+  if (move.to_floor) me.floor[move.color] += move.to_floor;
+  if (move.to_lid) st.lid[move.color] += move.to_lid;
+  if (move.took_marker) me.floor_marker = true;
+  const occupied =
+    me.floor.reduce((a, b) => a + b, 0) + (me.floor_marker ? 1 : 0);
+  me.floor_penalty = CUM_PENALTY[Math.min(7, occupied)];
+  st.tiles_left -= move.count;
+  return st;
+}
+
+/** The hand tray: the selection as real tiles, in the page, scrolling with it. */
+function renderHand(info) {
+  ui.handTiles.innerHTML = "";
+  if (!info || !info.count) {
     ui.hand.hidden = true;
     return;
   }
-  held.taken.concat(held.rest, held.extra).forEach((g) => g.remove());
-  held.hidden.forEach((elm) => {
-    if (elm && elm.style) elm.style.visibility = "";
-  });
-  ui.hand.hidden = true;
-  ui.handTiles.innerHTML = "";
-  held = null;
+  for (let k = 0; k < info.count; k++) ui.handTiles.appendChild(tileEl(info.color));
+  if (info.took_marker) ui.handTiles.appendChild(markerChip(true));
+  ui.hand.hidden = false;
+}
+
+/** A soft light around the tiles a placed move just put down. */
+function glowPlacement(move) {
+  placedTiles(move).forEach((t) => t.classList.add("proposed"));
+}
+
+/** The placed move's own tiles on the freshly drawn board, in take order. */
+function placedTiles(move) {
+  const board = boards.human;
+  const out = [];
+  if (move.dest !== FLOOR && move.placed) {
+    out.push.apply(out, board.lineTiles(move.dest).slice(-move.placed));
+  }
+  if (move.to_floor) {
+    const mine = board.floorTiles().filter((t) => Number(t.dataset.color) === move.color);
+    out.push.apply(out, mine.slice(-move.to_floor));
+  }
+  if (move.took_marker) {
+    const floor = board.floorEl();
+    const chip = floor && floor.querySelector(".marker");
+    if (chip) out.push(chip);
+  }
+  return out;
 }
 
 /**
- * Hand the held selection to the move that commits it. The caller now owns the
- * clones (they become the move's flight sources — or, for a placed move, the
- * tiles already sitting where they land), and render() will no longer reset
- * them.
+ * Redraw, then fly clones from rectangles captured off the outgoing page to the
+ * elements `find()` names on the new one. The page is never *between* positions:
+ * the new position is drawn at once, and the pieces that moved are briefly
+ * covered while their clones travel. With animation off, the redraw is all.
  */
-function takeHeld() {
-  const h = held;
-  held = null;
-  if (h) ui.hand.hidden = true;
-  return h;
+async function flyInto(find) {
+  render();
+  if (!animated()) return;
+  const plan = find() || [];
+  const flights = [];
+  const covered = [];
+  plan.forEach(([rect, target, color]) => {
+    if (!rect || !target) return;
+    if (target.style) {
+      target.style.visibility = "hidden";
+      covered.push(target);
+    }
+    flights.push({ from: rect, to: target, color, hide: false });
+  });
+  await flyTiles(flights, { layer: ui.fly });
+  covered.forEach((elm) => {
+    elm.style.visibility = "";
+  });
 }
 
 /* ------------------------------------------------------------- confirm mode */
 /**
  * A row was clicked. With confirm mode off this *is* the move; with it on (the
- * default) the tiles are placed on the board — clones over the real squares,
- * the game state untouched — and two buttons appear: Play this move, Take it
- * back. What she sees is exactly the position her move would leave.
+ * default) the page draws the position the move would leave — real tiles in
+ * their real places, the new ones glowing — and the banner under the middle
+ * asks for the word. Cancel goes all the way back to before the pick.
  */
 function route(id) {
-  if (busy || !session || !S || !S.your_turn || nav.browsing()) return;
+  if (busy || !session || !S || !S.your_turn || nav.browsing() || proposal) return;
   if (!confirmOn()) {
     play(id);
     return;
@@ -599,115 +690,51 @@ function route(id) {
   propose(id);
 }
 
-/** Show/hide and label the two buttons a placed move answers to. */
-function syncMoveButtons() {
-  ui.confirm.classList.toggle("hidden", !proposal);
-  ui.cancel.textContent = proposal ? "Take it back" : "Clear selection";
-  if (proposal) ui.cancel.classList.remove("hidden");
-}
-
-/** A still clone at `target` — what a flight is when nothing may move. A tile
- * stays a tile even when the target is a whole panel (the lid), so the clone
- * is capped at tile size and centred in whatever it lands in. */
-function parkAt(target, color, collect) {
-  const r =
-    typeof target.getBoundingClientRect === "function"
-      ? target.getBoundingClientRect()
-      : target;
-  if (!r || (!r.width && !r.height)) return;
-  const size = Math.min(r.width, r.height, 44);
-  const g = document.createElement("div");
-  g.className = "fly-tile landed " + (color === "marker" ? "marker" : "tile");
-  if (color === "marker") g.textContent = "1";
-  else g.dataset.color = color;
-  g.style.left = r.left + (r.width - size) / 2 + "px";
-  g.style.top = r.top + (r.height - size) / 2 + "px";
-  g.style.width = size + "px";
-  g.style.height = size + "px";
-  ui.park.appendChild(g);
-  collect.push(g);
-}
-
-/** Fly when tiles fly today, appear in place when they do not. */
-function flyOrPark(flights, collect) {
-  if (animated()) {
-    flyTiles(flights, { layer: ui.fly, keep: true, collect });
-    return;
+/** The banner a placed move answers to. */
+function syncBanner() {
+  const on = !!proposal && !busy;
+  ui.confirmBar.hidden = !on;
+  if (on) {
+    ui.confirmDetail.textContent =
+      "You " + proposal.move.text + ". Nothing is final until you play it.";
   }
-  flights.forEach((f) => {
-    if (f.hide !== false && f.from && f.from.style) f.from.style.visibility = "hidden";
-    parkAt(f.to, f.color, collect);
+}
+
+/** Place the move: draw its position, glow its tiles, and wait for the word. */
+function propose(id) {
+  const move = describeAction(session.state, id);
+  // take-off points: the hand tray the selection is sitting in
+  const rects = [].slice
+    .call(ui.handTiles.querySelectorAll(".tile"))
+    .map((t) => t.getBoundingClientRect());
+  const chip = ui.handTiles.querySelector(".marker");
+  const markerRect = chip ? chip.getBoundingClientRect() : null;
+  proposal = { id, move };
+  sel = null; // a placed move is validated or cancelled whole
+  flyInto(() => {
+    const landed = placedTiles(move);
+    const lidRect =
+      move.to_lid > 0 ? lidTarget().getBoundingClientRect() : null;
+    const plan = [];
+    rects.forEach((r, i) => {
+      // in take order: the row, then the floor; overflow melts into the lid
+      const target = landed[i] || lidRect;
+      plan.push([r, target, move.color]);
+    });
+    if (markerRect) {
+      const floor = boards.human.floorEl();
+      plan.push([markerRect, floor && floor.querySelector(".marker"), "marker"]);
+    }
+    return plan;
   });
 }
 
-/** Place the move on the board and wait for the player's word. */
-function propose(id) {
-  const move = describeAction(session.state, id);
-  const targets = travelTargets(boards.human, move);
-  let fromRects;
-  if (held && held.source === move.source && held.color === move.color && held.taken.length) {
-    // the tiles continue from wherever they are — the hand tray, or the row a
-    // previous placement put them on
-    fromRects = held.taken.map((g) => g.getBoundingClientRect());
-    held.taken.forEach((g) => g.remove());
-    held.taken = [];
-  } else {
-    // no acted-out selection (animation off, or a hint set it): rise from the dish
-    if (held) clearHeld();
-    const src = middle.sourceTiles(move.source, move.color, move.count);
-    const rest = middle.remainderTiles(move.source, move.color);
-    held = emptyHeld(move.source, move.color, src.concat(rest));
-    src.concat(rest).forEach((elm) => {
-      elm.style.visibility = "hidden";
-    });
-    fromRects = src.map((elm) => elm.getBoundingClientRect());
-    if (rest.length) flyOrPark(restFlights(rest), held.rest);
-  }
-  if (move.took_marker && !held.extra.length) {
-    const chip = middle.centerEl().querySelector(".marker");
-    const slot = boards.human.floorSlots()[0];
-    if (chip && slot) {
-      held.hidden.push(chip);
-      flyOrPark([{ from: chip, to: slot, color: "marker" }], held.extra);
-    }
-  }
-  flyOrPark(
-    fromRects.map((r, i) => ({ from: r, to: targets[i], color: move.color })),
-    held.taken
-  );
-  held.placed = true;
-  proposal = { id, move };
-  syncMoveButtons();
-  renderStatus(nav.frame());
-}
-
-/** Take a placed move back: the tiles return to the hand, the selection stays. */
-function cancelProposal() {
-  if (!proposal) return;
+/** The banner's Cancel: all the way back, as if nothing had been picked. */
+function cancelMove() {
   proposal = null;
-  if (held) {
-    // the marker goes home at once; its chip was only hidden
-    held.extra.forEach((g) => g.remove());
-    held.extra = [];
-    const chip = middle.centerEl().querySelector(".marker");
-    if (chip) chip.style.visibility = "";
-    held.placed = false;
-    if (animated() && ui.handTiles.children.length) {
-      const slots = [].slice.call(ui.handTiles.children);
-      const rects = held.taken.map((g) => g.getBoundingClientRect());
-      held.taken.forEach((g) => g.remove());
-      held.taken = [];
-      flyTiles(
-        rects.map((r, i) => ({ from: r, to: slots[i % slots.length], color: held.color })),
-        { layer: ui.fly, keep: true, collect: held.taken }
-      );
-    } else {
-      // animation off: the originals come back exactly where they were
-      clearHeld();
-    }
-  }
-  syncMoveButtons();
-  renderStatus(nav.frame());
+  sel = null;
+  suggestion = null;
+  render();
 }
 
 /**
@@ -721,23 +748,37 @@ function cancelProposal() {
  */
 async function play(id) {
   if (busy || !session || !S || !S.your_turn || nav.browsing()) return;
+  const move = describeAction(session.state, id);
+  const committed = !!(proposal && proposal.id === id); // a validated placement
+  // the direct path takes off from the hand the selection is sitting in
+  const fromHand = !committed && !ui.hand.hidden;
+  const handRects = fromHand
+    ? [].slice.call(ui.handTiles.querySelectorAll(".tile")).map((t) => t.getBoundingClientRect())
+    : null;
+  const handChip = fromHand ? ui.handTiles.querySelector(".marker") : null;
+  const markerRect = handChip ? handChip.getBoundingClientRect() : null;
+  if (!committed) committing = move; // keeps the held view up while the tiles fly
   sel = null;
-  const carried = takeHeld(); // the acted-out selection becomes the move's take-off
+  suggestion = null;
   setBusy(true);
   clearScoring(ui.scoring);
   try {
     const setupBefore = coachOn ? session.state.toSetup() : null;
     const { move: applied, reports } = session.playHuman(id);
     if (setupBefore) queueRating(setupBefore, id, session.log[applied.log_n]);
-    await settle([applied], boards.human, reports, "human", carried);
+    const takeoff = committed
+      ? { skip: true }
+      : handRects
+        ? { fromRects: handRects, markerRect }
+        : null;
+    await settle([applied], boards.human, reports, "human", takeoff);
     if (session.aiTurn) await runAiTurn();
   } catch (err) {
     status.stopClock();
     say(err.message);
     adopt();
   } finally {
-    // whatever happened, no clone may outlive the turn that owned it
-    if (carried) carried.taken.concat(carried.rest, carried.extra).forEach((g) => g.remove());
+    committing = null;
     setBusy(false);
     resumeIfPending(); // a failed search leaves the AI owing a move
     flushRatings(); // now the table is quiet, let the coach think
@@ -795,7 +836,7 @@ async function runAiTurn() {
  * the position it was played from, so we draw that first and then animate: both
  * moves are shown, in order, from the right board.
  */
-async function playMoves(moves, board, reports, mover, carried) {
+async function playMoves(moves, board, reports, mover, takeoff) {
   let taken = 0;
   for (let i = 0; i < moves.length; i++) {
     const move = moves[i];
@@ -810,7 +851,7 @@ async function playMoves(moves, board, reports, mover, carried) {
         tone: "ai",
       });
     }
-    await animateTake(move, board, middle, i === 0 ? carried : null);
+    await animateTake(move, board, middle, i === 0 ? takeoff : null);
     // an observability hook, so a test can prove that *every* move animates —
     // including the second of the AI's double move across a round boundary
     document.dispatchEvent(
@@ -829,12 +870,9 @@ async function playMoves(moves, board, reports, mover, carried) {
 }
 
 /** Play out `moves`, then show the position they led to and the round's scoring. */
-async function settle(moves, board, reports, mover, carried) {
-  await playMoves(moves, board, reports, mover, carried);
+async function settle(moves, board, reports, mover, takeoff) {
+  await playMoves(moves, board, reports, mover, takeoff);
   adopt({ moves });
-  // the parked clones bow out in the same paint that draws the real tiles they
-  // stood in for — the leftovers in the middle, and a placed move's whole take
-  if (carried) carried.taken.concat(carried.rest, carried.extra).forEach((g) => g.remove());
   if (reports.length) {
     const last = reports[reports.length - 1];
     flashWall(last);
@@ -918,7 +956,7 @@ function syncCoach() {
 /* --------------------------------------------------------------------- hints */
 /** The policy head's own pick, shown as a suggestion (one forward pass). */
 async function askHint() {
-  if (!session || !S || !S.your_turn || busy || nav.browsing()) return;
+  if (!session || !S || !S.your_turn || busy || nav.browsing() || proposal) return;
   setBusy(true);
   try {
     const reply = await ask({ type: "policy", setup: session.state.toSetup() });
@@ -963,70 +1001,56 @@ function travelTargets(board, move) {
  * *remainder* travels to the centre. Watching the leftovers arrive in the
  * middle is how you learn what the next player can take.
  *
- * When the move commits a selection that was already acted out (`carried`, from
- * takeHeld()), the story continues instead of restarting: the tiles fly on from
- * the hand tray — wherever they are, even mid-air — and the leftovers, already
- * sitting in the middle, stay put. The dish's freshly-redrawn originals are
- * hidden for the duration; the redraw at the end of the turn replaces them.
+ * `takeoff` says where this story already got to. `{skip: true}` is a validated
+ * placement — the board has shown the final position since the tiles were
+ * placed, so nothing moves. `{fromRects, markerRect}` is a selection sitting in
+ * the hand tray — the tiles continue from there, and the leftovers, already
+ * drawn in the middle by the held view, stay put. `null` is the AI (or a bare
+ * page): everything flies from the dish, as it always has.
  */
-async function animateTake(move, board, table, carried) {
+async function animateTake(move, board, table, takeoff) {
+  if (takeoff && takeoff.skip) {
+    // a validated placement: the board has been showing exactly this position
+    // since the tiles were placed, so there is nothing left to move
+    popFloorCost(move, board);
+    return;
+  }
   const dish = table.sourceEl(move.source);
   const row = board.lineRow(move.dest);
   if (dish) dish.classList.add("picked");
   if (row) row.classList.add("incoming");
 
   const targets = travelTargets(board, move);
-  const handoff =
-    carried && carried.source === move.source && carried.color === move.color;
   let flights;
-  if (handoff && carried.placed) {
-    // a confirmed placement: the clones already sit exactly where the tiles
-    // land, so nothing flies — the redrawn originals just have to stay out of
-    // sight until the real position is painted over them
-    hideOriginals(move, table);
-    flights = [];
-  } else if (handoff) {
-    const rects = carried.taken.map((g) => g.getBoundingClientRect());
-    carried.taken.forEach((g) => g.remove());
-    carried.taken = [];
-    hideOriginals(move, table);
-    flights = rects.map((r, i) => ({ from: r, to: targets[i], color: move.color }));
+  if (takeoff && takeoff.fromRects) {
+    // the selection was sitting in the hand tray; it continues from there, and
+    // the tray empties the moment the tiles push off
+    ui.hand.hidden = true;
+    ui.handTiles.innerHTML = "";
+    flights = takeoff.fromRects.map((r, i) => ({ from: r, to: targets[i], color: move.color }));
+    if (move.took_marker && takeoff.markerRect) {
+      const slot = board.floorSlots()[0];
+      if (slot) flights.push({ from: takeoff.markerRect, to: slot, color: "marker" });
+    }
   } else {
+    // the AI's move (or a hintless page state): straight from the dish
     const taken = table.sourceTiles(move.source, move.color, move.count);
     flights = taken.map((from, i) => ({ from, to: targets[i], color: move.color }));
-    // leftovers slide to the middle
     const centreEl = table.centerEl();
     table.remainderTiles(move.source, move.color).forEach((from) => {
       flights.push({ from, to: centreEl, color: Number(from.dataset.color) });
     });
-  }
-  // the marker, if taken, drops onto the floor — unless a placed move already
-  // shows it there
-  if (move.took_marker && !(handoff && carried.placed)) {
-    const chip = table.centerEl().querySelector(".marker");
-    const slot = board.floorSlots()[0];
-    if (chip && slot) flights.push({ from: chip, to: slot, color: "marker" });
+    if (move.took_marker) {
+      const chip = centreEl.querySelector(".marker");
+      const slot = board.floorSlots()[0];
+      if (chip && slot) flights.push({ from: chip, to: slot, color: "marker" });
+    }
   }
 
   await flyTiles(flights, { layer: ui.fly });
   popFloorCost(move, board);
   if (dish) dish.classList.remove("picked");
   if (row) row.classList.remove("incoming");
-}
-
-/** What is visually in the hand and in the middle must not also sit in the dish:
- * hide the freshly-redrawn originals a carried selection stands in for. */
-function hideOriginals(move, table) {
-  table.sourceTiles(move.source, move.color, move.count).forEach((elm) => {
-    elm.style.visibility = "hidden";
-  });
-  table.remainderTiles(move.source, move.color).forEach((elm) => {
-    elm.style.visibility = "hidden";
-  });
-  if (move.took_marker) {
-    const chip = table.centerEl().querySelector(".marker");
-    if (chip) chip.style.visibility = "hidden";
-  }
 }
 
 /** What this move just added to the floor bill, popped off the floor line. */
@@ -1183,18 +1207,11 @@ ui.think.addEventListener("change", () => {
 ui.hint.addEventListener("click", askHint);
 ui.confirm.addEventListener("click", () => {
   if (!proposal || busy) return;
-  const id = proposal.id;
-  proposal = null;
-  syncMoveButtons();
-  play(id);
+  play(proposal.id); // play() reads the proposal itself; it stays up until the
+  // real position takes over, so the board never flashes back
 });
+ui.confirmCancel.addEventListener("click", cancelMove);
 ui.cancel.addEventListener("click", () => {
-  // during a placed move this button reads "Take it back": the tiles return to
-  // the hand and the selection stays, so another row is one click away
-  if (proposal) {
-    cancelProposal();
-    return;
-  }
   sel = null;
   suggestion = null;
   render();
@@ -1212,6 +1229,10 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (nav.browsing()) {
     nav.toLatest();
+    return;
+  }
+  if (proposal && !busy) {
+    cancelMove(); // all the way back, same as the banner's Cancel
     return;
   }
   if (sel) {
