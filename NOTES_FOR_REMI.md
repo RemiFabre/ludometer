@@ -4,6 +4,21 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-15 — Morning report: run2 caught run1 overnight
+
+- run2 (the 3× bigger net) trained all night at ~31 games/min and is at **+2005 ± 32 after
+  22.5k games** — statistically level with run1's best (+2014), winning ~45% of direct
+  head-to-heads. It learned far more per game than run1 (+1750 at 10k games vs run1's +1410)
+  but plays fewer games per hour, so the wall-clock race was closer than the per-game one.
+- The run continues toward its 60k budget through the day; the GUI's "Strongest trained
+  (auto)" will flip from run1's checkpoint to run2's the moment one out-rates it.
+- Practical note for your next game: the Elo ladder rates checkpoints at 100 sims/move, but
+  with the 5 s thinking budget the AI searches ~50-100× more than that — it plays well above
+  its listed rating. Expect it to be noticeably stronger than yesterday's opponent.
+- Science note: run2's curve is also concave in raw games (fast to ~+1400 by 4k, grind after)
+  — same shape as run1, which is evidence the shape belongs to *the game + method*, not to a
+  particular net size.
+
 ## 2026-08-14 — GUI: board aligned like the real one, real tile colours, the AI now thinks
 
 All four things you flagged after your first game, all in `web/play/` plus a small additive
