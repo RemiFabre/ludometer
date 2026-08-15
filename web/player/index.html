@@ -68,6 +68,8 @@
       <!-- move navigation: pure replay of positions the page already has -->
       <div id="nav" aria-label="Move navigation"></div>
       <button type="button" class="btn" id="hint" disabled>Suggest a move</button>
+      <!-- confirm mode: a placed move waits for these two -->
+      <button type="button" class="btn btn-primary hidden" id="confirm">Play this move</button>
       <button type="button" class="btn hidden" id="cancel">Clear selection</button>
     </div>
   </section>
@@ -113,6 +115,9 @@
 </main>
 
 <div class="fly-layer" id="fly" aria-hidden="true"></div>
+<!-- placed-not-flown clones (confirm mode with animation off) get their own
+     layer, so nothing that counts tile flights ever counts a still tile -->
+<div class="fly-layer" id="park" aria-hidden="true"></div>
 <!-- score pop-ups get their own layer: a number is not a tile, and nothing that
      counts tile flights should ever count these -->
 <div class="pop-layer" id="pops" aria-hidden="true"></div>

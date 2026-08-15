@@ -232,6 +232,9 @@ const PLAY_ONE = `
               document.querySelector("#board-human .floor.open");
   if (!row) { document.getElementById("cancel").click(); return "blocked"; }
   row.click();
+  // confirm mode (on by default on pages that have it): press "Play this move"
+  const confirm = document.getElementById("confirm");
+  if (confirm && !confirm.classList.contains("hidden")) confirm.click();
   return "played";
 `;
 
@@ -733,6 +736,95 @@ async function checkNavAnimation(page, label, errors) {
   console.log(`    ${label}: history steps flew ${forward} tiles (${back} back, ${forward - back} forward)`);
 }
 
+/** Confirm mode: a clicked row only *places* the move; Play commits, Take it
+ * back returns the tiles with the selection intact. */
+async function checkConfirmMove(page, label, errors) {
+  if (!(await page.eval('return !!document.getElementById("confirm");'))) {
+    console.log(`    ${label}: no confirm mode on this page — skipped`);
+    return;
+  }
+  await setSpeed(page, 1);
+  await until("your turn", () => page.eval(`
+    return !document.body.classList.contains("locked") &&
+      !!document.querySelector("#middle button.tile:not([disabled])");`), 60000);
+  const placed = await page.eval(`
+    document.querySelector("#middle button.tile:not([disabled])").click();
+    const row = document.querySelector("#board-human .line.open") ||
+                document.querySelector("#board-human .floor.open");
+    if (!row) return null;
+    const logBefore = document.querySelectorAll('#log .log-entry[data-kind="move"]').length;
+    row.click();
+    return {
+      logBefore,
+      confirmShown: !document.getElementById("confirm").classList.contains("hidden"),
+      cancelText: document.getElementById("cancel").textContent,
+      locked: document.body.classList.contains("locked"),
+    };
+  `);
+  if (!placed) return errors.push(`${label}: no open row to place a move on`);
+  if (!placed.confirmShown) errors.push(`${label}: placing a move offered no confirm button`);
+  if (placed.locked) errors.push(`${label}: the move committed without confirmation`);
+  if (!/take it back/i.test(placed.cancelText)) {
+    errors.push(`${label}: no way back from a placed move (button says "${placed.cancelText}")`);
+  }
+  await sleep(800); // let the placement flight land
+  const shown = await page.eval(`return {
+    log: document.querySelectorAll('#log .log-entry[data-kind="move"]').length,
+    ghosts: document.querySelectorAll("#fly .fly-tile, #park .fly-tile").length,
+  };`);
+  if (shown.log > placed.logBefore) errors.push(`${label}: a placed move reached the log early`);
+  if (!shown.ghosts) errors.push(`${label}: a placed move shows nothing on the board`);
+  await page.eval('document.getElementById("cancel").click(); return true;');
+  await sleep(800);
+  const back = await page.eval(`return {
+    confirmShown: !document.getElementById("confirm").classList.contains("hidden"),
+    log: document.querySelectorAll('#log .log-entry[data-kind="move"]').length,
+    openRows: document.querySelectorAll("#board-human .line.open, #board-human .floor.open").length,
+  };`);
+  if (back.confirmShown) errors.push(`${label}: taking a move back left the confirm button up`);
+  if (back.log > placed.logBefore) errors.push(`${label}: taking a move back still played it`);
+  if (!back.openRows) errors.push(`${label}: taking a move back lost the selection`);
+  const committed = await page.eval(`
+    const row = document.querySelector("#board-human .line.open") ||
+                document.querySelector("#board-human .floor.open");
+    row.click();
+    document.getElementById("confirm").click();
+    return document.body.classList.contains("locked");
+  `);
+  if (!committed) errors.push(`${label}: confirming a placed move did not play it`);
+  await until("the confirmed turn to finish", () =>
+    page.eval('return !document.body.classList.contains("locked");'), 90000);
+  const final = await page.eval(
+    'return document.querySelectorAll(\'#log .log-entry[data-kind="move"]\').length;'
+  );
+  if (final <= placed.logBefore) errors.push(`${label}: the confirmed move never reached the log`);
+  // and with the switch off, a row click commits at once
+  await page.eval(`
+    document.querySelector('.flag[data-confirm="false"]').click();
+    return true;
+  `);
+  await until("your turn", () => page.eval(`
+    return !document.body.classList.contains("locked") &&
+      !!document.querySelector("#middle button.tile:not([disabled])");`), 60000);
+  const direct = await page.eval(`
+    document.querySelector("#middle button.tile:not([disabled])").click();
+    const row = document.querySelector("#board-human .line.open") ||
+                document.querySelector("#board-human .floor.open");
+    if (!row) return null;
+    row.click();
+    return {
+      locked: document.body.classList.contains("locked"),
+      confirmShown: !document.getElementById("confirm").classList.contains("hidden"),
+    };
+  `);
+  if (direct && !direct.locked) errors.push(`${label}: with confirm off, the row click did not play`);
+  if (direct && direct.confirmShown) errors.push(`${label}: with confirm off, the confirm button appeared`);
+  await until("the direct turn to finish", () =>
+    page.eval('return !document.body.classList.contains("locked");'), 90000);
+  await page.eval('document.querySelector(\'.flag[data-confirm="true"]\').click(); return true;');
+  console.log(`    ${label}: place → take back → place → confirm all behaved; off-switch commits at once`);
+}
+
 /* ------------------------------------------------------------------- the pages */
 async function checkPage({ name, url, deal, errors, shots }) {
   console.log(`\n== ${name} — ${url}`);
@@ -793,6 +885,7 @@ async function checkPage({ name, url, deal, errors, shots }) {
     await checkScorePops(page, name, errors);
     await checkNavAnimation(page, name, errors);
     await checkHeldPreview(page, name, errors);
+    await checkConfirmMove(page, name, errors);
     await checkCoachImmediate(page, name, errors);
 
     // 5. Nothing may cover the board, settings panel included.

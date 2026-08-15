@@ -4,16 +4,18 @@
  * everything else on this page reports itself. Animation speed is always here
  * (it exists because the alternative was letting the operating system decide —
  * see animate.js for that story); a page that shows score pop-ups asks for
- * their switch too with `{popups: true}`.
+ * their switch with `{popups: true}`, and a page that places moves before
+ * playing them asks for the confirm switch with `{confirm: true}`.
  *
  *   const settings = createSettings(host);                  // speed only
- *   const settings = createSettings(host, {popups: true});  // + score pop-ups
+ *   const settings = createSettings(host, {popups: true, confirm: true});
  *
  * Every control reads its stored value through its own module and writes it
  * back on every click, so a reload keeps whatever you chose.
  */
 
 import { SPEEDS, initSpeed, prefersReducedMotion, setSpeed, speed } from "./animate.js";
+import { confirmOn, initConfirm, setConfirm } from "./confirm.js";
 import { initPopups, popupsOn, setPopups } from "./popups.js";
 import { node } from "./dom.js";
 
@@ -78,25 +80,19 @@ export function createSettings(host, options = {}) {
     return b;
   });
 
-  let popFlags = [];
-  if (options.popups) {
-    initPopups();
-    panel.append(
-      node("i", "settings-gap"),
-      node("span", "settings-label", "Score pop-ups")
-    );
+  /** One On/Off pair in the panel, wired to a stored preference. */
+  function flagRow(label, dataKey, titles, get, set) {
+    panel.append(node("i", "settings-gap"), node("span", "settings-label", label));
     const flags = node("div", "speeds");
     flags.setAttribute("role", "group");
-    flags.setAttribute("aria-label", "Score pop-ups");
-    popFlags = [true, false].map((value) => {
+    flags.setAttribute("aria-label", label);
+    const pair = [true, false].map((value) => {
       const b = node("button", "flag", value ? "On" : "Off");
       b.type = "button";
-      b.dataset.pops = String(value);
-      b.title = value
-        ? "Every point floats off the square that earned it as the round is scored"
-        : "Scoring stays in the panel below the boards";
+      b.dataset[dataKey] = String(value);
+      b.title = titles[value ? 0 : 1];
       b.addEventListener("click", () => {
-        setPopups(value);
+        set(value);
         sync();
         if (options.onChange) options.onChange(speed());
       });
@@ -104,6 +100,39 @@ export function createSettings(host, options = {}) {
       return b;
     });
     panel.append(flags);
+    return { pair, get, dataKey };
+  }
+
+  const flagRows = [];
+  if (options.popups) {
+    initPopups();
+    flagRows.push(
+      flagRow(
+        "Score pop-ups",
+        "pops",
+        [
+          "Every point floats off the square that earned it as the round is scored",
+          "Scoring stays in the panel below the boards",
+        ],
+        popupsOn,
+        setPopups
+      )
+    );
+  }
+  if (options.confirm) {
+    initConfirm();
+    flagRows.push(
+      flagRow(
+        "Confirm each move",
+        "confirm",
+        [
+          "Clicking a row places the tiles; the move plays only when you confirm it",
+          "Clicking a row plays the move at once",
+        ],
+        confirmOn,
+        setConfirm
+      )
+    );
   }
 
   host.append(head, panel);
@@ -113,11 +142,14 @@ export function createSettings(host, options = {}) {
     buttons.forEach((b) => {
       b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === now));
     });
-    popFlags.forEach((b) => {
-      b.setAttribute("aria-pressed", String((b.dataset.pops === "true") === popupsOn()));
+    flagRows.forEach(({ pair, get, dataKey }) => {
+      pair.forEach((b) => {
+        b.setAttribute("aria-pressed", String((b.dataset[dataKey] === "true") === get()));
+      });
     });
     const bits = [now ? "animation " + LABELS[now] : "animation off"];
     if (options.popups) bits.push(popupsOn() ? "pop-ups on" : "pop-ups off");
+    if (options.confirm) bits.push(confirmOn() ? "confirm on" : "confirm off");
     summary.textContent = bits.join(" · ");
     hint.textContent = prefersReducedMotion()
       ? "Your system asks apps to reduce motion. The tiles still move here, because " +
