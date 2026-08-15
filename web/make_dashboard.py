@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""Regenerate web/dashboard.html from everything under runs/.
+"""Regenerate web/dashboard.html (and web/methodology.html) from runs/ and docs/.
 
 Stdlib only (no numpy, no torch, no chart libraries): charts are inline SVG
 emitted by this script. The output is a single self-contained file that works
 from file:// and refreshes itself every 30 s, so a browser tab left open during
 training keeps up as the trainer rewrites the logs in place.
 
+Two pages come out of one run:
+
+* ``dashboard.html`` — the live monitor (status, Elo curves, losses, journal).
+* ``methodology.html`` — ``docs/METHODOLOGY.md`` rendered in the same visual
+  language, with a table of contents, four inline-SVG diagrams and a run
+  comparison table built from the *actual* logs, so the explainer can never
+  drift away from the numbers it explains.
+
 Usage:
-    python3 web/make_dashboard.py                # write once
+    python3 web/make_dashboard.py                # write both pages once
     python3 web/make_dashboard.py --watch 20     # rewrite every 20 s, forever
     python3 web/make_dashboard.py --runs /tmp/r --out /tmp/d.html
 
 Reads (all optional, all tolerant of truncated last lines — the trainer may be
 mid-write): runs/<run>/config.json, status.json, train.jsonl, elo.jsonl, plus
-NOTES_FOR_REMI.md for the journal. Schemas are defined in docs/DESIGN.md.
+NOTES_FOR_REMI.md for the journal and docs/METHODOLOGY.md for the explainer.
+Schemas are defined in docs/DESIGN.md.
 """
 
 from __future__ import annotations
@@ -1040,13 +1049,45 @@ def inline_md(text: str) -> str:
     return re.sub(r"\x00(\d+)\x00", lambda m: slots[int(m.group(1))], text)
 
 
-def md_to_html(text: str) -> str:
-    """A small hand-rolled subset: headings, lists, rules, code, paragraphs."""
+def slugify(text: str, used: set[str] | None = None) -> str:
+    """A stable, URL-safe id for a heading (deduplicated against `used`)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "section"
+    if used is None:
+        return slug
+    candidate = slug
+    n = 2
+    while candidate in used:
+        candidate = f"{slug}-{n}"
+        n += 1
+    used.add(candidate)
+    return candidate
+
+
+_TABLE_SEP = re.compile(r"^\s*\|?[\s:|-]+\|[\s:|-]*$")
+
+
+def _table_cells(line: str) -> list[str]:
+    row = line.strip()
+    row = row.removeprefix("|")
+    row = row.removesuffix("|")
+    return [cell.strip() for cell in row.split("|")]
+
+
+def md_to_html(text: str, headings: list | None = None) -> str:
+    """A small hand-rolled subset: headings, lists, tables, rules, code, paragraphs.
+
+    Pass `headings` to collect `(markdown_depth, title, slug)` for every heading
+    and have ids emitted on them — that is what the methodology page's table of
+    contents is built from. Omit it and the output is unchanged (the journal).
+    """
     out: list[str] = []
     paragraph: list[str] = []
     list_kind = None
     in_code = False
     code: list[str] = []
+    used_slugs: set[str] = set()
+    lines = text.splitlines()
+    index = 0
 
     def flush_paragraph():
         nonlocal paragraph
@@ -1060,7 +1101,9 @@ def md_to_html(text: str) -> str:
             out.append(f"</{list_kind}>")
             list_kind = None
 
-    for raw in text.splitlines():
+    while index < len(lines):
+        raw = lines[index]
+        index += 1
         line = raw.rstrip()
         if line.strip().startswith("```"):
             if in_code:
@@ -1092,7 +1135,32 @@ def md_to_html(text: str) -> str:
             if depth == 1 and not out:
                 continue  # the section header already carries the document title
             level = min(6, depth + 1)  # the page itself owns <h1>
-            out.append(f"<h{level}>{inline_md(heading.group(2).strip())}</h{level}>")
+            title = heading.group(2).strip()
+            attrs = ""
+            if headings is not None:
+                slug = slugify(re.sub(r"[`*]", "", title), used_slugs)
+                headings.append((depth, re.sub(r"[`*]", "", title), slug))
+                attrs = f' id="{slug}"'
+            out.append(f"<h{level}{attrs}>{inline_md(title)}</h{level}>")
+            continue
+        if line.lstrip().startswith("|") and index < len(lines) and _TABLE_SEP.match(lines[index]):
+            flush_paragraph()
+            close_list()
+            header = _table_cells(line)
+            index += 1  # the |---|---| separator
+            body_rows = []
+            while index < len(lines) and lines[index].lstrip().startswith("|"):
+                body_rows.append(_table_cells(lines[index]))
+                index += 1
+            head = "".join(f"<th>{inline_md(cell)}</th>" for cell in header)
+            body = "".join(
+                "<tr>" + "".join(f"<td>{inline_md(cell)}</td>" for cell in row) + "</tr>"
+                for row in body_rows
+            )
+            out.append(
+                f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead>'
+                f"<tbody>{body}</tbody></table></div>"
+            )
             continue
         bullet = re.match(r"(\s*)[-*+]\s+(.*)", line)
         ordered = re.match(r"(\s*)\d+[.)]\s+(.*)", line)
@@ -1136,6 +1204,523 @@ def journal_section(notes_path: Path) -> str:
         f'<p class="section-sub">Read from {esc(notes_path.name)} · newest entries first</p>'
         "</header>"
         f'<div class="prose">{md_to_html(text)}</div></section>'
+    )
+
+
+# ==========================================================================
+# Methodology diagrams
+#
+# Every coordinate below is authored by hand on a fixed grid, never derived
+# from data, so these drawings cannot contain a NaN and cannot go stale with
+# the logs. What they *describe* is checked against the source: the network
+# diagram follows ludometer/train/net2.py, the search cycle follows
+# ludometer/train/mcts.py, the layout follows docs/DESIGN.md.
+# ==========================================================================
+
+
+class Diagram:
+    """A hand-laid inline SVG: boxes, arrows, labels. Same tokens as the charts."""
+
+    def __init__(self, key: str, width: int, height: int):
+        self.key = key
+        self.width = width
+        self.height = height
+        self.parts: list[str] = []
+
+    # -- primitives -----------------------------------------------------
+    def rect(self, x, y, w, h, fill=SURFACE_2, stroke=HAIRLINE, r=9, dash=None, opacity=1.0):
+        attrs = f'fill="{fill}" stroke="{stroke}" stroke-width="1" opacity="{coord(opacity)}"'
+        if dash:
+            attrs += f' stroke-dasharray="{dash}"'
+        self.parts.append(
+            f'<rect x="{coord(x)}" y="{coord(y)}" width="{coord(w)}" height="{coord(h)}" '
+            f'rx="{coord(r)}" {attrs} />'
+        )
+
+    def text(self, x, y, value, cls="d-body", anchor="start"):
+        self.parts.append(
+            f'<text x="{coord(x)}" y="{coord(y)}" class="{cls}" text-anchor="{anchor}">'
+            f"{esc(value)}</text>"
+        )
+
+    def line(self, x1, y1, x2, y2, color=AXIS, width=1.0, dash=None, opacity=1.0):
+        attrs = f'stroke="{color}" stroke-width="{coord(width)}" opacity="{coord(opacity)}"'
+        if dash:
+            attrs += f' stroke-dasharray="{dash}"'
+        self.parts.append(
+            f'<line x1="{coord(x1)}" y1="{coord(y1)}" x2="{coord(x2)}" y2="{coord(y2)}" {attrs} />'
+        )
+
+    def arrow(self, x1, y1, x2, y2, accent=False, dash=None):
+        color = SERIES[0] if accent else MUTED
+        marker = f"{self.key}-{'b' if accent else 'a'}"
+        attrs = f'stroke="{color}" stroke-width="1.6" marker-end="url(#{marker})"'
+        if dash:
+            attrs += f' stroke-dasharray="{dash}"'
+        self.parts.append(
+            f'<line x1="{coord(x1)}" y1="{coord(y1)}" x2="{coord(x2)}" y2="{coord(y2)}" {attrs} />'
+        )
+
+    def circle(self, cx, cy, r, fill=SURFACE_2, stroke=AXIS, width=1.5, dash=None):
+        attrs = f'fill="{fill}" stroke="{stroke}" stroke-width="{coord(width)}"'
+        if dash:
+            attrs += f' stroke-dasharray="{dash}"'
+        self.parts.append(
+            f'<circle cx="{coord(cx)}" cy="{coord(cy)}" r="{coord(r)}" {attrs} />'
+        )
+
+    # -- composites -----------------------------------------------------
+    def box(self, x, y, w, h, title, lines=(), accent=None, fill=SURFACE_2):
+        self.rect(x, y, w, h, fill=fill)
+        if accent:
+            self.parts.append(
+                f'<rect x="{coord(x)}" y="{coord(y + 10)}" width="3" '
+                f'height="{coord(h - 20)}" rx="1.5" fill="{accent}" />'
+            )
+        self.text(x + 15, y + 24, title, "d-title")
+        for i, entry in enumerate(lines):
+            self.text(x + 15, y + 45 + 17 * i, entry, "d-body")
+
+    def swatch(self, x, y, color, label, cls="d-body"):
+        self.parts.append(
+            f'<rect x="{coord(x)}" y="{coord(y - 8)}" width="9" height="9" rx="2" '
+            f'fill="{color}" />'
+        )
+        self.text(x + 15, y, label, cls)
+
+    # -- output ---------------------------------------------------------
+    def svg(self, description: str) -> str:
+        defs = (
+            f'<defs>{self._marker("a", MUTED)}{self._marker("b", SERIES[0])}</defs>'
+        )
+        return (
+            f'<svg class="diagram" viewBox="0 0 {self.width} {self.height}" '
+            f'preserveAspectRatio="xMidYMid meet" role="img" '
+            f'aria-label="{esc(description)}">{defs}{"".join(self.parts)}</svg>'
+        )
+
+    def _marker(self, suffix: str, color: str) -> str:
+        return (
+            f'<marker id="{self.key}-{suffix}" viewBox="0 0 10 10" refX="9.5" refY="5" '
+            f'markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
+            f'<path d="M0 0 L10 5 L0 10 z" fill="{color}" /></marker>'
+        )
+
+
+def diagram_loop() -> str:
+    """The training iteration, exactly as ludometer/train/trainer.py runs it."""
+    d = Diagram("loop", 640, 392)
+    d.box(
+        16, 24, 250, 108, "1 · Self-play",
+        ["8 worker processes, CPU", "MCTS 512 sims/move (run3)", "~53 positions per game"],
+        accent=SERIES[0],
+    )
+    d.box(
+        374, 24, 250, 108, "2 · Replay buffer",
+        ["500,000 positions, FIFO ring", "state 182 / policy 180 / value", "sampled with replacement"],
+        accent=SERIES[2],
+    )
+    d.box(
+        374, 196, 250, 108, "3 · Gradient steps",
+        ["Adam on Apple MPS, batch 256", "loss = CE(visits) + MSE(value)", "1.5 replays per position"],
+        accent=SERIES[3],
+    )
+    d.box(
+        16, 196, 250, 108, "4 · Checkpoint + rating",
+        ["every 512 self-play games", "40 games vs each anchor", "Bradley-Terry fit, one Elo"],
+        accent=SERIES[1],
+    )
+    d.arrow(266, 78, 370, 78)
+    d.text(318, 68, "positions", "d-note", "middle")
+    d.arrow(499, 132, 499, 192)
+    d.text(491, 168, "batches", "d-note", "end")
+    d.arrow(374, 250, 270, 250)
+    d.text(322, 240, "updated net", "d-note", "middle")
+    d.arrow(141, 196, 141, 136, accent=True)
+    d.text(151, 168, "new weights to the workers", "d-note")
+    d.arrow(141, 304, 141, 336)
+    d.rect(16, 340, 608, 38, fill=SURFACE)
+    d.text(320, 364, "one line appended to runs/<run>/elo.jsonl — that is the Elo curve", "d-note", "middle")
+    return d.svg(
+        "The four stages of one training iteration: self-play, replay buffer, "
+        "gradient steps, checkpoint and rating, feeding new weights back to self-play."
+    )
+
+
+def diagram_mcts() -> str:
+    """One MCTS simulation: select, expand, evaluate, back up (mcts.py)."""
+    d = Diagram("mcts", 640, 486)
+    panels = [
+        (16, 26, "1 select", ["from the root, follow the child", "with the best PUCT score"]),
+        (326, 26, "2 expand", ["the leaf's legal moves become", "edges; priors P from the net"]),
+        (16, 218, "3 evaluate", ["one net call gives v in [-1, 1]", "for the mover — no rollout"]),
+        (326, 218, "4 back up", ["+1 visit and +/- v on every edge", "of the path, per node's player"]),
+    ]
+    for i, (px, py, step, lines) in enumerate(panels):
+        d.rect(px, py, 298, 176, fill=SURFACE)
+        d.text(px + 15, py + 24, step, "d-step")
+        # the same three-ply sketch in every panel; only the emphasis changes
+        root = (px + 149, py + 54)
+        kids = [(px + 99, py + 94), (px + 149, py + 94), (px + 199, py + 94)]
+        deep = (px + 199, py + 130)
+        hot = i in (0, 3)
+        for j, kid in enumerate(kids):
+            on = j == 2 and hot
+            d.line(root[0], root[1], kid[0], kid[1], SERIES[0] if on else AXIS, 2.2 if on else 1.0)
+        d.line(kids[2][0], kids[2][1], deep[0], deep[1], SERIES[0] if hot else AXIS, 2.2 if hot else 1.0)
+        if i == 1:
+            # New edges fan out to the right of the leaf, never downward: the two
+            # caption lines own everything below y = py + 140.
+            for dy in (-16, 0, 16):
+                d.line(deep[0], deep[1], deep[0] + 32, deep[1] + dy, AXIS, 1.0, dash="3 3")
+                d.circle(deep[0] + 32, deep[1] + dy, 5.5, SURFACE, SERIES[2], 1.4, dash="3 2")
+        d.circle(root[0], root[1], 10, SURFACE_2, SERIES[0] if hot else AXIS, 1.8)
+        for j, kid in enumerate(kids):
+            on = j == 2 and hot
+            d.circle(kid[0], kid[1], 8.5, SURFACE_2, SERIES[0] if on else AXIS, 1.8 if on else 1.2)
+        d.circle(deep[0], deep[1], 8, SURFACE_2, SERIES[2] if i in (1, 2) else (SERIES[0] if hot else AXIS), 1.8)
+        if i == 2:
+            d.text(deep[0] + 16, deep[1] + 4, "v", "d-title")
+        if i == 3:
+            d.arrow(deep[0] + 15, deep[1] - 4, kids[2][0] + 15, kids[2][1] + 6, accent=True)
+            d.arrow(kids[2][0] + 15, kids[2][1] - 6, root[0] + 15, root[1] + 8, accent=True)
+        for k, entry in enumerate(lines):
+            d.text(px + 15, py + 152 + 16 * k, entry, "d-body")
+    d.rect(16, 406, 608, 74, fill=SURFACE_2)
+    d.text(31, 428, "score(a) = Q(a) + c * P(a) * sqrt(N + 1) / (1 + N(a))", "d-eq")
+    d.text(31, 448, "c_puct = 1.4; an unvisited edge takes Q = 0 (assume a draw)", "d-note")
+    d.text(31, 468, "Root priors are mixed 75/25 with Dirichlet(10 / n legal) noise.", "d-note")
+    return d.svg(
+        "The four steps of one Monte Carlo tree search simulation, with the PUCT "
+        "selection formula."
+    )
+
+
+def diagram_net() -> str:
+    """The structured net, derived from ludometer/train/net2.py."""
+    d = Diagram("net", 640, 576)
+    d.rect(16, 20, 608, 36, fill=SURFACE_2)
+    d.text(320, 43, "encoded position — 182 floats, from the mover's point of view", "d-title", "middle")
+    d.arrow(320, 56, 320, 74)
+
+    # 22 entity tokens, coloured by type (the TOKEN_SPECS order in net2.py)
+    groups = [
+        ("pool", 6, 6, SERIES[0]),
+        ("pattern row", 10, 11, SERIES[2]),
+        ("wall set", 2, 4, SERIES[3]),
+        ("floor", 2, 7, SERIES[1]),
+        ("supply", 1, 10, SERIES[4]),
+        ("globals", 1, 7, SERIES[6]),
+    ]
+    x = 62.0
+    for _name, count, _dims, color in groups:
+        for _ in range(count):
+            d.rect(x, 78, 20, 30, fill=color, stroke=color, r=4, opacity=0.85)
+            x += 23.6
+    columns = (66, 268, 452)
+    for i, (name, count, dims, color) in enumerate(groups):
+        d.swatch(columns[i % 3], 134 + 20 * (i // 3), color, f"{name} ({count} x {dims})")
+    d.text(320, 178, "22 entity tokens (count x raw dims) — the same 182 numbers, regrouped by meaning", "d-note", "middle")
+    d.arrow(320, 186, 320, 204)
+
+    d.box(86, 204, 468, 58, "Weight-shared entity embedding", ["one matrix per type + one bias per slot  ->  22 x 96"], accent=SERIES[0])
+    d.arrow(320, 262, 320, 280)
+    d.box(86, 280, 468, 58, "Self-attention trunk", ["1 pre-LN layer, 4 heads, 22x22 attention, FFN x2  ->  22 x 96"], accent=SERIES[2])
+    d.arrow(320, 338, 320, 356)
+    d.box(86, 356, 468, 58, "Readout", ["globals token + mean of all tokens -> 192 -> body 1024"], accent=SERIES[3])
+
+    d.line(320, 414, 320, 428)
+    d.line(166, 428, 474, 428)
+    d.arrow(166, 428, 166, 442)
+    d.arrow(474, 428, 474, 442)
+    d.box(
+        16, 442, 300, 104, "Policy head — factorised",
+        [
+            "source token s -> key A[s, c], k = 32",
+            "dest token d -> query B[d], k = 32",
+            "logit = A[s, c] . B[d] + bias + global",
+            "180 = 6 sources x 5 colours x 6 dests",
+        ],
+        accent=SERIES[1],
+    )
+    d.box(
+        324, 442, 300, 104, "Value head",
+        [
+            "1024 -> 128 -> tanh",
+            "v in [-1, 1] for the mover",
+            "target: game result blended with",
+            "0.15 x tanh(score margin / 20)",
+        ],
+        accent=SERIES[4],
+    )
+    d.text(320, 566, "1,679,002 parameters — about 0.20 ms per position on one idle CPU thread", "d-note", "middle")
+    return d.svg(
+        "The structured network: 182 input floats sliced into 22 entity tokens, "
+        "embedded per type, mixed by self-attention, read out by a factorised "
+        "policy head and a value head."
+    )
+
+
+def diagram_data() -> str:
+    """Where every number lives on disk (docs/DESIGN.md)."""
+    d = Diagram("data", 640, 486)
+    d.text(24, 28, "runs/ — everything the trainer knows, on disk", "d-title")
+    # (depth, label, annotation) — indentation is drawn with x offsets, because
+    # SVG collapses leading whitespace inside <text>.
+    tree = [
+        (0, "runs/", ""),
+        (1, "|- human_benchmarks.jsonl", "hand-logged games against real people"),
+        (1, "`- run3/", ""),
+        (2, "|- config.json", "hyperparameters, frozen at launch"),
+        (2, "|- status.json", "heartbeat: state, games, steps (every 20 s)"),
+        (2, "|- train.jsonl", "one line per iteration: loss, buffer, lr"),
+        (2, "|- elo.jsonl", "one line per rated checkpoint: elo, vs, pool"),
+        (2, "`- checkpoints/", "git-ignored — gigabytes"),
+        (3, "|- ckpt-020992.pt", "net_config + state_dict + games/steps"),
+        (3, "|- latest.pt", "the same, plus optimizer state, for resume"),
+        (3, "`- replay.npz", "states (N,182), policies (N,180), values (N)"),
+    ]
+    for i, (depth, path, note) in enumerate(tree):
+        y = 58 + 24 * i
+        d.text(24 + 18 * depth, y, path, "d-mono")
+        if note:
+            d.line(272, y - 4, 284, y - 4, GRID, 1.0, dash="2 3")
+            d.text(292, y, note, "d-note")
+    d.box(16, 346, 180, 62, "trainer.py", ["appends, never rewrites"], accent=SERIES[0])
+    d.box(230, 346, 180, 62, "runs/ files", ["plain JSON and JSONL"], accent=SERIES[2])
+    d.box(444, 346, 180, 62, "make_dashboard.py", ["reads every run, no deps"], accent=SERIES[1])
+    d.arrow(196, 377, 226, 377)
+    d.arrow(410, 377, 440, 377)
+    d.arrow(534, 408, 534, 428)
+    d.rect(370, 430, 254, 36, fill=SURFACE)
+    d.text(497, 453, "dashboard.html + methodology.html", "d-note", "middle")
+    return d.svg(
+        "The runs directory layout, what each file contains, and the one-way flow "
+        "from the trainer through the log files to the generated pages."
+    )
+
+
+DIAGRAMS = {
+    "alphazero-loop": (
+        diagram_loop,
+        "The training iteration",
+        "One turn of the loop. It repeats about 430 times over a 12-hour run.",
+    ),
+    "mcts-cycle": (
+        diagram_mcts,
+        "One search simulation",
+        "Repeated 512 times per move in run3, then the visit counts become the move.",
+    ),
+    "structured-net": (
+        diagram_net,
+        "run3's structured network",
+        "Drawn from ludometer/train/net2.py — token counts, widths and heads are the real ones.",
+    ),
+    "data-layout": (
+        diagram_data,
+        "Where the numbers live",
+        "Every observable is a plain text file under runs/; nothing is hidden in a database.",
+    ),
+}
+
+
+def diagram_figure(name: str) -> str:
+    entry = DIAGRAMS.get(name)
+    if entry is None:
+        return ""
+    draw, title, subtitle = entry
+    return (
+        '<figure class="figure figure-diagram"><div class="fig-head"><div>'
+        f'<h3 class="fig-title">{esc(title)}</h3>'
+        f'<p class="fig-sub">{esc(subtitle)}</p></div></div>'
+        f'<div class="diagram-wrap">{draw()}</div></figure>'
+    )
+
+
+# ==========================================================================
+# Methodology page
+# ==========================================================================
+
+# A marker line in METHODOLOGY.md is replaced by generated HTML, and the block
+# that immediately follows it in the Markdown is dropped. The Markdown file
+# therefore stands on its own (it carries an ASCII sketch, or a snapshot table),
+# while the page shows the live, generated version of the same thing.
+MARKER_RE = re.compile(r"^\s*<!--\s*ludometer:([a-z0-9:-]+)\s*-->\s*$")
+
+
+def run_summary(run: Run) -> dict:
+    """The handful of headline numbers the methodology table quotes per run."""
+    cfg = run.config
+    arch = str(cfg.get("arch") or "mlp")
+    if arch == "structured":
+        net = f"{cfg.get('layers', 1)}-layer attention, 22 tokens"
+    else:
+        net = f"{cfg.get('blocks', '?')} x {cfg.get('hidden', '?')} residual MLP"
+    extras = []
+    if cfg.get("tree_reuse"):
+        extras.append("tree reuse")
+    if cfg.get("pretrain"):
+        extras.append("pretrained")
+    best = max(run.elo_points, key=lambda p: p[1]) if run.elo_points else None
+    return {
+        "net": net + (" (" + ", ".join(extras) + ")" if extras else ""),
+        "sims": cfg.get("sims"),
+        "games": run.games,
+        "elapsed": run.elapsed,
+        "best": best,
+        "latest": run.latest_elo,
+        "fit": run.fit,
+    }
+
+
+def runs_table_html(runs: list[Run]) -> str:
+    """The run comparison table, read straight out of runs/*/ at build time."""
+    # "sims" is written by every TrainConfig, so it is what distinguishes a real
+    # training run from the synthetic sample-run kept in the repo as a schema fixture.
+    rated = [r for r in runs if r.elo_points and "sims" in r.config]
+    rated.sort(key=lambda r: r.run_name)
+    if not rated:
+        return '<p class="empty">No rated runs found under runs/.</p>'
+    headers = [
+        "run", "network", "sims/move", "games", "wall clock",
+        "best Elo", "latest Elo", "Elo / 1k games", "R²",
+    ]
+    rows = []
+    for run in rated:
+        s = run_summary(run)
+        best = s["best"]
+        rows.append(
+            [
+                run.run_name,
+                s["net"],
+                fmt_int(s["sims"]),
+                fmt_int(s["games"]),
+                fmt_duration(s["elapsed"]),
+                "—" if not best else f"{best[1]:,.0f} ± {best[2]:,.0f} ({best[3]})",
+                "—" if s["latest"] is None else f"{s['latest']:,.0f}",
+                "—" if not s["fit"] else fmt_float(s["fit"][0] * 1000, 1),
+                "—" if not s["fit"] else f"{s['fit'][2]:.3f}",
+            ]
+        )
+    head = "".join(f"<th>{esc(h)}</th>" for h in headers)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>" for row in rows
+    )
+    return (
+        '<figure class="figure figure-table"><div class="fig-head"><div>'
+        '<h3 class="fig-title">The runs so far</h3>'
+        '<p class="fig-sub">Read from runs/*/config.json, status.json and elo.jsonl '
+        "when this page was generated — never typed in by hand.</p></div></div>"
+        f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead>'
+        f"<tbody>{body}</tbody></table></div>"
+        '<p class="table-note">Best Elo is the single highest-rated checkpoint, which is a '
+        "max over many noisy estimates and so sits a little above the truth; "
+        "&quot;Elo / 1k games&quot; and R² are the least-squares fit over every rating in the "
+        "run.</p></figure>"
+    )
+
+
+def split_doc(text: str):
+    """Split Markdown into ('md', text) and ('gen', name) segments at markers."""
+    segments: list[tuple[str, str]] = []
+    buffer: list[str] = []
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        match = MARKER_RE.match(lines[i])
+        if not match:
+            buffer.append(lines[i])
+            i += 1
+            continue
+        segments.append(("md", "\n".join(buffer)))
+        buffer = []
+        segments.append(("gen", match.group(1)))
+        i += 1
+        # Drop the plain-text stand-in that follows the marker in the Markdown.
+        while i < len(lines) and not lines[i].strip():
+            i += 1
+        if i < len(lines) and lines[i].lstrip().startswith("```"):
+            i += 1
+            while i < len(lines) and not lines[i].lstrip().startswith("```"):
+                i += 1
+            i += 1
+        elif i < len(lines) and lines[i].lstrip().startswith("|"):
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                i += 1
+    segments.append(("md", "\n".join(buffer)))
+    return segments
+
+
+def toc_html(headings: list) -> str:
+    if not headings:
+        return ""
+    items = []
+    for depth, title, slug in headings:
+        if depth > 3:
+            continue
+        cls = "toc-1" if depth <= 2 else "toc-2"
+        items.append(f'<li class="{cls}"><a href="#{esc(slug)}">{esc(title)}</a></li>')
+    if not items:
+        return ""
+    return (
+        '<nav class="toc" aria-label="Table of contents">'
+        '<div class="eyebrow">contents</div>'
+        f'<ol>{"".join(items)}</ol></nav>'
+    )
+
+
+def build_methodology(doc_path: Path, runs: list[Run], now: float) -> str:
+    generated = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")  # noqa: DTZ006
+    try:
+        text = doc_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = f"# Methodology\n\n{doc_path.name} was not found next to this generator.\n"
+
+    title = "Methodology"
+    for line in text.splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip()
+            break
+
+    headings: list = []
+    chunks: list[str] = []
+    for kind, value in split_doc(text):
+        if kind == "md":
+            if value.strip():
+                chunks.append(md_to_html(value, headings=headings))
+        elif value == "runs-table":
+            chunks.append(runs_table_html(runs))
+        elif value.startswith("diagram:"):
+            chunks.append(diagram_figure(value.split(":", 1)[1]))
+
+    meta = [f"generated {generated}", f"{len(runs)} runs read", "static page, no scripts"]
+    body = [
+        '<div class="wrap">',
+        '<header class="masthead"><div class="brand">',
+        f"<h1>{esc(title)}</h1>",
+        '<p class="thesis">How the AI learns, end to end.</p>',
+        '<a class="cta" href="dashboard.html">Live dashboard &#8594;</a></div>',
+        f'<div class="masthead-meta">{"".join(f"<span>{esc(m)}</span>" for m in meta)}</div>',
+        "</header>",
+        '<div class="doc-layout">',
+        toc_html(headings),
+        f'<article class="prose doc">{"".join(chunks)}</article>',
+        "</div>",
+        (
+            '<footer class="foot"><span>ludometer &middot; docs/METHODOLOGY.md, rendered by '
+            "web/make_dashboard.py</span>"
+            '<span><a href="dashboard.html">back to the live dashboard</a></span>'
+            f"<span>{esc(generated)}</span></footer>"
+        ),
+        "</div>",
+    ]
+    return (
+        "<!doctype html>\n"
+        '<html lang="en"><head><meta charset="utf-8" />\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1" />\n'
+        f"<title>{esc(title)} · Ludometer</title>\n"
+        f"<style>{fill_tokens(CSS + DOC_CSS)}</style>\n"
+        "</head><body>\n" + "".join(body) + "\n</body></html>\n"
     )
 
 
@@ -1184,6 +1769,14 @@ a { color: var(--accent); text-underline-offset: 3px; }
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--muted);
 }
+.cta {
+  margin-left: auto; text-decoration: none; white-space: nowrap;
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface-2); color: var(--accent);
+}
+.cta:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); }
 
 /* panels --------------------------------------------------------------- */
 .panel { padding: 34px 0 6px; border-bottom: 1px solid var(--hairline); }
@@ -1389,6 +1982,65 @@ th:first-child, td:first-child { text-align: left; }
 }
 """
 
+DOC_CSS = """
+/* methodology page ------------------------------------------------------ */
+.doc-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 44px; align-items: start; }
+.toc {
+  position: sticky; top: 22px; padding: 22px 0 0; max-height: calc(100vh - 44px);
+  overflow-y: auto;
+}
+.toc ol { list-style: none; margin: 12px 0 0; padding: 0; }
+.toc li { margin: 0 0 2px; }
+.toc a {
+  display: block; padding: 3px 0 3px 11px; border-left: 1px solid var(--grid);
+  text-decoration: none; color: var(--ink-2); font-size: 13px; line-height: 1.35;
+}
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+.toc .toc-2 a { padding-left: 22px; font-size: 12px; color: var(--muted); }
+.doc { padding: 22px 0 0; max-width: 74ch; }
+.doc h2 { scroll-margin-top: 20px; }
+.doc h3, .doc h4 { scroll-margin-top: 20px; }
+.doc > p:first-child { font-size: 18px; color: var(--ink); }
+.doc .figure { margin: 26px 0; max-width: none; }
+.doc .table-wrap { margin: 20px 0; }
+.doc table { font-size: 11.5px; }
+.doc td:first-child, .doc th:first-child { position: sticky; left: 0; background: var(--plane); }
+.doc .figure td:first-child, .doc .figure th:first-child { background: var(--surface); }
+
+/* diagrams -------------------------------------------------------------- */
+.diagram-wrap { overflow-x: auto; margin-top: 12px; }
+svg.diagram { display: block; width: 640px; min-width: 520px; max-width: 100%; height: auto; }
+svg.diagram text { font-family: var(--mono); fill: var(--ink-2); }
+svg.diagram .d-title { font-family: var(--sans); font-size: 13.5px; font-weight: 600; fill: INK; }
+svg.diagram .d-body { font-size: 11px; fill: INK_2; }
+svg.diagram .d-mono { font-size: 11.5px; fill: INK; }
+svg.diagram .d-note { font-size: 10.5px; fill: MUTED; }
+svg.diagram .d-eq { font-size: 12px; fill: INK; }
+svg.diagram .d-step {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; fill: MUTED;
+}
+
+@media (max-width: 900px) {
+  .doc-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .toc {
+    position: static; max-height: none; padding: 20px 0 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .toc ol { columns: 2; column-gap: 24px; padding-bottom: 18px; }
+  .toc li { break-inside: avoid; }
+  /* Sub-sections would push the first paragraph a whole screen down on a phone;
+     the section links still reach every part of the document. */
+  .toc .toc-2 { display: none; }
+  /* A diagram narrower than 520px stops being readable, so it scrolls instead of
+     shrinking — say so, rather than silently hiding its right-hand half. */
+  .figure-diagram .fig-sub::after { content: " Scroll the diagram sideways to see all of it."; }
+  .doc { max-width: none; font-size: 16px; }
+}
+@media (max-width: 560px) {
+  .toc ol { columns: 1; }
+}
+"""
+
 JS = """
 (function () {
   'use strict';
@@ -1513,8 +2165,8 @@ JS = """
 """
 
 
-def styles() -> str:
-    css = CSS
+def fill_tokens(css: str) -> str:
+    """Substitute the design-token names used verbatim inside the CSS strings."""
     for token, value in (
         ("PLANE", PLANE),
         ("SURFACE_2", SURFACE_2),
@@ -1532,6 +2184,10 @@ def styles() -> str:
     ):
         css = css.replace(token, value)
     return css
+
+
+def styles() -> str:
+    return fill_tokens(CSS)
 
 
 def build_page(runs: list[Run], notes_path: Path, now: float) -> str:
@@ -1552,7 +2208,8 @@ def build_page(runs: list[Run], notes_path: Path, now: float) -> str:
         '<div class="wrap">',
         '<header class="masthead"><div class="brand">',
         "<h1>Ludometer</h1>",
-        '<p class="thesis">Does a good game teach linearly?</p></div>',
+        '<p class="thesis">Does a good game teach linearly?</p>',
+        '<a class="cta" href="methodology.html">How it works &#8594;</a></div>',
         f'<div class="masthead-meta">{"".join(f"<span>{esc(m)}</span>" for m in meta)}</div>',
         "</header>",
     ]
@@ -1595,15 +2252,27 @@ def build_page(runs: list[Run], notes_path: Path, now: float) -> str:
 # ==========================================================================
 
 
-def generate(runs_dir: Path, notes_path: Path, out_path: Path) -> tuple[int, int]:
+def write_atomic(path: Path, page: str) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(page, encoding="utf-8")
+    tmp.replace(path)  # atomic: a refreshing tab never sees a half file
+    return len(page)
+
+
+def generate(
+    runs_dir: Path,
+    notes_path: Path,
+    out_path: Path,
+    doc_path: Path | None = None,
+    doc_out: Path | None = None,
+) -> tuple[int, int]:
     now = time.time()
     runs = discover_runs(runs_dir, now)
-    page = build_page(runs, notes_path, now)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    tmp.write_text(page, encoding="utf-8")
-    tmp.replace(out_path)  # atomic: a refreshing tab never sees a half file
-    return len(runs), len(page)
+    size = write_atomic(out_path, build_page(runs, notes_path, now))
+    if doc_out is not None:
+        size += write_atomic(doc_out, build_methodology(doc_path, runs, now))
+    return len(runs), size
 
 
 def main(argv=None) -> int:
@@ -1611,6 +2280,15 @@ def main(argv=None) -> int:
     parser.add_argument("--runs", type=Path, default=REPO / "runs", help="directory of run dirs")
     parser.add_argument("--notes", type=Path, default=REPO / "NOTES_FOR_REMI.md", help="journal file")
     parser.add_argument("--out", type=Path, default=REPO / "web" / "dashboard.html", help="output HTML")
+    parser.add_argument(
+        "--doc", type=Path, default=REPO / "docs" / "METHODOLOGY.md", help="methodology source"
+    )
+    parser.add_argument(
+        "--doc-out",
+        type=Path,
+        default=None,
+        help="methodology output HTML (default: methodology.html beside --out; 'none' to skip)",
+    )
     parser.add_argument(
         "--watch",
         type=float,
@@ -1621,11 +2299,18 @@ def main(argv=None) -> int:
     parser.add_argument("--quiet", action="store_true", help="only report errors")
     args = parser.parse_args(argv)
 
+    doc_out = args.doc_out
+    if doc_out is None:
+        doc_out = args.out.parent / "methodology.html"
+    elif str(doc_out).lower() == "none":
+        doc_out = None
+
     def once():
-        count, size = generate(args.runs, args.notes, args.out)
+        count, size = generate(args.runs, args.notes, args.out, args.doc, doc_out)
         if not args.quiet:
+            targets = str(args.out) + ("" if doc_out is None else f" + {doc_out.name}")
             print(
-                f"[{datetime.now().strftime('%H:%M:%S')}] wrote {args.out} "  # noqa: DTZ005
+                f"[{datetime.now().strftime('%H:%M:%S')}] wrote {targets} "  # noqa: DTZ005
                 f"({count} run{'s' if count != 1 else ''}, {size / 1024:.0f} kB)"
             )
 

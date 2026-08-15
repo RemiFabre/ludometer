@@ -4,6 +4,54 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-16 — **Methodology page**: how the AI learns, explained end to end
+
+There is now a "How it works" button in the dashboard header. It opens
+`web/methodology.html`, a second generated page that explains the whole system to
+someone who knows how to code and nothing about RL — every term defined at first use,
+plus a glossary. Source of truth is `docs/METHODOLOGY.md`; `web/make_dashboard.py`
+renders it with the dashboard's look, a table of contents, and four hand-drawn inline
+SVG diagrams (the training loop, one MCTS simulation, run3's 22-token network drawn
+from `net2.py`, and the `runs/` data layout). It regenerates with the dashboard, so
+the watcher already keeps it current.
+
+**Every number in it came out of the logs, not out of my head.** The run comparison
+table is built from `runs/*/config.json` + `status.json` + `elo.jsonl` at build time,
+so it can never drift; I verified all 18 of its cells against the raw files.
+
+Three things I found while writing it that you should know, because they are not
+written down anywhere else and two of them affect how you read the curves:
+
+- **`greedy` and `heuristic` contribute nothing to a checkpoint's Elo.** Only pairings
+  involving the candidate are in the fit, and only `random` and the pinned prior-run
+  checkpoints are anchored — which leaves greedy and heuristic as free parameters on a
+  star graph, so the fit just reproduces their observed win rates and passes no
+  information back. run1's first rating, +125.3, is reproduced to 0.1 Elo by the
+  `random` edge alone. They are readable milestones, not measuring instruments.
+- **The scale is now a ratchet, and run3 is standing on it.** Once you beat `random`
+  100% of the time that edge carries no Fisher information, so a rating is effectively
+  "the previously published checkpoint's Elo plus the score share against it". And
+  `eval_frozen` pins the *all-time strongest* checkpoint — a max over ~50 noisy
+  estimates, i.e. textbook winner's curse, biased high. run3's `ckpt-020992` (+2336)
+  has been the pinned anchor for 7k games, later checkpoints score ~0.46 against it,
+  and the curve has not exceeded it since. "Learning slowed" and "the ruler ran out"
+  look identical in this data.
+- **The concave shape is the real result so far.** run1 104.5 → 45.7 Elo/1k games
+  (first half → second half), run2 118.4 → 12.4, run3 8.8 → 5.6. Same shape across a
+  1.0M MLP at 160 sims, a 3.3M MLP at 256 sims, and a 1.7M attention net at 512 sims
+  with a warm start. That the shape survived every change to the learner is evidence it
+  belongs to the game plus the method rather than to any particular net.
+
+The doc says plainly what run4 would have to do to separate those last two: a gauntlet
+of run3's checkpoints against each other and against run1/run2 at play-time settings,
+anchored on run1's +2014.
+
+I touched only `docs/METHODOLOGY.md`, `web/make_dashboard.py`, `web/methodology.html`
+and this file. Nothing under `runs/` or in `ludometer/` was modified — the trainer kept
+running throughout.
+
+---
+
 ## 2026-08-15 — GUI v3, and **why you never saw the animations**
 
 You asked for tile animations repeatedly, and kept telling me the tiles still moved
