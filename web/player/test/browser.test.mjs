@@ -339,6 +339,9 @@ async function main() {
       if (!row) return null;
       const where = row.dataset.row;
       row.click();
+      // confirm mode (on by default): the click only places the move
+      const bar = document.getElementById("confirm-bar");
+      if (bar && !bar.hidden) document.getElementById("confirm").click();
       return where;
     `);
     if (dropped === null) throw new Error("no legal destination lit up after picking a colour");
@@ -406,6 +409,9 @@ async function main() {
                   document.querySelector("#board-human .floor.open");
       if (!row) { document.getElementById("cancel").click(); return "blocked"; }
       row.click();
+      // confirm mode (on by default): the click only places the move
+      const bar = document.getElementById("confirm-bar");
+      if (bar && !bar.hidden) document.getElementById("confirm").click();
       return "played";
     `;
     let played = 0;
