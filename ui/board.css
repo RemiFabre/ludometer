@@ -1,50 +1,34 @@
+@import url("theme.css");
+
 /* Azul board kit — the portable half of the page.
  *
- * Direction: glazed azulejo ceramic on a linen table. Everything a player
- * touches is a tile with a bevelled glaze and a pinwheel motif; the wall starts
- * as unglazed bisque and glazes over as tiles land on it. The palette is the
- * five tile glazes and nothing else, so no accent colour is invented.
+ * Direction: glazed azulejo ceramic on a linen table. A tile that is on the
+ * board is saturated, rimmed and raised; a square that is empty is a neutral
+ * recessed well. That single contrast is what makes the position readable from
+ * across a room, and it is the thing this file exists to protect.
  *
- * Scope: tokens, tiles, the two player boards, the middle of the table, the
- * status band, the move log, the inline scoring panels and the flight layer.
- * Nothing in here knows about a server, a form or a page shell — this file plus
- * ui/*.js is what another page needs to draw the same table.
+ * **Every colour comes from theme.css.** There is not one hex literal below
+ * this comment — if you find yourself typing one, add a token instead, or the
+ * next skin will quietly break. See THEMING.md.
+ *
+ * Scope: tiles, the two player boards, the middle of the table, the status
+ * band, the settings panel, the move navigator, the move log, the inline
+ * scoring panels and the flight layer. Nothing in here knows about a server, a
+ * form or a page shell — this file plus ui/*.js is what another page needs to
+ * draw the same table.
+ *
+ * Motion: animations are governed by the in-game speed setting alone (see
+ * animate.js), never by an OS accessibility flag. `body[data-anim="off"]` is
+ * the only thing that turns them off, and the setting writes it.
  */
-
-:root {
-  /* table & plaster */
-  --linen: #e6dbc6;
-  --linen-dark: #d8c9ae;
-  --plaster: #faf6ec;
-  --plaster-edge: #e6dcc6;
-  --bisque: #eae0cb;
-  --grout: #cfc0a4;
-  --ink: #2c2722;
-  --ink-soft: #6d6153;
-  --ink-faint: #9b8d7a;
-
-  /* The five glazes, matched to the base-game tiles you hold in your hand:
-   * deep cobalt, mustard ochre, brick terracotta, charcoal, and the pale one —
-   * "ice", a bright cyan-turquoise that must read lighter than the cobalt at a
-   * glance. Ghosts are the same glaze fired thin, for the empty wall squares. */
-  --c0: #17509e; --c0-hi: #4a80c8; --c0-lo: #0e3568; --c0-ghost: #b9cce6;
-  --c1: #d99a12; --c1-hi: #f2c445; --c1-lo: #9b6c06; --c1-ghost: #ecd8a2;
-  --c2: #b23a26; --c2-hi: #d46e57; --c2-lo: #7c2213; --c2-ghost: #e7c4b8;
-  --c3: #23272d; --c3-hi: #565e69; --c3-lo: #0d1014; --c3-ghost: #c4c7cb;
-  --c4: #31b8d1; --c4-hi: #7ddcea; --c4-lo: #1a7f94; --c4-ghost: #b6e0e9;
-
-  --tile: 32px;
-  --radius: 3px;
-  --shadow-panel: 0 1px 0 #fffdf7 inset, 0 10px 26px -18px rgba(60, 44, 20, .55);
-  --font-display: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
-  --font-body: "Avenir Next", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
-  --font-label: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
-}
 
 .panel {
   padding: 14px 16px 16px;
-  background: linear-gradient(#fdfbf5, var(--plaster));
-  border: 1px solid var(--plaster-edge);
+  /* the solid colour matters as well as the gradient: it is what a contrast
+   * check (and a browser with gradients disabled) actually reads */
+  background-color: var(--panel-bottom);
+  background-image: linear-gradient(var(--panel-top), var(--panel-bottom));
+  border: 1px solid var(--panel-edge);
   border-radius: 4px;
   box-shadow: var(--shadow-panel);
 }
@@ -70,16 +54,19 @@
   gap: clamp(14px, 3vw, 40px);
   padding: 14px clamp(16px, 2.4vw, 26px) 16px;
   overflow: hidden;
-  background: linear-gradient(#fffdf7, #f6efe0);
-  border: 1px solid var(--plaster-edge);
-  border-left: 5px solid var(--grout);
+  background: linear-gradient(var(--plaster-hi), var(--plaster-sunk));
+  border: 1px solid var(--panel-edge);
+  border-left: 5px solid var(--tone-idle);
   border-radius: 4px;
   box-shadow: var(--shadow-panel);
 }
-.status[data-tone="you"] { border-left-color: var(--c4); }
-.status[data-tone="ai"] { border-left-color: var(--c0); }
-.status[data-tone="scoring"] { border-left-color: var(--c1); }
-.status[data-tone="end"] { border-left-color: var(--c2); }
+.status[data-tone="you"] { border-left-color: var(--tone-you); }
+.status[data-tone="ai"] { border-left-color: var(--tone-ai); }
+.status[data-tone="scoring"] { border-left-color: var(--tone-scoring); }
+.status[data-tone="end"] { border-left-color: var(--tone-end); }
+/* browsing the history: the band is the only thing that changes colour, so you
+ * always know at a glance that what you are looking at is the past */
+.status[data-tone="history"] { border-left-color: var(--ink-soft); }
 
 .status-text { flex: 1; min-width: 0; }
 .status-headline {
@@ -121,7 +108,7 @@
   position: absolute;
   inset: auto 0 0 0;
   height: 3px;
-  background: rgba(207, 192, 164, .5);
+  background: var(--c3-wash);
   opacity: 0;
   transition: opacity .2s ease;
 }
@@ -142,7 +129,10 @@
   to { transform: translateX(300%); }
 }
 
-/* ==================================================================== tile == */
+/* ==================================================================== tile ==
+ * A tile is *there*: saturated, rimmed with its own fired edge, and standing a
+ * little proud of the board. `background-color` carries the glaze on its own so
+ * that the colour survives even where gradients do not. */
 .tile {
   position: relative;
   width: var(--tile);
@@ -150,30 +140,35 @@
   padding: 0;
   border: 0;
   border-radius: var(--radius);
+  background-color: var(--base);
   background-image:
-    radial-gradient(circle at 31% 24%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 58%),
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .22) 0 17%, rgba(255, 255, 255, 0) 18%),
+    radial-gradient(circle at 31% 24%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 56%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .2) 0 17%, rgba(255, 255, 255, 0) 18%),
     conic-gradient(from 45deg at 50% 50%,
-      rgba(255, 255, 255, .13) 0 25%, rgba(0, 0, 0, .07) 0 50%,
-      rgba(255, 255, 255, .13) 0 75%, rgba(0, 0, 0, .07) 0),
+      rgba(255, 255, 255, .14) 0 25%, rgba(0, 0, 0, .08) 0 50%,
+      rgba(255, 255, 255, .14) 0 75%, rgba(0, 0, 0, .08) 0),
     linear-gradient(158deg, var(--hi), var(--base) 52%, var(--lo));
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, .4) inset,
-    0 -2px 4px rgba(0, 0, 0, .3) inset,
-    0 1px 2px rgba(60, 44, 20, .4);
+    0 0 0 1px var(--rim),
+    0 1px 0 rgba(255, 255, 255, .45) inset,
+    0 -2px 4px rgba(0, 0, 0, .28) inset,
+    var(--shadow-tile);
 }
-.tile[data-color="0"] { --base: var(--c0); --hi: var(--c0-hi); --lo: var(--c0-lo); }
-.tile[data-color="1"] { --base: var(--c1); --hi: var(--c1-hi); --lo: var(--c1-lo); }
-.tile[data-color="2"] { --base: var(--c2); --hi: var(--c2-hi); --lo: var(--c2-lo); }
-.tile[data-color="3"] { --base: var(--c3); --hi: var(--c3-hi); --lo: var(--c3-lo); }
-.tile[data-color="4"] { --base: var(--c4); --hi: var(--c4-hi); --lo: var(--c4-lo); }
+.tile[data-color="0"] { --base: var(--c0); --hi: var(--c0-hi); --lo: var(--c0-lo); --rim: var(--c0-rim); }
+.tile[data-color="1"] { --base: var(--c1); --hi: var(--c1-hi); --lo: var(--c1-lo); --rim: var(--c1-rim); }
+.tile[data-color="2"] { --base: var(--c2); --hi: var(--c2-hi); --lo: var(--c2-lo); --rim: var(--c2-rim); }
+.tile[data-color="3"] { --base: var(--c3); --hi: var(--c3-hi); --lo: var(--c3-lo); --rim: var(--c3-rim); }
+.tile[data-color="4"] { --base: var(--c4); --hi: var(--c4-hi); --lo: var(--c4-lo); --rim: var(--c4-rim); }
 .tile.mini { width: 22px; height: 22px; }
+
+/* a tile that has reached the wall is the most permanent thing on the board */
+.tile.placed { box-shadow: 0 0 0 1.5px var(--rim), 0 1px 0 rgba(255, 255, 255, .5) inset, 0 -2px 5px rgba(0, 0, 0, .3) inset, var(--shadow-tile-raised); }
 
 button.tile { cursor: pointer; transition: transform .13s ease, box-shadow .13s ease; }
 button.tile:hover {
   transform: translateY(-2px);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .4) inset, 0 -2px 4px rgba(0, 0, 0, .3) inset,
-    0 5px 9px -3px rgba(60, 44, 20, .55);
+  box-shadow: 0 0 0 1px var(--rim), 0 1px 0 rgba(255, 255, 255, .45) inset,
+    0 -2px 4px rgba(0, 0, 0, .28) inset, var(--shadow-tile-raised);
 }
 button.tile.taken { transform: translateY(-4px) scale(1.04); }
 button.tile.taken::after {
@@ -184,7 +179,7 @@ button.tile.taken::after {
   border-radius: 6px;
   opacity: .85;
 }
-button.tile.dimmed { opacity: .38; }
+button.tile.dimmed { opacity: .34; }
 button.tile:disabled { cursor: default; }
 
 .marker {
@@ -193,13 +188,28 @@ button.tile:disabled { cursor: default; }
   display: grid;
   place-items: center;
   border-radius: var(--radius);
-  background: linear-gradient(#fffdf4, #ece0c6);
-  box-shadow: 0 0 0 1px var(--grout) inset, 0 1px 2px rgba(60, 44, 20, .35);
+  background: linear-gradient(var(--marker-face), var(--marker-lo));
+  box-shadow: 0 0 0 1px var(--grout-deep) inset, var(--shadow-tile);
   font-family: var(--font-display);
   font-size: 16px;
   color: var(--ink-soft);
 }
 .marker.tiny { width: calc(var(--tile) - 4px); height: calc(var(--tile) - 4px); font-size: 12px; }
+
+/* ============================================================= empty slot ==
+ * A slot is a *hole*: neutral (no glaze, ever), sunk into the board, ringed by
+ * its own shadow. One rule, one look, everywhere a square is empty. */
+.slot, .cell.empty {
+  width: var(--tile);
+  height: var(--tile);
+  border-radius: var(--radius);
+  background-color: var(--slot);
+  background-image: linear-gradient(var(--slot-lo), var(--slot) 46%);
+  box-shadow:
+    0 0 0 1px var(--slot-rim) inset,
+    0 3px 5px -1px var(--slot-shade) inset,
+    0 -1px 0 rgba(255, 255, 255, .3) inset;
+}
 
 /* ================================================= middle of the table == */
 .factories {
@@ -210,22 +220,22 @@ button.tile:disabled { cursor: default; }
   padding: 4px 0 2px;
 }
 .factory {
-  --dish: calc(var(--tile) * 2 + 32px);
+  --dish-size: calc(var(--tile) * 2 + 32px);
   position: relative;
-  width: var(--dish);
-  height: var(--dish);
+  width: var(--dish-size);
+  height: var(--dish-size);
   display: grid;
   grid-template-columns: repeat(2, var(--tile));
   grid-auto-rows: var(--tile);
   gap: 5px;
   place-content: center;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 30%, #fffdf6, #efe4cd 62%, #dccdb0);
+  background: radial-gradient(circle at 38% 30%, var(--dish-hi), var(--dish) 62%, var(--dish-lo));
   box-shadow:
-    0 0 0 1px var(--grout) inset,
-    0 3px 0 -1px rgba(255, 255, 255, .7) inset,
-    0 -6px 10px -6px rgba(90, 66, 30, .45) inset,
-    0 6px 14px -8px rgba(80, 58, 26, .55);
+    0 0 0 1px var(--dish-rim) inset,
+    0 3px 0 -1px rgba(255, 255, 255, .5) inset,
+    0 -6px 10px -6px var(--slot-shade) inset,
+    0 6px 14px -8px rgba(48, 34, 14, .5);
 }
 .factory:nth-child(odd) { transform: rotate(-1.1deg); }
 .factory:nth-child(even) { transform: rotate(1.3deg); }
@@ -239,7 +249,7 @@ button.tile:disabled { cursor: default; }
   letter-spacing: .12em;
   color: var(--ink-faint);
 }
-.factory.empty { opacity: .62; }
+.factory.empty { opacity: .55; }
 .factory .empty-note { grid-column: 1 / -1; text-align: center; }
 
 .center-dish {
@@ -253,12 +263,12 @@ button.tile:disabled { cursor: default; }
   gap: 6px 10px;
   padding: 11px 20px;
   border-radius: 999px;
-  background: radial-gradient(120% 160% at 50% 0%, #fffdf6, #f0e6d1 60%, #ddceb1);
+  background: radial-gradient(120% 160% at 50% 0%, var(--dish-hi), var(--dish) 60%, var(--dish-lo));
   box-shadow:
-    0 0 0 1px var(--grout) inset,
-    0 3px 0 -1px rgba(255, 255, 255, .7) inset,
-    0 -8px 14px -8px rgba(90, 66, 30, .4) inset,
-    0 8px 18px -12px rgba(80, 58, 26, .5);
+    0 0 0 1px var(--dish-rim) inset,
+    0 3px 0 -1px rgba(255, 255, 255, .5) inset,
+    0 -8px 14px -8px var(--slot-shade) inset,
+    0 8px 18px -12px rgba(48, 34, 14, .5);
 }
 .center-dish .empty-note, .factory .empty-note {
   font-family: var(--font-label);
@@ -273,9 +283,9 @@ button.tile:disabled { cursor: default; }
 .factory.picked, .center-dish.picked {
   box-shadow:
     0 0 0 2px var(--c0) inset,
-    0 3px 0 -1px rgba(255, 255, 255, .7) inset,
-    0 0 0 4px rgba(23, 80, 158, .14),
-    0 6px 14px -8px rgba(80, 58, 26, .55);
+    0 3px 0 -1px rgba(255, 255, 255, .5) inset,
+    0 0 0 4px var(--c0-wash),
+    0 6px 14px -8px rgba(48, 34, 14, .55);
 }
 
 /* ================================================================= board == */
@@ -289,12 +299,13 @@ button.tile:disabled { cursor: default; }
   gap: 10px;
   align-items: stretch;
   padding: 12px 14px 14px;
-  background: linear-gradient(#fdfbf5, var(--plaster));
-  border: 1px solid var(--plaster-edge);
+  background-color: var(--panel-bottom);
+  background-image: linear-gradient(var(--panel-top), var(--panel-bottom));
+  border: 1px solid var(--panel-edge);
   border-radius: 4px;
   box-shadow: var(--shadow-panel);
 }
-.board.to-move { border-color: var(--grout); box-shadow: var(--shadow-panel), 0 0 0 2px rgba(49, 184, 209, .3); }
+.board.to-move { border-color: var(--grout); box-shadow: var(--shadow-panel), 0 0 0 2px var(--c4-wash); }
 
 .board-head {
   display: grid;
@@ -302,7 +313,7 @@ button.tile:disabled { cursor: default; }
   align-items: baseline;
   column-gap: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--plaster-edge);
+  border-bottom: 1px solid var(--panel-edge);
 }
 .board-who {
   font-family: var(--font-label);
@@ -344,22 +355,15 @@ button.tile:disabled { cursor: default; }
   background: none;
   text-align: right;
 }
-.line .slot, .floor .slot {
-  width: var(--tile);
-  height: var(--tile);
-  border-radius: var(--radius);
-  background: var(--bisque);
-  box-shadow: 0 0 0 1px var(--grout) inset, 0 2px 3px -2px rgba(90, 66, 30, .5) inset;
-}
 button.line { cursor: default; font: inherit; color: inherit; }
 button.line.open {
   cursor: pointer;
   border-color: var(--c4-lo);
-  background: rgba(49, 184, 209, .12);
-  box-shadow: 0 0 0 3px rgba(49, 184, 209, .16);
+  background: var(--c4-wash);
+  box-shadow: 0 0 0 3px var(--c4-wash);
 }
-button.line.open:hover { background: rgba(49, 184, 209, .22); }
-button.line.blocked { cursor: not-allowed; opacity: .55; }
+button.line.open:hover { background: var(--c4-wash); filter: brightness(1.04); }
+button.line.blocked { cursor: not-allowed; opacity: .5; }
 .line .row-note {
   flex: 1;
   min-width: 0;
@@ -374,7 +378,7 @@ button.line.blocked { cursor: not-allowed; opacity: .55; }
   color: var(--ink-faint);
 }
 .line.open .row-note { color: var(--c4-lo); }
-.line.incoming { border-color: var(--c0); background: rgba(23, 80, 158, .1); }
+.line.incoming { border-color: var(--c0); background: var(--c0-wash); }
 
 /* One grouted strip per wall row; stacked with no row gap they read as one
  * mortared panel, and each strip stays level with its pattern line. */
@@ -387,32 +391,34 @@ button.line.blocked { cursor: not-allowed; opacity: .55; }
   gap: 4px;
   height: 100%;
   padding: 0 5px;
-  background: var(--grout);
-  box-shadow: 0 2px 6px -3px rgba(90, 66, 30, .7) inset;
+  /* the mortar has to be darker than the squares set into it, or the wall reads
+   * as one slab instead of a grid */
+  background: var(--grout-deep);
+  box-shadow: 0 2px 6px -3px var(--slot-shade) inset;
 }
 .wall-row.top { border-radius: 4px 4px 0 0; }
 .wall-row.bottom { border-radius: 0 0 4px 4px; }
+
+/* An empty wall square is a hole with a note in it: the neutral well of every
+ * other empty slot, plus a thin outlined diamond in the tile's own ink saying
+ * which glaze belongs here. Outlined, never filled — a filled diamond is a
+ * small tile, and this square has no tile. */
 .cell { width: var(--tile); height: var(--tile); border-radius: var(--radius); }
-/* An empty wall square is bisque waiting for its glaze: pale ground plus a
- * diamond in the true colour, so the wall's pattern reads at a glance. */
-.cell.bisque {
-  position: relative;
-  box-shadow: 0 0 0 1px rgba(140, 120, 90, .35) inset, 0 -1px 2px rgba(90, 66, 30, .18) inset;
-}
-.cell.bisque::after {
+.cell.empty { position: relative; }
+.cell.empty::after {
   content: "";
   position: absolute;
-  inset: 27%;
-  border-radius: 1px;
+  inset: 26%;
   transform: rotate(45deg);
-  background: var(--ghost-ink);
-  opacity: .55;
+  border: 1.5px solid var(--ghost-ink);
+  border-radius: 1px;
+  opacity: var(--slot-motif);
 }
-.cell.bisque[data-color="0"] { background-color: var(--c0-ghost); --ghost-ink: var(--c0); }
-.cell.bisque[data-color="1"] { background-color: var(--c1-ghost); --ghost-ink: var(--c1); }
-.cell.bisque[data-color="2"] { background-color: var(--c2-ghost); --ghost-ink: var(--c2); }
-.cell.bisque[data-color="3"] { background-color: var(--c3-ghost); --ghost-ink: var(--c3); }
-.cell.bisque[data-color="4"] { background-color: var(--c4-ghost); --ghost-ink: var(--c4); }
+.cell.empty[data-color="0"] { --ghost-ink: var(--c0-ink); }
+.cell.empty[data-color="1"] { --ghost-ink: var(--c1-ink); }
+.cell.empty[data-color="2"] { --ghost-ink: var(--c2-ink); }
+.cell.empty[data-color="3"] { --ghost-ink: var(--c3-ink); }
+.cell.empty[data-color="4"] { --ghost-ink: var(--c4-ink); }
 
 .floor {
   display: flex;
@@ -428,29 +434,139 @@ button.line.blocked { cursor: not-allowed; opacity: .55; }
 button.floor.open {
   cursor: pointer;
   border-color: var(--c2);
-  background: rgba(178, 58, 38, .1);
-  box-shadow: 0 0 0 3px rgba(178, 58, 38, .14);
+  background: var(--c2-wash);
+  box-shadow: 0 0 0 3px var(--c2-wash);
 }
-button.floor.open:hover { background: rgba(178, 58, 38, .18); }
+button.floor.open:hover { background: var(--c2-wash); filter: brightness(1.04); }
 .floor-wrap { display: flex; flex-direction: column; gap: 4px; }
 .floor-note { font-family: var(--font-label); font-size: 11px; color: var(--ink-faint); }
-.floor-note.warn { color: var(--c2-lo); }
+.floor-note.warn { color: var(--c2-ink); }
 
-/* ============================================================== move log == */
+/* ========================================================= settings panel ==
+ * A gear and a row of presets, opened *inline*: it pushes the table down rather
+ * than covering it, because this page has no pop-ups and this is not the place
+ * to start. */
+.settings { display: flex; flex-direction: column; }
+.settings-head { display: flex; align-items: center; gap: 10px; }
+.gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 12px 4px 9px;
+  border: 1px solid var(--grout);
+  border-radius: 3px;
+  background: linear-gradient(var(--btn-top), var(--btn-bottom));
+  cursor: pointer;
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.gear:hover { background: linear-gradient(var(--btn-top-hover), var(--btn-bottom-hover)); }
+.gear .gear-icon { width: 15px; height: 15px; display: block; fill: var(--ink-soft); transition: transform .35s ease; }
+.settings.open .gear .gear-icon { transform: rotate(60deg); }
+.settings-note { font-family: var(--font-label); font-size: 11.5px; letter-spacing: .05em; color: var(--ink-faint); }
+
+.settings-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--plaster-sunk);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  box-shadow: 0 2px 5px -3px var(--slot-shade) inset;
+}
+.settings-panel[hidden] { display: none; }
+.settings-label {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.speeds { display: flex; gap: 0; }
+.speed {
+  min-width: 52px;
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid var(--grout);
+  border-left-width: 0;
+  background: var(--field-bg);
+  cursor: pointer;
+  font-family: var(--font-label);
+  font-size: 13px;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+}
+.speed:first-child { border-left-width: 1px; border-radius: 3px 0 0 3px; }
+.speed:last-child { border-radius: 0 3px 3px 0; }
+.speed:hover { background: var(--btn-bottom-hover); }
+.speed[aria-pressed="true"] {
+  color: var(--btn-primary-ink);
+  border-color: var(--c0-lo);
+  background: linear-gradient(var(--btn-primary-top), var(--btn-primary-bottom));
+}
+.settings-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+}
+
+/* ========================================================= move navigator ==
+ * Previous / next, and the only place on the page that talks about the past. */
+.nav { display: inline-flex; align-items: center; gap: 6px; }
+.nav-btn {
+  min-width: 38px;
+  min-height: 34px;
+  padding: 4px 11px;
+  border: 1px solid var(--grout);
+  border-radius: 3px;
+  background: linear-gradient(var(--btn-top), var(--btn-bottom));
+  cursor: pointer;
+  font-family: var(--font-label);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.nav-btn:hover:not(:disabled) { background: linear-gradient(var(--btn-top-hover), var(--btn-bottom-hover)); }
+.nav-btn:disabled { opacity: .4; cursor: not-allowed; }
+.nav-count {
+  min-width: 84px;
+  text-align: center;
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  letter-spacing: .08em;
+  color: var(--ink-faint);
+}
+/* while you are browsing, the board is a record, not a game */
+body.viewing .board-grid, body.viewing .factories, body.viewing .center-dish { cursor: default; }
+body.viewing .middle-table { opacity: .93; }
+
+/* ============================================================== move log ==
+ * Newest at the top, so the move you just made is the one you are looking at.
+ * Every entry, always, is drawn the same: a log is a record, not a headline —
+ * nothing here is highlighted, including the newest. */
 .log {
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 260px;
+  max-height: 300px;
   overflow-y: auto;
 }
-/* Every entry, always, is drawn the same: a log is a record, not a headline. */
 .log-entry {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   gap: 10px;
   padding: 5px 0;
-  border-top: 1px solid var(--plaster-edge);
+  border-top: 1px solid var(--panel-edge);
   font-size: 13.5px;
   line-height: 1.4;
   color: var(--ink-soft);
@@ -466,11 +582,40 @@ button.floor.open:hover { background: rgba(178, 58, 38, .18); }
 }
 .log-text { min-width: 0; }
 
+/* the pictographic half: the tiles that moved, drawn as tiles */
+.glyphs { display: inline-flex; align-items: center; gap: 2px; vertical-align: -3px; margin-right: 6px; }
+.glyph {
+  width: 15px;
+  height: 15px;
+  border-radius: 2px;
+  background-color: var(--base);
+  background-image: linear-gradient(150deg, var(--hi), var(--base) 55%, var(--lo));
+  box-shadow: 0 0 0 1px var(--rim), 0 1px 0 rgba(255, 255, 255, .35) inset;
+}
+.glyph[data-color="0"] { --base: var(--c0); --hi: var(--c0-hi); --lo: var(--c0-lo); --rim: var(--c0-rim); }
+.glyph[data-color="1"] { --base: var(--c1); --hi: var(--c1-hi); --lo: var(--c1-lo); --rim: var(--c1-rim); }
+.glyph[data-color="2"] { --base: var(--c2); --hi: var(--c2-hi); --lo: var(--c2-lo); --rim: var(--c2-rim); }
+.glyph[data-color="3"] { --base: var(--c3); --hi: var(--c3-hi); --lo: var(--c3-lo); --rim: var(--c3-rim); }
+.glyph[data-color="4"] { --base: var(--c4); --hi: var(--c4-hi); --lo: var(--c4-lo); --rim: var(--c4-rim); }
+.glyph.marker-glyph {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(var(--marker-face), var(--marker-lo));
+  box-shadow: 0 0 0 1px var(--grout-deep);
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+.glyph.spill { opacity: .5; }
+.log-where { font-family: var(--font-label); font-size: 12.5px; letter-spacing: .04em; }
+.log-arrow { color: var(--ink-faint); padding: 0 3px; }
+.log-aside { color: var(--ink-faint); font-family: var(--font-label); font-size: 11.5px; }
+
 .coach-chip { display: inline-flex; align-items: baseline; gap: 7px; margin-left: 8px; vertical-align: baseline; }
 .coach-delta {
   padding: 1px 7px 2px;
   border-radius: 2px;
-  background: var(--bisque);
+  background: var(--plaster-sunk);
   box-shadow: 0 0 0 1px var(--grout) inset;
   font-family: var(--font-label);
   font-size: 11.5px;
@@ -478,9 +623,9 @@ button.floor.open:hover { background: rgba(178, 58, 38, .18); }
   color: var(--ink-soft);
   white-space: nowrap;
 }
-.coach-chip[data-grade="best"] .coach-delta { color: var(--c0-lo); box-shadow: 0 0 0 1px var(--c0-ghost) inset; background: rgba(23, 80, 158, .08); }
-.coach-chip[data-grade="slip"] .coach-delta { color: var(--c1-lo); box-shadow: 0 0 0 1px var(--c1-ghost) inset; background: rgba(217, 154, 18, .12); }
-.coach-chip[data-grade="blunder"] .coach-delta { color: var(--c2-lo); box-shadow: 0 0 0 1px var(--c2-ghost) inset; background: rgba(178, 58, 38, .12); }
+.coach-chip[data-grade="best"] .coach-delta { color: var(--grade-best); box-shadow: 0 0 0 1px var(--c0-ink) inset; background: var(--c0-wash); }
+.coach-chip[data-grade="slip"] .coach-delta { color: var(--grade-slip); box-shadow: 0 0 0 1px var(--c1-ink) inset; background: var(--c1-wash); }
+.coach-chip[data-grade="blunder"] .coach-delta { color: var(--grade-blunder); box-shadow: 0 0 0 1px var(--c2-ink) inset; background: var(--c2-wash); }
 .coach-chip[data-grade="pending"] .coach-delta { font-style: italic; }
 .coach-why { font-family: var(--font-label); font-size: 11.5px; letter-spacing: .03em; color: var(--ink-faint); }
 .coach-legend {
@@ -494,19 +639,19 @@ button.floor.open:hover { background: rgba(178, 58, 38, .18); }
 /* ========================================================= inline scoring == */
 .scoring {
   padding: 14px 16px 16px;
-  background: linear-gradient(#fffdf7, #f7f0e2);
-  border: 1px solid var(--plaster-edge);
-  border-left: 5px solid var(--c1);
+  background: linear-gradient(var(--plaster-hi), var(--plaster-sunk));
+  border: 1px solid var(--panel-edge);
+  border-left: 5px solid var(--tone-scoring);
   border-radius: 4px;
   box-shadow: var(--shadow-panel);
 }
-.scoring.final { border-left-color: var(--c2); }
+.scoring.final { border-left-color: var(--tone-end); }
 .scoring[hidden] { display: none; }
 .scoring-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 12px; }
 .scoring-title { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 400; }
 .scoring-note { font-family: var(--font-label); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
 .scoring-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(12px, 1.6vw, 20px); }
-.score-card { padding: 12px 14px; border-radius: 4px; background: var(--bisque); box-shadow: 0 0 0 1px var(--grout) inset; }
+.score-card { padding: 12px 14px; border-radius: 4px; background: var(--plaster-sunk); box-shadow: 0 0 0 1px var(--grout) inset; }
 .score-card-who {
   margin: 0 0 6px;
   font-family: var(--font-label);
@@ -518,8 +663,8 @@ button.floor.open:hover { background: rgba(178, 58, 38, .18); }
 }
 .score-delta { margin: 0 0 8px; font-family: var(--font-display); font-size: 24px; }
 .score-delta.big { font-size: 38px; line-height: 1; }
-.score-delta.up { color: var(--c0-lo); }
-.score-delta.down { color: var(--c2-lo); }
+.score-delta.up { color: var(--gain); }
+.score-delta.down { color: var(--loss); }
 .score-delta.won { color: var(--c0); }
 .score-tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
 .score-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -533,12 +678,15 @@ button.floor.open:hover { background: rgba(178, 58, 38, .18); }
 
 /* =============================================================== flights == */
 .fly-layer { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
-/* Straight line, constant speed: a tile is being moved by a hand, not thrown. */
+/* Straight line, constant speed: a tile is being moved by a hand, not thrown.
+ * The duration is written onto each clone by animate.js from the speed setting,
+ * so nothing here — and nothing in the OS — can shorten it behind your back. */
 .fly-tile {
   position: fixed;
   transition-property: transform;
   transition-timing-function: cubic-bezier(.36, .62, .38, 1);
   will-change: transform;
+  box-shadow: 0 0 0 1px var(--rim), 0 1px 0 rgba(255, 255, 255, .45) inset, var(--shadow-tile-raised);
 }
 .fly-tile.marker { display: grid; place-items: center; }
 
@@ -548,12 +696,14 @@ button.floor.open:hover { background: rgba(178, 58, 38, .18); }
   60% { transform: scale(1); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
-.tile.placed.landing { animation: glaze-land .42s ease-out both; }
+.tile.placed.landing { animation: glaze-land var(--land-ms, .42s) ease-out both; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .001ms !important;
-  }
+/* The only motion switch on this page is the one in the settings panel. An OS
+ * "reduce motion" flag is deliberately NOT honoured here: it used to silence
+ * every tile flight, which made the game look like it was teleporting tiles and
+ * left no way to turn the animation back on. */
+body[data-anim="off"] .fly-tile,
+body[data-anim="off"] .tile.placed.landing {
+  animation-duration: .001ms !important;
+  transition-duration: .001ms !important;
 }

@@ -1,9 +1,9 @@
 {
   "run": "run3",
-  "checkpoint": "ckpt-001024",
-  "elo": 2184.8,
-  "games": 1024,
-  "exported_at": "2026-08-15T11:59:33Z",
+  "checkpoint": "ckpt-007680",
+  "elo": 2198.4,
+  "games": 7680,
+  "exported_at": "2026-08-15T14:07:09Z",
   "input_size": 182,
   "action_space": 180,
   "net_config": {
@@ -23,14 +23,14 @@
   "num_params": 1679002,
   "opset": 17,
   "onnx_bytes": 6805183,
-  "onnx_sha256": "e704698e982b4d039d3d1a7b64b4916558090707d57bab6a9827924acdd64ba7",
+  "onnx_sha256": "1d51069dc93d7474191a0126e2ee8647e8d8de42857da69787de6bdd0a9ac4af",
   "parity": {
     "checked": true,
     "n": 100,
-    "policy_max_abs_diff": 8.58306884765625e-06,
-    "value_max_abs_diff": 1.1324882507324219e-06,
+    "policy_max_abs_diff": 8.106231689453125e-06,
+    "value_max_abs_diff": 8.344650268554688e-07,
     "tol": 0.0001
   },
-  "source_checkpoint": "/Users/remi/ludometer/runs/run3/checkpoints/ckpt-001024.pt",
+  "source_checkpoint": "/Users/remi/ludometer/runs/run3/checkpoints/ckpt-007680.pt",
   "torch_reference": "/Users/remi/ludometer/web/player/test/fixtures/torch_reference.json.gz"
 }

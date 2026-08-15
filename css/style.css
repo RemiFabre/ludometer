@@ -29,9 +29,9 @@ body {
   background-color: var(--linen);
   /* woven linen: two hairline threads plus a warm vignette */
   background-image:
-    linear-gradient(rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
-    radial-gradient(120% 90% at 50% 0%, #efe6d3 0%, var(--linen) 55%, var(--linen-dark) 100%);
+    linear-gradient(var(--linen-thread) 1px, rgba(0, 0, 0, 0) 1px),
+    linear-gradient(90deg, var(--linen-thread) 1px, rgba(0, 0, 0, 0) 1px),
+    radial-gradient(120% 90% at 50% 0%, var(--linen-warm) 0%, var(--linen) 55%, var(--linen-dark) 100%);
   background-size: 7px 7px, 7px 7px, 100% 100%;
 }
 
@@ -45,7 +45,7 @@ button, input, select { font: inherit; color: inherit; }
   align-items: flex-end;
   gap: 14px 24px;
   padding: 12px clamp(14px, 3vw, 34px);
-  background: linear-gradient(#fdfaf3, #f4ecdc);
+  background: linear-gradient(var(--topbar-top), var(--topbar-bottom));
   border-bottom: 1px solid var(--grout);
   box-shadow: 0 6px 18px -14px rgba(60, 44, 20, .6);
 }
@@ -56,7 +56,7 @@ button, input, select { font: inherit; color: inherit; }
   letter-spacing: .16em;
   text-transform: uppercase;
   /* the title is glazed like a tile: cobalt with a highlight along the top */
-  background: linear-gradient(#3d76bd, var(--c0) 55%, var(--c0-lo));
+  background: linear-gradient(var(--c0-hi), var(--c0) 55%, var(--c0-lo));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -75,22 +75,22 @@ button, input, select { font: inherit; color: inherit; }
 .field select, .field input {
   padding: 6px 9px;
   min-width: 132px;
-  background: #fffdf7;
+  background: var(--field-bg);
   border: 1px solid var(--grout);
   border-radius: 2px;
-  box-shadow: 0 1px 0 #fff inset;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset;
 }
 .field-narrow input { min-width: 78px; width: 88px; }
 .field-narrow select { min-width: 132px; }
 .check { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; font-size: 14px; }
-.check.coach { padding: 5px 10px 5px 8px; border: 1px solid var(--grout); border-radius: 2px; background: #fffdf7; }
+.check.coach { padding: 5px 10px 5px 8px; border: 1px solid var(--grout); border-radius: 2px; background: var(--field-bg); }
 .check.coach.off { opacity: .55; }
 
 .btn {
   padding: 7px 15px;
   border: 1px solid var(--grout);
   border-radius: 2px;
-  background: linear-gradient(#fffdf8, #f0e7d5);
+  background: linear-gradient(var(--btn-top), var(--btn-bottom));
   cursor: pointer;
   font-family: var(--font-label);
   font-size: 13px;
@@ -98,15 +98,15 @@ button, input, select { font: inherit; color: inherit; }
   text-transform: uppercase;
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
-.btn:hover { background: linear-gradient(#fff, #f6efe1); }
+.btn:hover { background: linear-gradient(var(--btn-top-hover), var(--btn-bottom-hover)); }
 .btn:active { transform: translateY(1px); }
 .btn-primary {
-  color: #fdfaf2;
+  color: var(--btn-primary-ink);
   border-color: var(--c0-lo);
-  background: linear-gradient(#3d76bd, var(--c0) 60%, var(--c0-lo));
+  background: linear-gradient(var(--btn-primary-top), var(--c0) 60%, var(--btn-primary-bottom));
   box-shadow: 0 1px 0 rgba(255, 255, 255, .35) inset, 0 2px 6px -3px rgba(20, 40, 80, .8);
 }
-.btn-primary:hover { background: linear-gradient(#4d84c8, #1c5296); }
+.btn-primary:hover { background: linear-gradient(var(--btn-primary-top-hover), var(--btn-primary-bottom-hover)); }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
 :where(a, button, input, select, [tabindex]):focus-visible {
@@ -124,7 +124,7 @@ button, input, select { font: inherit; color: inherit; }
   align-items: center;
   gap: 8px 12px;
   padding: 8px clamp(14px, 3vw, 34px);
-  background: linear-gradient(#f6efe0, #f1e8d5);
+  background: linear-gradient(var(--engine-top), var(--engine-bottom));
   border-bottom: 1px solid var(--grout);
   font-family: var(--font-label);
   font-size: 12px;
@@ -136,25 +136,25 @@ button, input, select { font: inherit; color: inherit; }
   height: 9px;
   border-radius: 50%;
   background: var(--c1);
-  box-shadow: 0 0 0 3px rgba(217, 154, 18, .18);
+  box-shadow: 0 0 0 3px var(--c1-wash);
   animation: kiln 1.2s ease-in-out infinite;
 }
 @keyframes kiln {
   0%, 100% { opacity: .35; }
   50% { opacity: 1; }
 }
-.engine-bar.ready .engine-dot { background: var(--c4); box-shadow: 0 0 0 3px rgba(49, 184, 209, .18); animation: none; }
-.engine-bar.failed .engine-dot { background: var(--c2); box-shadow: 0 0 0 3px rgba(178, 58, 38, .18); animation: none; }
+.engine-bar.ready .engine-dot { background: var(--c4); box-shadow: 0 0 0 3px var(--c4-wash); animation: none; }
+.engine-bar.failed .engine-dot { background: var(--c2); box-shadow: 0 0 0 3px var(--c2-wash); animation: none; }
 .engine-text { flex: 1 1 auto; min-width: 200px; }
 .engine-badge {
   padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(23, 80, 158, .1);
-  border: 1px solid rgba(23, 80, 158, .25);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-edge);
   text-transform: uppercase;
   letter-spacing: .12em;
   font-size: 11px;
-  color: var(--c0-lo);
+  color: var(--c0-ink);
   white-space: nowrap;
 }
 
@@ -213,7 +213,7 @@ button, input, select { font: inherit; color: inherit; }
 .swatch .chip[data-color="4"] { background: var(--c4); }
 .supply-total { margin-left: auto; font-family: var(--font-label); font-size: 12px; color: var(--ink-faint); }
 #lid-row { border-radius: 3px; padding: 2px 4px; transition: background .3s ease; }
-#lid-row.receiving { background: rgba(217, 154, 18, .18); }
+#lid-row.receiving { background: var(--lid-receiving); }
 
 /* --------------------------------------------------------------- about box */
 .about p { margin: 0 0 8px; font-size: 13.5px; color: var(--ink-soft); }
@@ -246,6 +246,9 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
   .field select, .field input { min-width: 0; padding: 9px 8px; }
   .field-narrow select, .field-narrow input { width: auto; min-width: 0; }
   .btn { padding: 10px 14px; min-height: 44px; }
+  /* the settings and the navigator are controls, so they get a tap target too */
+  .gear, .speed, .nav-btn { min-height: 44px; }
+  .settings-panel { gap: 8px 12px; }
   .check { padding-bottom: 0; min-height: 44px; }
   .check input { width: 20px; height: 20px; }
 
@@ -255,7 +258,7 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
   .scoring-grid { grid-template-columns: minmax(0, 1fr); }
   .board { --tile: clamp(26px, 9vw, 38px); }
   .factories { gap: 10px 12px; }
-  .factory { --dish: calc(var(--tile) * 2 + 22px); }
+  .factory { --dish-size: calc(var(--tile) * 2 + 22px); }
   .middle-table { --tile: clamp(24px, 8vw, 32px); }
 
   .board-grid { column-gap: 8px; }
@@ -276,5 +279,5 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
 /* A coarse pointer never hovers, so the hover lift just makes taps feel laggy. */
 @media (hover: none) {
   button.tile:hover { transform: none; }
-  button.line.open:hover { background: rgba(49, 184, 209, .12); }
+  button.line.open:hover { background: var(--c4-wash); filter: none; }
 }

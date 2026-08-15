@@ -97,6 +97,12 @@ export class GameSession {
     move.label = this.labelOf(player);
     const before = state.clone();
     const roundBefore = state.roundIndex;
+    // The position this move was played from — the page animates from it. When
+    // the AI moves twice across a round boundary, its second move starts from a
+    // refilled table that `apply` produced inside the first and that nothing
+    // ever drew; this is how both moves get animated. It doubles as the move
+    // history the ← / → navigator replays.
+    move.state_before = before.toJSON();
     state.apply(actionId);
     this.ply += 1;
     move.ply = this.ply;
@@ -105,6 +111,13 @@ export class GameSession {
       player,
       action_id: actionId,
       ply: this.ply,
+      // what the log draws as little tiles instead of colour words
+      color: move.color,
+      count: move.count,
+      source: move.source,
+      dest: move.dest,
+      overflow: move.overflow,
+      took_marker: move.took_marker,
     });
     move.log_n = entry.n;
 
@@ -123,13 +136,16 @@ export class GameSession {
       this._logEntry(
         "round",
         `End of round ${report.round + 1}: you ${sign(you.delta)} → ${you.score_after}, AI ${sign(ai.delta)} → ${ai.score_after}.`,
-        { round: report.round, report_n: this.roundReports.length - 1 }
+        // every entry carries its ply, so the move navigator can show the log as
+        // it stood at any point in the game
+        { round: report.round, report_n: this.roundReports.length - 1, ply: this.ply }
       );
       if (state.isTerminal) {
         const final = finalReport(state, this.humanSeat) || {};
         this._logEntry(
           "end",
-          `${final.headline || "Game over."} Final score ${state.scores[this.humanSeat]}–${state.scores[this.aiSeat]}.`
+          `${final.headline || "Game over."} Final score ${state.scores[this.humanSeat]}–${state.scores[this.aiSeat]}.`,
+          { ply: this.ply }
         );
       }
     }
