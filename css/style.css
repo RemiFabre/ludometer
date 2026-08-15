@@ -281,3 +281,43 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
   button.tile:hover { transform: none; }
   button.line.open:hover { background: var(--c4-wash); filter: none; }
 }
+
+/* ========================================================== corner buttons ==
+ * Two small round buttons pinned to the bottom-right, the way every board-game
+ * site pins its "?" — one scrolls to the What-this-is panel, one opens the
+ * public tally. Fixed, but tiny: they float over the linen, never the table. */
+.corner {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.corner-btn {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--grout);
+  border-radius: 50%;
+  background: linear-gradient(var(--btn-top), var(--btn-bottom));
+  box-shadow: var(--shadow-tile);
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-family: var(--font-display);
+  font-size: 21px;
+  line-height: 1;
+  text-decoration: none;
+}
+.corner-btn:hover {
+  background: linear-gradient(var(--btn-top-hover), var(--btn-bottom-hover));
+  color: var(--ink);
+}
+.corner-btn svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+
+/* the "?" button's landing: the panel it scrolled to glows for a breath */
+.about.lit { box-shadow: var(--shadow-panel), 0 0 0 3px var(--c4-wash); }
+.about { transition: box-shadow .5s ease; }

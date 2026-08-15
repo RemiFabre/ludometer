@@ -1332,22 +1332,22 @@ document.addEventListener("keydown", (event) => {
 // ← / → / End walk the game, exactly as they do in a chess client
 bindHistoryKeys(nav, { enabled: () => !busy });
 
-// The tally is off until analytics.js names an endpoint. When it is on, the
-// About panel must stop claiming a silence the page no longer keeps — and it
-// links to the public dashboard, so anyone can see exactly what is recorded.
+// The corner buttons: "?" walks you to the What-this-is panel; the bars open
+// the public tally. If the tally is ever switched off (COUNT_URL emptied), the
+// page stops pointing at it — it never claims a transparency it does not keep.
+el("corner-about").addEventListener("click", () => {
+  const about = el("about");
+  about.scrollIntoView({ behavior: "smooth", block: "start" });
+  about.classList.add("lit");
+  setTimeout(() => about.classList.remove("lit"), 1600);
+});
 if (analyticsOn()) {
-  const disclosure = node(
-    "p",
-    null,
-    "One anonymous, cookie-free ping counts each visit, each game dealt, and " +
-      "how finished games ended (score and which net was playing) — nothing " +
-      "else, and nothing about you. "
-  );
-  const link = node("a", null, "The tally is public");
-  link.href = statsUrl();
-  disclosure.append(link, node("span", null, ", so you can see everything it records."));
-  ui.aboutMeta.before(disclosure);
+  el("corner-stats").href = statsUrl();
   track("pageview");
+} else {
+  el("corner-stats").remove();
+  const note = el("tally-note");
+  if (note) note.remove();
 }
 
 syncCoach();
