@@ -6,9 +6,16 @@
  * blocks — the board stays interactive and the "thinking" clock keeps ticking
  * while the search runs.
  *
+ * Backends. Two onnxruntime-web builds are vendored and exactly one is
+ * downloaded: the WebGPU one when the browser can run it (`navigator.gpu` plus
+ * JSPI), the pure-WASM one otherwise. The choice is made here rather than on the
+ * page so that a WebGPU session that fails to create can quietly fall back to
+ * WASM before the page has been told anything. See js/net.js for the measured
+ * reason the two differ — and why the batch size differs with them.
+ *
  * Protocol (all messages carry an `id` that is echoed back):
- *   -> {type:"init", ortUrl, wasmUrl, modelUrl}
- *                                            <- {type:"loading"} ... {type:"ready"} | {type:"error"}
+ *   -> {type:"init", backends, modelUrl}
+ *                                            <- {type:"loading"} ... {type:"ready", backend, batch, margin} | {type:"error"}
  *   -> {type:"search", setup, budgetS}       <- {type:"progress"} ... {type:"result"}
  *   -> {type:"policy", setup}                <- {type:"result"}   (hint: no search)
  *   -> {type:"rate", setup, actionId, budgetS}
@@ -19,11 +26,35 @@
 
 import { AzulState, Rng } from "./engine.js";
 import { MCTS, STALL_ROUNDS, selectAction } from "./mcts.js";
-import { OnnxEvaluator } from "./net.js";
+import { OnnxEvaluator, webgpuLikely } from "./net.js";
 import { describeAction } from "./report.js";
+
+/**
+ * Leaves per forward pass, per backend.
+ *
+ * Measured on this laptop (Chrome, Apple M3 Pro), raw `session.run` throughput:
+ *
+ *   backend   batch 1     batch 16    batch 64    batch 256
+ *   wasm      2.1 k/s     4.0 k/s     4.2 k/s     4.1 k/s
+ *   webgpu    0.25 k/s    4.6 k/s     16.5 k/s    50 k/s
+ *
+ * WASM saturates by 16, so there is nothing to buy past it and a bigger batch
+ * only blurs the search. A GPU dispatch costs ~4 ms whatever it carries, so
+ * WebGPU is *worse* than WASM until about batch 8 and only then starts winning;
+ * 64 is where the tree still stays sharp enough to be worth the extra breadth.
+ *
+ * `minBatch` is the floor the ramp may not go under (see mcts.js `batchRamp`):
+ * on the CPU a batch of one is simply a small step, but on the GPU it is a 4 ms
+ * dispatch carrying one position, so the GPU never goes below 8.
+ */
+export const BATCH_BY_BACKEND = {
+  wasm: { batch: 16, minBatch: 1 },
+  webgpu: { batch: 64, minBatch: 8 },
+};
 
 let ort = null;
 let evaluator = null;
+let searchConfig = {};
 let cancelled = false;
 const rng = new Rng((Date.now() ^ 0x5eed) >>> 0);
 
@@ -58,21 +89,69 @@ async function fetchWithProgress(url, id) {
   return bytes;
 }
 
-async function init(msg) {
-  ort = await import(msg.ortUrl);
+/** Load one onnxruntime-web build and point it at its own .wasm. */
+async function loadRuntime(spec) {
+  const runtime = await import(spec.module);
   // SharedArrayBuffer needs cross-origin isolation, which GitHub Pages does not
-  // send; one thread is also plenty for a batch-of-one MLP.
-  ort.env.wasm.numThreads = 1;
+  // send; the CPU kernels therefore run on one thread either way.
+  runtime.env.wasm.numThreads = 1;
   // Object form on purpose: a bare string prefix makes onnxruntime look for the
   // Emscripten glue .mjs next to the .wasm, and the bundled build has it inlined.
-  ort.env.wasm.wasmPaths = { wasm: msg.wasmUrl };
-  ort.env.logLevel = "error";
+  runtime.env.wasm.wasmPaths = { wasm: spec.wasm };
+  runtime.env.logLevel = "error";
+  return runtime;
+}
+
+async function init(msg) {
   const bytes = await fetchWithProgress(msg.modelUrl, msg.id);
-  evaluator = await OnnxEvaluator.create(ort, bytes);
-  // one throwaway evaluation so the first real move is not paying for warm-up
-  const warm = AzulState.newGame(1, new Rng(1));
-  await evaluator.evaluate(warm, warm.legalActions());
-  return { bytes: bytes.length };
+  // Ordered best-first by the page; each entry is {name, module, wasm, ep}.
+  // Anything that fails — no adapter, a runtime that will not instantiate, a
+  // graph the EP cannot take — falls through to the next, so the worst case is
+  // the WASM path that shipped before.
+  const tried = [];
+  // `navigator.gpu` inside the worker is the authority — a page can be served to
+  // a browser whose worker scope has no WebGPU at all — and skipping the entry
+  // here means the 15 MB WebGPU runtime is never even requested.
+  const wanted = msg.backends.filter((spec) => spec.ep !== "webgpu" || webgpuLikely());
+  for (const spec of wanted) {
+    try {
+      ort = await loadRuntime(spec);
+      evaluator = await OnnxEvaluator.create(ort, bytes, {
+        backend: spec.name,
+        executionProviders: [spec.ep],
+      });
+      // Warm-up is also the real test: a WebGPU session can be created and then
+      // fail on its first dispatch, and that must still fall back.
+      const warm = AzulState.newGame(1, new Rng(1));
+      await evaluator.evaluate(warm, warm.legalActions());
+      break;
+    } catch (err) {
+      tried.push(`${spec.name}: ${String((err && err.message) || err)}`);
+      ort = null;
+      evaluator = null;
+    }
+  }
+  if (!evaluator) throw new Error("no usable onnxruntime backend — " + tried.join("; "));
+
+  searchConfig = { ...(BATCH_BY_BACKEND[evaluator.backend] || { batch: 1, minBatch: 1 }) };
+  return {
+    bytes: bytes.length,
+    backend: evaluator.backend,
+    batch: searchConfig.batch,
+    margin: evaluator.hasMargin,
+    outputs: evaluator.outputNames,
+    fallbacks: tried,
+  };
+}
+
+/** The search's own timing, so the page can show a real positions/s. */
+let lastRate = null;
+
+function noteRate(result) {
+  if (result && result.sims > 32 && result.elapsedS > 0.2) {
+    lastRate = result.sims / result.elapsedS;
+  }
+  return result;
 }
 
 async function search(msg) {
@@ -83,7 +162,7 @@ async function search(msg) {
     return { action: legal[0], search: { sims: 0, elapsedS: 0, forced: true } };
   }
 
-  const mcts = new MCTS(evaluator, {}, new Rng(rng.next()));
+  const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
   cancelled = false;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
@@ -97,6 +176,7 @@ async function search(msg) {
   const action =
     state.roundIndex >= STALL_ROUNDS ? selectAction(result.policy, 1, mcts.rng) : result.best;
   const top = [...result.visits.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  noteRate(result);
   return {
     action,
     search: {
@@ -106,6 +186,9 @@ async function search(msg) {
       nodes: mcts.nodesCreated,
       forced: false,
       top,
+      backend: evaluator.backend,
+      batch: searchConfig.batch,
+      rate: lastRate,
     },
   };
 }
@@ -136,7 +219,7 @@ async function rate(msg) {
     return { coach: { ...base, delta: 0, forced: true } };
   }
 
-  const mcts = new MCTS(evaluator, {}, new Rng(rng.next()));
+  const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
     onProgress: ({ sims, elapsedS }) => {
@@ -188,7 +271,7 @@ async function analyze(msg) {
   const base = { budgetS: msg.budgetS, legal: legal.length, sims: 0, elapsedS: 0 };
   if (legal.length <= 1) return { analysis: { ...base, forced: true, children: [] } };
 
-  const mcts = new MCTS(evaluator, {}, new Rng(rng.next()));
+  const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
   cancelled = false;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,

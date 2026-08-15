@@ -66,6 +66,7 @@ import { createSettings } from "../ui/settings.js";
 import { createStatus } from "../ui/status.js";
 import { analyticsOn, statsUrl, track } from "./analytics.js";
 import { GameSession } from "./game.js";
+import { BACKENDS } from "./net.js";
 import { describeAction } from "./report.js";
 
 const el = (id) => document.getElementById(id);
@@ -88,6 +89,7 @@ let sel = null;        // {source, color} — tiles you are holding
 let suggestion = null; // {source, color, dest} from the policy head
 let busy = false;      // a move is being computed, or is still playing out
 let meta = null;       // model/model_meta.json
+let backend = null;    // {name, batch, margin, rate} — what the worker settled on
 let engineReady = false;
 let liveSims = 0;      // positions the current search has visited
 let coachOn = false;   // rate my moves with the AI's own search
@@ -204,12 +206,20 @@ async function bootEngine() {
   describeModel();
   const sizeMB = meta && meta.onnx_bytes ? (meta.onnx_bytes / 1e6).toFixed(1) : "13";
   ui.engineText.textContent = `Downloading the net (${sizeMB} MB, cached after the first visit)…`;
+  let ready = null;
   try {
-    await ask(
+    ready = await ask(
       {
         type: "init",
-        ortUrl: new URL("../vendor/onnxruntime-web/ort.wasm.bundle.min.mjs", import.meta.url).href,
-        wasmUrl: new URL("../vendor/onnxruntime-web/ort-wasm-simd-threaded.wasm", import.meta.url).href,
+        // In preference order. The worker takes the first one that actually
+        // works in this browser and tells us which that was; a browser with no
+        // WebGPU never downloads the WebGPU runtime at all.
+        backends: ["webgpu", "wasm"].map((name) => ({
+          name,
+          ep: BACKENDS[name].ep,
+          module: new URL(BACKENDS[name].module, import.meta.url).href,
+          wasm: new URL(BACKENDS[name].wasm, import.meta.url).href,
+        })),
         modelUrl: new URL("../model/model.onnx", import.meta.url).href,
       },
       (msg) => {
@@ -233,17 +243,28 @@ async function bootEngine() {
     return;
   }
   engineReady = true;
+  backend = { name: ready.backend, batch: ready.batch, margin: !!ready.margin, rate: null };
   ui.engineBar.classList.add("ready");
   ui.engineText.textContent = engineLine();
+  describeModel();
   ui.deal.disabled = false;
   newGame();
 }
 
+/** Where the net is running, in the words a player would use. */
+function backendLabel() {
+  if (!backend) return "your CPU";
+  return backend.name === "webgpu" ? "your GPU (WebGPU)" : "your CPU (WebAssembly)";
+}
+
 function engineLine() {
-  if (!meta) return "Net ready — searching on your CPU.";
+  const where = `searching on ${backendLabel()}`;
+  if (!meta) return `Net ready — ${where}.`;
   const elo = typeof meta.elo === "number" ? `${meta.elo >= 0 ? "+" : ""}${Math.round(meta.elo)} Elo` : "unrated";
   const params = meta.num_params ? `${(meta.num_params / 1e6).toFixed(1)}M parameters` : "";
-  return `${meta.run}/${meta.checkpoint} · ${elo} on our internal ladder · ${params} · searching on your CPU`;
+  const rate =
+    backend && backend.rate ? ` · ${Math.round(backend.rate).toLocaleString()} positions/s` : "";
+  return `${meta.run}/${meta.checkpoint} · ${elo} on our internal ladder · ${params} · ${where}${rate}`;
 }
 
 function describeModel() {
@@ -257,6 +278,14 @@ function describeModel() {
     meta.num_params ? `${meta.num_params.toLocaleString()} parameters` : null,
     meta.onnx_bytes ? `${(meta.onnx_bytes / 1e6).toFixed(1)} MB ONNX` : null,
     meta.exported_at ? `exported ${meta.exported_at.slice(0, 10)}` : null,
+    // What the search is actually running on, and how hard: this is the number
+    // the thinking-time selector is really spending, so it belongs on the page
+    // rather than in a console log.
+    backend
+      ? `${backend.name === "webgpu" ? "WebGPU" : "WebAssembly"}, ${backend.batch} positions per pass`
+      : null,
+    backend && backend.rate ? `${Math.round(backend.rate).toLocaleString()} positions/s here` : null,
+    backend && backend.margin ? "margin head: decisive play" : null,
   ].filter(Boolean);
   ui.aboutMeta.textContent = bits.join(" · ");
 }
@@ -464,6 +493,13 @@ async function think(state, onThinking) {
       if (onThinking) onThinking(msg);
     }
   );
+  // The worker measures its own rate; the first real search is the first honest
+  // positions/s this machine has produced, so the page stops guessing at it.
+  if (backend && reply.search && reply.search.rate && !backend.rate) {
+    backend.rate = reply.search.rate;
+    ui.engineText.textContent = engineLine();
+    describeModel();
+  }
   return { action: reply.action, search: reply.search };
 }
 
