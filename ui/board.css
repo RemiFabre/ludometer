@@ -722,38 +722,46 @@ body.viewing .middle-table { opacity: .93; }
 .hand-tiles { display: flex; gap: 4px; }
 
 /* ============================================================= confirm bar ==
- * Confirm mode's one voice: an inline cartouche between the middle and the
- * boards, in the same plaster as the status band, raised only by the attention
- * hue on its edge. It appears when a move is placed and asks for the word —
- * never a pop-up, never over the board. */
+ * Confirm mode's one voice. It lives *inside* the middle panel's action row:
+ * while a move is placed, the row's usual controls step aside and the banner
+ * takes their exact place — centred, same height, so nothing on the page moves
+ * when it appears or goes. Never a pop-up, never over the board. */
+.middle-actions.placing > :not(.confirm-bar) { display: none; }
 .confirm-bar {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 18px;
-  padding: 12px clamp(16px, 2.4vw, 26px) 13px;
-  background: linear-gradient(var(--plaster-hi), var(--plaster-sunk));
-  border: 1px solid var(--panel-edge);
-  border-left: 5px solid var(--tone-scoring);
-  border-radius: 4px;
-  box-shadow: var(--shadow-panel);
+  justify-content: center;
+  gap: 8px 14px;
+  min-height: 34px; /* the height of the buttons it replaces */
 }
 .confirm-bar[hidden] { display: none; }
-.confirm-text { flex: 1; min-width: 240px; }
 .confirm-title {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-family: var(--font-display);
-  font-size: 21px;
-  line-height: 1.15;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--ink);
+  white-space: nowrap;
+}
+/* a small ochre diamond — the attention hue, in the table's own shape */
+.confirm-title::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  border-radius: 1.5px;
+  background: var(--tone-scoring);
 }
 .confirm-detail {
-  margin: 3px 0 0;
   font-family: var(--font-label);
   font-size: 12.5px;
-  letter-spacing: .06em;
+  letter-spacing: .05em;
   color: var(--ink-soft);
 }
-.confirm-actions { display: flex; align-items: center; gap: 8px; }
 
 /* the placed move's own tiles: a breathing ring of the attention hue, the one
  * moving thing on a page that is otherwise holding still for your word */

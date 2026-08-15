@@ -13,6 +13,7 @@
  *   -> {type:"policy", setup}                <- {type:"result"}   (hint: no search)
  *   -> {type:"rate", setup, actionId, budgetS}
  *                                            <- {type:"progress"} ... {type:"result"} (coach)
+ *   -> {type:"analyze", setup, budgetS}      <- {type:"result"} (coach, move not yet known)
  *   -> {type:"cancel"}
  */
 
@@ -174,6 +175,51 @@ async function rate(msg) {
   };
 }
 
+/**
+ * Coach mode's head start: the same search `rate` runs, but *before* the move
+ * is known — it runs while the human is still thinking. The whole tree is
+ * position-only, so the root's explored children can be shipped back whole and
+ * the page can grade whichever move is eventually played. Honors `cancel`, so
+ * the moment the human moves, the opponent's own search gets the worker back.
+ */
+async function analyze(msg) {
+  const state = AzulState.fromSetup(msg.setup, new Rng(rng.next()));
+  const legal = state.legalActions();
+  const base = { budgetS: msg.budgetS, legal: legal.length, sims: 0, elapsedS: 0 };
+  if (legal.length <= 1) return { analysis: { ...base, forced: true, children: [] } };
+
+  const mcts = new MCTS(evaluator, {}, new Rng(rng.next()));
+  cancelled = false;
+  const result = await mcts.search(state, {
+    timeLimitS: msg.budgetS,
+    shouldStop: () => cancelled,
+    onProgress: ({ sims, elapsedS }) => {
+      self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
+    },
+  });
+  const children = mcts
+    .rootChildren()
+    .filter((c) => c.visits && c.q !== null)
+    .map((c) => ({ action: c.action, q: c.q, visits: c.visits }));
+  let bestAction = null;
+  let bestText = null;
+  if (children.length) {
+    const best = children.reduce((a, b) => (b.q > a.q ? b : a));
+    bestAction = best.action;
+    bestText = describeAction(state, best.action).text;
+  }
+  return {
+    analysis: {
+      ...base,
+      sims: result.sims,
+      elapsedS: result.elapsedS,
+      children,
+      best_action: bestAction,
+      best_text: bestText,
+    },
+  };
+}
+
 /** The policy head's own pick, no search — what the "Suggest a move" button asks. */
 async function policy(msg) {
   const state = AzulState.fromSetup(msg.setup, new Rng(rng.next()));
@@ -197,6 +243,7 @@ self.onmessage = async (event) => {
     else if (msg.type === "search") payload = await search(msg);
     else if (msg.type === "policy") payload = await policy(msg);
     else if (msg.type === "rate") payload = await rate(msg);
+    else if (msg.type === "analyze") payload = await analyze(msg);
     else throw new Error(`unknown message type ${msg.type}`);
     self.postMessage({ type: msg.type === "init" ? "ready" : "result", id: msg.id, ...payload });
   } catch (err) {
