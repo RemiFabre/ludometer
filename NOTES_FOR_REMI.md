@@ -4,6 +4,24 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-16 — run3 retired (~+2255 true), run4 training with a "win big" head
+
+- **run3 final**: 29,000 games, ~12.9 h. Its headline +2336 was a measurement spike: I re-rated
+  the top checkpoint with 240 fresh games and its honest strength is **+2255 ± 40** ("winner's
+  curse" — pick the max of 55 noisy ratings and you overpick luck; the methodology page
+  explains this). Still ~+235 above run2, and the checkpoint your wife lost 4/5 against.
+- **run4 is training now**, aimed at your two asks:
+  1. **Decisive endgames**: the net gains a third output that predicts the final score *gap*.
+     The search still maximizes winning first, but among near-equal winning moves it now plays
+     the one that wins by more — no more "lazy but technically correct" endgame moves.
+  2. It warm-starts from run3's 500k positions (a nice trick even recovered exact margin
+     labels from run3's stored values), so no knowledge is lost.
+- Ladder hygiene, from the methodology audit: greedy/heuristic are now *pinned* at their
+  calibrated ratings so eval games against them actually inform the fit, and run4's anchor for
+  run3 uses the honest re-rated +2255, not the spike. run4's curve is a slightly better ruler.
+- Your win vs ckpt-020992 and the 4/5 session are logged in `runs/human_benchmarks.jsonl` —
+  keep the results coming, they're our only human calibration.
+
 ## 2026-08-16 — **Methodology page**: how the AI learns, explained end to end
 
 There is now a "How it works" button in the dashboard header. It opens

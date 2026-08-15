@@ -4,8 +4,7 @@
   "seed": 20260817,
   "device": "auto",
   "workers": 8,
-
-  "_note_margin": "THE POINT OF RUN4. run3 plays technically-correct but lazy endgames: a win/draw/loss value head is indifferent between +1 and +40, so once the game is decided the search plays whichever winning move it happened to visit most, and to a human it looks broken. arch=structured now grows a third head predicting m = tanh((my final score - their final score) / 20) from the player-to-move's point of view (net_config version 2). The value head goes back to being a PURE win/draw/loss estimate, which is why value_score_weight is 0 here and not 0.15: the blend run1-run3 used was a cheap approximation of exactly this head, and keeping both would have the two questions fight over one output. Search is untouched — PUCT still descends on the win value alone, so visit counts and therefore the policy targets are what they always were — and MCTS merely backs the margin up alongside the value, with terminal nodes contributing the true final margin. Only the move actually PLAYED changes: among root children with at least decisive_min_visit_frac of the top child's visits, keep the ones within decisive_eps of the best win-Q and play the biggest margin-Q. Winning stays lexicographically first; the margin can never buy a win away.",
+  "_note_margin": "THE POINT OF RUN4. run3 plays technically-correct but lazy endgames: a win/draw/loss value head is indifferent between +1 and +40, so once the game is decided the search plays whichever winning move it happened to visit most, and to a human it looks broken. arch=structured now grows a third head predicting m = tanh((my final score - their final score) / 20) from the player-to-move's point of view (net_config version 2). The value head goes back to being a PURE win/draw/loss estimate, which is why value_score_weight is 0 here and not 0.15: the blend run1-run3 used was a cheap approximation of exactly this head, and keeping both would have the two questions fight over one output. Search is untouched \u2014 PUCT still descends on the win value alone, so visit counts and therefore the policy targets are what they always were \u2014 and MCTS merely backs the margin up alongside the value, with terminal nodes contributing the true final margin. Only the move actually PLAYED changes: among root children with at least decisive_min_visit_frac of the top child's visits, keep the ones within decisive_eps of the best win-Q and play the biggest margin-Q. Winning stays lexicographically first; the margin can never buy a win away.",
   "arch": "structured",
   "margin_head": true,
   "embed": 96,
@@ -17,8 +16,7 @@
   "value_hidden": 128,
   "policy_rank": 32,
   "policy_global": true,
-
-  "_note_search": "Unchanged from run3, which is deliberate: run4 is a change of objective, not of search. Keeping sims, tree reuse, c_puct and the noise identical is what makes run4's Elo curve comparable with run3's, so any Elo the margin head costs (it should cost nothing — it never steers PUCT) is visible rather than confounded. Re-run `python -m ludometer.train.benchmark --config configs/run4.json --games 2` if you touch the net size. The margin head is two Linears off the existing body (1024->128->1), so it adds 131k parameters, 1.68M -> 1.81M (+7.8%) — and no measurable time: interleaved best-of-8 on the same busy machine gave 0.658 ms/position for run3's net and 0.657 for run4's, because batch-1 CPU inference is dominated by op dispatch rather than by FLOPs (the same reason net2.py folds its six embedders into one matmul).",
+  "_note_search": "Unchanged from run3, which is deliberate: run4 is a change of objective, not of search. Keeping sims, tree reuse, c_puct and the noise identical is what makes run4's Elo curve comparable with run3's, so any Elo the margin head costs (it should cost nothing \u2014 it never steers PUCT) is visible rather than confounded. Re-run `python -m ludometer.train.benchmark --config configs/run4.json --games 2` if you touch the net size. The margin head is two Linears off the existing body (1024->128->1), so it adds 131k parameters, 1.68M -> 1.81M (+7.8%) \u2014 and no measurable time: interleaved best-of-8 on the same busy machine gave 0.658 ms/position for run3's net and 0.657 for run4's, because batch-1 CPU inference is dominated by op dispatch rather than by FLOPs (the same reason net2.py folds its six embedders into one matmul).",
   "sims": 512,
   "tree_reuse": true,
   "c_puct": 1.4,
@@ -33,22 +31,19 @@
   "decisive_eps": 0.03,
   "decisive_min_visit_frac": 0.1,
   "margin_weight": 0.25,
-
-  "_note_pretrain": "run3's buffer is 500k positions played at 512 sims by a ~2300-Elo net — much better data than run2's, which is what run3 itself warm-started on. pretrain_unblend=0.15 is the interesting part: run3 stored a BLENDED value, 0.85*outcome + 0.15*tanh(diff/20), and those three bands do not overlap (a win lands in [0.85, 1.0], a loss in [-1.0, -0.85], a draw in (-0.15, 0.15) — verified on the actual file: 486k wins/losses, 13.5k draws, nothing in between). So the outcome comes back exactly from the sign with a dead band, and the margin follows by algebra — and it is precisely tanh(diff/20), this run's margin target. The margin head therefore starts pretrained on 500k real examples instead of on nothing. Set pretrain_unblend to 0 to fall back to the safe path: the margin loss is then masked out on every inherited position and the head learns from self-play alone.",
+  "_note_pretrain": "run3's buffer is 500k positions played at 512 sims by a ~2300-Elo net \u2014 much better data than run2's, which is what run3 itself warm-started on. pretrain_unblend=0.15 is the interesting part: run3 stored a BLENDED value, 0.85*outcome + 0.15*tanh(diff/20), and those three bands do not overlap (a win lands in [0.85, 1.0], a loss in [-1.0, -0.85], a draw in (-0.15, 0.15) \u2014 verified on the actual file: 486k wins/losses, 13.5k draws, nothing in between). So the outcome comes back exactly from the sign with a dead band, and the margin follows by algebra \u2014 and it is precisely tanh(diff/20), this run's margin target. The margin head therefore starts pretrained on 500k real examples instead of on nothing. Set pretrain_unblend to 0 to fall back to the safe path: the margin loss is then masked out on every inherited position and the head learns from self-play alone.",
   "pretrain": "runs/run3/checkpoints/replay.npz",
   "pretrain_epochs": 3,
   "pretrain_lr": 0.001,
   "pretrain_keep_buffer": true,
   "pretrain_unblend": 0.15,
-
   "games_per_iter": 64,
   "total_games": 60000,
   "min_buffer": 5000,
   "batch_size": 256,
   "steps_per_position": 1.5,
   "chunk_steps": 25,
-
-  "_note_lr": "60000 games x ~55 positions x 1.5 replays / 256 per batch = ~19.3k self-play steps, so lr_total_steps=20000 lands the cosine on lr_min exactly at the end of the game budget — same arithmetic as run3, same budget. Peak lr is 5e-4, below run3's 6e-4, because the warm start is stronger this time: run3 pretrained on run2's MLP-era buffer, run4 pretrains on run3's own 512-sim buffer AND (via pretrain_unblend) gets a pretrained margin head too, so there is proportionally less to relearn and more to lose to a big first few hundred steps. lr_min 5e-5 as in run3: late self-play data stays useful without churning the weights.",
+  "_note_lr": "60000 games x ~55 positions x 1.5 replays / 256 per batch = ~19.3k self-play steps, so lr_total_steps=20000 lands the cosine on lr_min exactly at the end of the game budget \u2014 same arithmetic as run3, same budget. Peak lr is 5e-4, below run3's 6e-4, because the warm start is stronger this time: run3 pretrained on run2's MLP-era buffer, run4 pretrains on run3's own 512-sim buffer AND (via pretrain_unblend) gets a pretrained margin head too, so there is proportionally less to relearn and more to lose to a big first few hundred steps. lr_min 5e-5 as in run3: late self-play data stays useful without churning the weights.",
   "lr": 0.0005,
   "lr_min": 5e-05,
   "lr_schedule": "cosine",
@@ -56,10 +51,8 @@
   "weight_decay": 0.0001,
   "value_weight": 1.0,
   "grad_clip": 1.0,
-
   "replay_capacity": 500000,
   "save_buffer": true,
-
   "_note_anchors": "run1's best (+2014) and run2's best (+2020.3) are pinned so run4's curve shares run1's, run2's and run3's scale. ADD RUN3'S BEST HERE AT LAUNCH: append \"mcts:runs/run3/checkpoints/ckpt-XXXXXX.pt?sims=100\" to eval_anchors and the same string with its Elo to anchor_elos. Do NOT take that Elo from the best line of runs/run3/elo.jsonl: with ~55 evaluations at +/-31 Elo each, the maximum of the series is an order statistic and overestimates the true strength by roughly the noise (the top three lines sit inside one standard error of each other, which is what that looks like). Re-rate it first with a niced gauntlet against the two anchors that are already on the scale, and paste the fitted number: nice -n 19 uv run python -m ludometer.eval.gauntlet --games 40 --workers 8 --seed 4242 --json runs/run3/rerate.json --anchor run1=2014 --anchor run2=2020.3 run1=mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 run2=mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100 run3a=mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100 run3b=mcts:runs/run3/checkpoints/ckpt-019968.pt?sims=100 -- that is 6 pairings x 40 = 240 games; swap run3a/run3b for whichever two checkpoints top runs/run3/elo.jsonl when run3 actually finishes, and anchor on the better of the two.",
   "eval_every_games": 512,
   "eval_games": 40,
@@ -70,13 +63,17 @@
     "greedy",
     "heuristic",
     "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100",
-    "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100"
+    "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100",
+    "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100"
   ],
   "eval_frozen": 2,
   "anchor_elos": {
     "random": 0.0,
     "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100": 2014.0,
-    "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100": 2020.3
+    "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100": 2020.3,
+    "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100": 2254.7,
+    "greedy": 1220.0,
+    "heuristic": 1378.0
   },
   "eval_at_start": true,
   "heartbeat": 20.0
