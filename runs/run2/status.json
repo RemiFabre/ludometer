@@ -1,0 +1,11 @@
+{
+  "run": "run2",
+  "state": "running",
+  "started": "2026-08-14T21:16:15Z",
+  "updated": "2026-08-15T03:16:44Z",
+  "ended": null,
+  "error": null,
+  "games": 11776,
+  "steps": 3623,
+  "note": "rated ckpt-011776: +1823 Elo"
+}
