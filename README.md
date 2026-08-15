@@ -20,7 +20,56 @@ widely considered excellent — then reuse the framework to evaluate new board g
 - `ludometer/agents/` — baseline agents (random, greedy, heuristic) and the neural agent
 - `ludometer/train/` — AlphaZero-style self-play training (PyTorch, Apple MPS)
 - `ludometer/eval/` — arena + Elo rating of checkpoints against a fixed anchor pool
-- `web/` — browser dashboard (training progress) and a GUI to play against the AI
+- `ludometer/export/` — checkpoint → ONNX, for the browser player
+- `web/` — training dashboard, a local GUI to play against the AI, and `web/player/`:
+  the whole thing (rules, search, net) reimplemented in JavaScript and published to
+  GitHub Pages
+
+## Play in your browser (no install)
+
+### **→ [remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/) ←**
+
+The strongest trained net, playable by anyone, with **nothing running on a server**.
+Open the page and the tab downloads the exported net once (~16 MB over the wire, cached
+afterwards), then plays Azul against you entirely on your own machine — the same PUCT tree
+search the trainer uses, running in a Web Worker on top of onnxruntime-web (WASM). No
+account, no upload, works offline once loaded, and fine on a phone.
+
+The header names which checkpoint you are facing and its internal Elo; **AI thinks for**
+(instant / 3 / 5 / 10 s) is the same strength dial as the local GUI, and the table talk
+reports the true count every move — *“searched 16,384 positions in 5.0s”*. On an M-series
+Mac that is **~3,300 positions/second**, i.e. **~16,000 per move at the default 5 s**; a
+slower laptop or a phone will do less, and the page will tell you exactly how much.
+
+How it is put together, and why you can trust it:
+
+| piece | where | how it is checked |
+|---|---|---|
+| ONNX export of the best checkpoint | `ludometer/export/onnx_export.py` | 100 real positions through torch **and** onnxruntime, max abs diff < 1e-4 (`tests/test_export_onnx.py`) |
+| Azul rules, ported to JS | `web/player/js/engine.js` | 30 seeded Python games + 5 handcrafted edge positions replayed move by move — states, legal-action lists, all 182 encoding floats and outcomes must match exactly (`web/player/test/engine.test.mjs`) |
+| PUCT search, ported to JS | `web/player/js/mcts.js` | full JS-vs-JS games under node: every move legal, every game terminates, no tiles lost (`web/player/test/selfplay.test.mjs`) |
+| the page itself | `web/player/` | driven in headless Chrome: no console errors, a real human/AI exchange, no sideways scroll at 390 px (`web/player/test/browser.test.mjs`) |
+
+Run those four locally with:
+
+```bash
+uv run --group export python -m ludometer.export.onnx_export   # refresh model/
+uv run --group export pytest tests/test_export_onnx.py
+node web/player/test/engine.test.mjs
+node web/player/test/parity.test.mjs
+node web/player/test/selfplay.test.mjs --games 1 --budget 0.3
+node web/player/test/browser.test.mjs                          # add --live for the deployed site
+```
+
+To publish a newer checkpoint (re-export, re-check, rebuild `gh-pages`, wait for the site):
+
+```bash
+./scripts/deploy_player.sh
+```
+
+The site is a copy of `web/player/` minus its `test/` directory. `deploy_player.sh` writes
+the `gh-pages` branch through a temporary git index, so it never checks anything out and
+never touches your working tree — safe to run while a training run is writing into `runs/`.
 
 ## Quick start
 
@@ -30,7 +79,7 @@ uv run pytest              # engine tests
 uv run ludometer-gui       # play Azul against the current best agent
 ```
 
-## Play against the AI
+## Play against the AI (locally, with the trainer's own agents)
 
 ```bash
 uv sync

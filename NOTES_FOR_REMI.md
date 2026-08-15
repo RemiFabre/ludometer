@@ -4,6 +4,82 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-15 — Anyone can now play our best net, in their browser: **https://remifabre.github.io/ludometer/**
+
+Send that link to anyone. It opens a full Azul game against **run2/ckpt-023040 (+2020 Elo)**
+and **nothing runs on a server** — the tab downloads the net once and does all the thinking
+locally. No account, no install, works offline once loaded, playable on a phone.
+
+**What is actually being served.** A *snapshot* of the best rated checkpoint, exported to
+ONNX. It does not follow the training run: when run2 finishes (or any checkpoint out-rates
+this one), re-publish with
+
+```bash
+./scripts/deploy_player.sh
+```
+
+which re-exports the best checkpoint, re-runs the correctness gates, rebuilds the `gh-pages`
+branch and waits for the site to answer 200. It writes that branch through a temporary git
+index — **it never checks anything out, so it is safe to run while run2 is writing into
+`runs/`** (I ran it that way today).
+
+**Speed, measured not guessed.** In headless Chrome on this Mac: **16,384 positions in 5.0 s
+= ~3,300 positions/second**. The page reports the true number every move in the table talk,
+so a visitor on a slow phone sees their own figure rather than my marketing. For scale, the
+ladder rates checkpoints at 100 sims/move, so the default 5 s budget is ~160× more search
+than the rating was measured at — same "the Elo is a floor" story as the local GUI. When
+run2 was hammering all the cores, node measured ~1,000/s instead, i.e. the number roughly
+tracks how busy the machine is.
+
+**Payload.** 26.9 MB on disk, **~15.9 MB over the wire** (GitHub Pages gzips both big
+files): 13.3 MB ONNX → 12.4 MB, 13.5 MB onnxruntime wasm → 3.5 MB, plus ~150 KB of my own
+JS/CSS/HTML. All vendored, no CDN, no third-party request at runtime. The page streams the
+download and shows a percentage, because on a phone that is several seconds of nothing.
+
+**The part I was most worried about, and how it is nailed down.** The browser needs the Azul
+rules and the exact 182-float observation the net was trained on, in JavaScript. A hand port
+that is 99% right would produce an AI that looks fine and plays subtly nonsense, so the port
+is *proved*, not reviewed:
+
+- `scripts/dump_fixtures.py` plays 30 seeded games with the **Python** engine and records
+  every move — the full `to_json()` state, the legal-action list *in engine order*, all 182
+  encoding floats, the scores, the outcome — plus the bag ordering of every shuffle (JS
+  cannot reproduce CPython's Mersenne Twister, so it replays Python's deals instead).
+- `web/player/test/engine.test.mjs` replays all of it in JS and demands an exact match:
+  **2,155 moves, 9,384 assertions, all green**.
+- Random play never reaches some branches, so five positions are built by hand (all-
+  monochrome round end, bag running dry, score clamped at 0, the end-game bonuses, marker on
+  a floor line) — 191 more moves. I mutation-tested the gate: five deliberate bugs
+  (a shifted encoding offset, a wrong column bonus, an off-by-one floor overflow, reordered
+  legal actions, the wrong marker fallback) — the first four were caught by the random games,
+  and the fifth *only* by the handcrafted case, which is why those exist.
+- The net itself: exported ONNX matches torch to **3.2e-05** on 100 real positions, checked
+  twice — once against onnxruntime-python in the exporter, once against the actual vendored
+  onnxruntime-**web** build in `parity.test.mjs`, since the browser runs the latter.
+- Whole-stack: JS-vs-JS games under node (every move legal, every game terminates, tile
+  census intact) and the real page driven in headless Chrome, including against the deployed
+  URL (`node web/player/test/browser.test.mjs --live`).
+
+**Caveats, honestly.**
+
+- **It is a snapshot.** The live site does *not* track `runs/`; it is whatever
+  `deploy_player.sh` last published. The header names the checkpoint and its Elo.
+- **First load is heavy.** ~16 MB. Fine on wifi, slow on a train. After that it is cached.
+- **The search runs on one thread.** SharedArrayBuffer needs COOP/COEP headers, which
+  GitHub Pages does not send, so no wasm threading. A batch-of-one MLP gains little from
+  threads anyway, but it does mean a phone will be several times slower than this Mac.
+- **The chance handling is the full Python one** (re-sampled determinizations with a
+  reshuffled bag at refills, capped at 4 outcomes per edge) — I did *not* take the
+  documented shortcut of cutting the tree at round boundaries.
+- **Dirichlet noise is not ported.** It is a self-play training device; against a human it
+  would only make the AI worse.
+- **`onnx` + `onnxruntime` are new dependencies**, in a non-default `export` group
+  (`uv run --group export ...`). Nothing in training, self-play or the arena imports them,
+  and `uv lock` added them without moving a single existing pin — torch and numpy are
+  untouched.
+- I did not touch `ludometer/train/`, `ludometer/eval/`, `configs/` or anything under
+  `runs/`, and I ran only `tests/test_export_onnx.py`, never the full suite.
+
 ## 2026-08-15 — Morning report: run2 caught run1 overnight
 
 - run2 (the 3× bigger net) trained all night at ~31 games/min and is at **+2005 ± 32 after
