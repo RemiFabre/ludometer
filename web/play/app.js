@@ -1,71 +1,66 @@
-/* Azul play-vs-AI — vanilla JS, no external resources.
+/* Azul play-vs-AI — the page's own glue.
  *
- * The server owns the rules; this file owns the table. It keeps one snapshot of
- * the game (`S`, straight from /api/state) plus one piece of local UI state
- * (`sel`, the colour the player has picked up), and redraws from those. Legality
- * always comes from the server's action-id list: a destination lights up because
- * `source*30 + colour*6 + dest` is in it, never because we re-derived the rules.
+ * The reusable half of this app lives in ui/: the boards, the status band, the
+ * log, the scoring panels and the tile flights are framework-free modules that
+ * take state and give back elements (see ui/PORTING.md). This file is the part
+ * that is specific to the local server: it talks to /api/*, owns the turn
+ * sequence, and decides what the status band says.
  *
- * A turn plays out in two requests, so the table moves at a human pace:
- * `/api/act` puts the player's own move on the board at once, then `/api/ai`
- * spends the AI's whole thinking budget. While that request is out the page
- * shows the clock running; when it lands, the tiles travel from the factory to
- * the opponent's board before the new snapshot is adopted. Input stays locked
- * from the moment a move is sent until the last tile has landed.
+ * How a turn plays out — and why there is no overlay anywhere on this page:
+ *
+ *   1. you click a colour, then a row; the move is sent (with coach mode on,
+ *      the server rates it first and the band shows the rating clock);
+ *   2. the tiles fly, in a straight line, from the dish to your board, and the
+ *      dish's leftovers fly to the middle;
+ *   3. if that ended the round, full pattern lines fly to the wall and the
+ *      floor line flies to the lid, and the round's scoring appears *inline*
+ *      under the boards;
+ *   4. the AI thinks against the clock in the status band, then its move plays
+ *      out on the right-hand board exactly the same way.
+ *
+ * Input is locked from the moment a move is sent until the last tile lands, and
+ * for no longer than that.
  */
-"use strict";
 
-const COLORS = ["blue", "yellow", "red", "black", "teal"];
-const FLOOR_PENALTIES = [-1, -1, -2, -2, -2, -3, -3];
-const CUM_PENALTY = [0, -1, -2, -4, -6, -8, -11, -14];
-const CENTER = 5;
-const FLOOR = 5;
-const FLASH_MS = 1400;
-/* move animation: pick up, fly, settle — about 1.7 s all told */
-const PICKUP_MS = 420;
-const FLIGHT_MS = 780;
-const STAGGER_MS = 55;
-const SETTLE_MS = 220;
-const TILING_STEP_MS = 150;   // one wall tile lands every ...
-const TILING_LAST_MS = 520;   // ... plus the last tile's own animation
+import { flyTiles, prefersReducedMotion, sleep } from "./ui/animate.js";
+import { createBoard, createMiddle } from "./ui/board.js";
+import { COLORS, FLOOR, node, preview } from "./ui/dom.js";
+import { renderLog } from "./ui/log.js";
+import { clearScoring, renderFinalPanel, renderRoundPanel } from "./ui/scoring.js";
+import { createStatus } from "./ui/status.js";
 
 const el = (id) => document.getElementById(id);
 const ui = {
   matchup: el("matchup"), setup: el("setup"), opponent: el("opponent"),
   specField: el("spec-field"), spec: el("spec"), seed: el("seed"), first: el("first"),
   opponentNote: el("opponent-note"), thinkField: el("think-field"), think: el("think"),
-  facing: el("facing"),
-  deal: el("deal"), factories: el("factories"), center: el("center"), turn: el("turn"),
-  thinking: el("thinking"), thinkingText: el("thinking-text"), fly: el("fly"),
-  scoreHuman: el("score-human"), scoreAi: el("score-ai"), boardAi: el("board-ai"),
-  boardHuman: el("board-human"), lastMove: el("last-move"), log: el("log"),
-  supply: el("supply"), prompt: el("prompt"), hint: el("hint"), cancel: el("cancel"),
-  overlay: el("overlay"), overlayTitle: el("overlay-title"), overlayBody: el("overlay-body"),
-  overlayOk: el("overlay-ok"), toasts: el("toasts"),
+  deal: el("deal"), middle: el("middle"), prompt: el("prompt"),
+  hint: el("hint"), cancel: el("cancel"), fly: el("fly"), scoring: el("scoring"),
+  log: el("log"), coach: el("coach"), coachField: el("coach-field"),
+  coachLegend: el("coach-legend"), supply: el("supply"), toasts: el("toasts"),
 };
 
-let S = null;          // last server snapshot
-let sel = null;        // {source, color} — tiles the player is holding
-let suggestion = null; // {source, color, dest} from /api/hint
-let busy = false;      // a request is in flight, or a move is playing out
-let sheets = [];       // queued round-end / game-end overlays
-let bestInfo = null;   // /api/agents "best" entry: which checkpoint is strongest
-let thinkSeconds = 0;  // per-move budget the AI is playing with
-let sheetWaiters = []; // resolvers waiting for the overlay queue to drain
+const status = createStatus(el("status"));
+const middle = createMiddle(ui.middle, { onPick: pick });
+const boards = {
+  human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: play }),
+  ai: createBoard(el("board-ai"), { seat: 1, interactive: false }),
+};
 
-const reducedMotion = window.matchMedia
-  && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let S = null;           // last server snapshot
+let sel = null;         // {source, color} — tiles you are holding
+let suggestion = null;  // {source, color, dest} from /api/hint
+let busy = false;       // a request is in flight, or tiles are still moving
+let bestInfo = null;    // /api/agents "best": which checkpoint is strongest
+let thinkSeconds = 0;   // the AI's per-move budget
+let coachOn = false;    // rate my moves with the AI's own search
 
-const sleep = (ms) => new Promise((done) => setTimeout(done, reducedMotion ? 0 : ms));
+const COACH_LEGEND =
+  "Coach mode rates your move with the AI's own search: 0.00 = the move it would " +
+  "have played, −1 ≈ a whole win thrown away. It thinks before your move lands, " +
+  "so each turn takes a couple of seconds longer.";
 
 /* ------------------------------------------------------------------ plumbing */
-function node(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text !== undefined && text !== null) n.textContent = text;
-  return n;
-}
-
 function toast(message, kind) {
   const t = node("div", "toast" + (kind ? " " + kind : ""), message);
   ui.toasts.appendChild(t);
@@ -77,8 +72,7 @@ async function api(path, options) {
   let data = null;
   try { data = await res.json(); } catch (err) { data = null; }
   if (!res.ok) {
-    const msg = (data && data.error) || res.status + " " + res.statusText;
-    const error = new Error(msg);
+    const error = new Error((data && data.error) || res.status + " " + res.statusText);
     error.status = res.status;
     throw error;
   }
@@ -92,21 +86,150 @@ const postJSON = (path, body) => api(path, {
 });
 
 function setBusy(on) {
+  const changed = busy !== on;
   busy = on;
   document.body.classList.toggle("locked", on);
   ui.deal.disabled = on;
   ui.hint.disabled = on || !S || !S.your_turn;
+  // the tiles you may pick up depend on this, and unlocking has to give them
+  // back — the redraw is safe here because tiles only ever fly while busy
+  if (changed && S) render();
+}
+
+/* ---------------------------------------------------------------- the boards */
+function seatsOf(snapshot) {
+  return snapshot ? { you: snapshot.human_seat, ai: snapshot.ai_seat } : { you: 0, ai: 1 };
+}
+
+function aiLabel() {
+  return S && S.agent_name ? "AI · " + S.agent_name : "AI";
+}
+
+function render() {
+  if (!S) return;
+  const st = S.state;
+  renderStatus();
+  middle.render({
+    state: st,
+    legalActions: S.human_legal_actions,
+    canPick: S.your_turn && !st.is_terminal && !busy,
+    selection: sel,
+  });
+  boards.human.render({
+    state: st,
+    legalActions: S.human_legal_actions,
+    selection: sel,
+    title: "You",
+    toMove: !st.is_terminal && st.current_player === S.human_seat,
+    highlightRow: suggestion ? suggestion.dest : undefined,
+  });
+  boards.ai.render({
+    state: st,
+    title: aiLabel(),
+    toMove: !st.is_terminal && st.current_player === S.ai_seat,
+  });
+  renderSupply();
+  renderLog(ui.log, S.log || []);
+  ui.cancel.classList.toggle("hidden", !sel);
+  ui.hint.disabled = busy || !S.your_turn;
+  syncCoachAvailability();
+  if (suggestion) {
+    const dish = middle.sourceEl(suggestion.source);
+    if (dish) {
+      dish.classList.add("picked");
+      setTimeout(() => dish.classList.remove("picked"), 1600);
+    }
+  }
+}
+
+/** Fix the two boards' seats to this game's seating (you are always on the left). */
+function seatBoards() {
+  const seats = seatsOf(S);
+  boards.human = createBoard(el("board-human"), {
+    seat: seats.you, interactive: true, onPlay: play,
+  });
+  boards.ai = createBoard(el("board-ai"), { seat: seats.ai, interactive: false });
+}
+
+function renderStatus() {
+  const st = S.state;
+  const info = S.opponent_info || {};
+  const rating = typeof info.elo === "number" ? " (" + Math.round(info.elo) + " Elo)" : "";
+  ui.matchup.textContent = "you versus " + S.agent_name + rating + " · seed " + S.seed;
+  status.setScore(st.scores[S.human_seat], st.scores[S.ai_seat], "You", "AI");
+
+  if (st.is_terminal) {
+    const mine = st.scores[S.human_seat];
+    const theirs = st.scores[S.ai_seat];
+    const verb = mine > theirs ? "You won " : theirs > mine ? "The AI won " : "A draw, ";
+    status.set({
+      headline: verb + mine + "–" + theirs,
+      detail: "The final scoring is below; the board stays exactly as it ended.",
+      tone: "end",
+    });
+    ui.prompt.textContent = "Deal again for another game.";
+    return;
+  }
+  if (S.your_turn) {
+    status.set({
+      headline: sel
+        ? "Your turn — pick a row for your " + COLORS[sel.color] + " tiles"
+        : "Your turn — pick a colour",
+      detail: turnDetail(),
+      tone: "you",
+    });
+    ui.prompt.textContent = sel
+      ? "Or press Escape to put them back."
+      : "Take every tile of one colour from a factory, or from the middle.";
+  } else {
+    status.set({ headline: "The AI is choosing a move", detail: turnDetail(), tone: "ai" });
+    ui.prompt.textContent = "";
+  }
+}
+
+/** The line under the headline: where the game is, and what the AI just did. */
+function turnDetail() {
+  const st = S.state;
+  const bits = ["Round " + (st.round + 1), st.tiles_left + " tiles left on the table"];
+  const last = S.last_ai_move;
+  if (last) {
+    bits.push("AI " + last.text);
+    if (last.search_text) bits.push(last.search_text);
+  }
+  return bits.join(" · ");
+}
+
+function renderSupply() {
+  const st = S.state;
+  ui.supply.innerHTML = "";
+  [["Bag", st.bag, null], ["Lid", st.lid, "lid-row"]].forEach(([label, counts, id]) => {
+    const row = node("div", "supply-row");
+    if (id) row.id = id;
+    row.appendChild(node("span", "supply-label", label));
+    counts.forEach((n, c) => {
+      const sw = node("span", "swatch");
+      const chip = node("span", "chip");
+      chip.dataset.color = c;
+      chip.title = COLORS[c];
+      sw.appendChild(chip);
+      sw.appendChild(node("span", null, String(n)));
+      row.appendChild(sw);
+    });
+    row.appendChild(node("span", "supply-total", counts.reduce((a, b) => a + b, 0) + " tiles"));
+    ui.supply.appendChild(row);
+  });
+  const row = node("div", "supply-row");
+  row.appendChild(node("span", "supply-label", "Table"));
+  row.appendChild(node("span", "swatch", st.tiles_left + " tiles still to take"));
+  ui.supply.appendChild(row);
 }
 
 /* -------------------------------------------------------------- game control */
 function currentSpec() {
   const choice = ui.opponent.value;
-  // "best" is resolved server-side at deal time, so an overnight run's newest
+  // "best" resolves server-side at deal time, so an overnight run's newest
   // strongest checkpoint is picked up without touching the page.
-  if (choice === "best") {
-    // sims is only the ceiling once a time budget is set; the server raises it
-    return "best?sims=" + ((bestInfo && bestInfo.default_sims) || 400);
-  }
+  if (choice === "best") return "best?sims=" + ((bestInfo && bestInfo.default_sims) || 400);
   if (choice !== "custom") return choice;
   return ui.spec.value.trim();
 }
@@ -134,7 +257,8 @@ async function newGame(event) {
   }
   setBusy(true);
   try {
-    adopt(await postJSON("/api/new", body));
+    clearScoring(ui.scoring);
+    adopt(await postJSON("/api/new", body), { reseat: true });
     toast("New game dealt against " + S.agent_name + ".", "good");
   } catch (err) {
     toast(err.message);
@@ -143,24 +267,53 @@ async function newGame(event) {
   }
 }
 
-/** One turn: your move lands, the AI thinks, then its move plays out. */
-async function play(actionId) {
-  if (busy) return;
-  setBusy(true);
-  try {
-    // 1. your own move, on the board straight away
-    const mine = await postJSON("/api/act", { action_id: actionId, defer_ai: true });
-    adopt(mine);
-    const myReports = mine.round_reports || [];
-    myReports.forEach(queueRoundSheet);
-    if (mine.state.is_terminal && mine.final) queueFinalSheet(mine.final);
-    await animateTiling(myReports);
+function adopt(snapshot, options) {
+  const first = !S || (options && options.reseat);
+  S = snapshot;
+  sel = null;
+  suggestion = null;
+  if (first) seatBoards();
+  render();
+}
 
-    // 2. the AI thinks (while you read the position) and its move plays out
-    if (!mine.ai_pending) { showNextSheet(); return; }
-    await runAiTurn(showNextSheet);
+async function refresh() {
+  try {
+    adopt(await api("/api/state"), { reseat: true });
   } catch (err) {
-    stopThinking();
+    if (err.status === 409) { await newGame(); return; }
+    toast(err.message);
+  }
+}
+
+function pick(source, color) {
+  if (busy || !S || !S.your_turn) return;
+  sel = sel && sel.source === source && sel.color === color ? null : { source, color };
+  suggestion = null;
+  render();
+}
+
+/**
+ * One turn: your move (rated first if coach mode is on), then the AI's reply.
+ * The tiles are animated from the *current* DOM, before the new state is
+ * adopted, so what you see leaving the dish is what actually left it.
+ */
+async function play(id) {
+  if (busy || !S || !S.your_turn) return;
+  const move = localMove(id);
+  sel = null;
+  setBusy(true);
+  clearScoring(ui.scoring);
+  try {
+    const request = postJSON("/api/act", {
+      action_id: id, defer_ai: true, coach: coachOn && !!S.coach_available,
+    });
+    const mine = await awaitMove(request);
+    await animateTake(move, boards.human, middle);
+    await settle(mine, "human");
+    if (!mine.ai_pending) return;
+    await runAiTurn();
+  } catch (err) {
+    status.stopClock();
     toast(err.message);
     await refresh();
   } finally {
@@ -169,45 +322,215 @@ async function play(actionId) {
   }
 }
 
-/** If the snapshot says the AI still has to move, let it move. */
+/** Wait for /api/act; if the coach is thinking, say so with the clock running. */
+async function awaitMove(request) {
+  let settled = false;
+  const done = request.then(
+    (value) => { settled = true; return value; },
+    (err) => { settled = true; throw err; }
+  );
+  await Promise.race([done.catch(() => null), sleep(140)]);
+  if (!settled) {
+    status.set({ headline: "Rating your move", detail: "the AI is searching your position", tone: "ai", keepClock: true });
+    status.startClock({
+      budget: (S && S.coach_time_s) || 0,
+      label: (spent, budget) =>
+        budget
+          ? "Rating your move — " + spent.toFixed(1) + "s of " + budget + "s"
+          : "Rating your move — " + spent.toFixed(1) + "s",
+    });
+  }
+  const value = await done;
+  status.stopClock();
+  return value;
+}
+
+/** If the snapshot says the AI still owes a move, let it move. */
 async function resumeIfPending() {
   if (busy || !S || !S.ai_pending) return;
   setBusy(true);
   try {
     await runAiTurn();
   } catch (err) {
-    stopThinking();
+    status.stopClock();
     toast(err.message);
   } finally {
     setBusy(false);
   }
 }
 
-/**
- * Ask for the AI's move, show the clock running, then play the move out.
- * `whileThinking` runs once the request is in flight, so a round-end sheet can
- * be read during the search instead of delaying it.
- */
-async function runAiTurn(whileThinking) {
+/** The AI's turn: the clock runs in the status band, then its move plays out. */
+async function runAiTurn() {
   const pending = postJSON("/api/ai", {});
-  startThinking();
-  if (whileThinking) whileThinking();
+  const budget = (S && S.think_time_s) || thinkSeconds;
+  status.set({ headline: "The AI is thinking", detail: turnDetail(), tone: "ai", keepClock: true });
+  status.startClock({
+    budget,
+    label: (spent, cap) =>
+      cap
+        ? "AI is thinking — " + spent.toFixed(1) + "s of " + cap + "s"
+        : "AI is thinking — " + spent.toFixed(1) + "s",
+  });
   let theirs;
   try {
     theirs = await pending;
   } finally {
-    stopThinking();
+    status.stopClock();
   }
-  await waitForSheets();
-  await animateAiMoves(theirs.ai_moves || []);
-  adopt(theirs);
-  const reports = theirs.round_reports || [];
-  reports.forEach(queueRoundSheet);
-  if (theirs.state.is_terminal && theirs.final) queueFinalSheet(theirs.final);
-  await animateTiling(reports);
-  showNextSheet();
+  const moves = theirs.ai_moves || [];
+  if (moves.length) {
+    const first = moves[0];
+    status.set({
+      headline: "AI " + first.text,
+      detail: first.search_text || turnDetail(),
+      tone: "ai",
+    });
+    await animateTake(first, boards.ai, middle);
+  }
+  await settle(theirs, "ai");
 }
 
+/**
+ * Adopt a snapshot: run the round-end animations first (wall tiling, floor to
+ * the lid), then show the new position and the inline scoring for the round.
+ */
+async function settle(payload, mover) {
+  const reports = payload.round_reports || [];
+  if (reports.length) {
+    status.set({
+      headline: "Round " + (reports[0].round + 1) + " scoring",
+      detail: "full lines move to the wall, the floor line goes to the lid",
+      tone: "scoring",
+    });
+    await animateTiling(reports);
+  }
+  adopt(payload);
+  if (reports.length) {
+    const last = reports[reports.length - 1];
+    flashWall(last);
+    if (!last.game_over) renderRoundPanel(ui.scoring, last, sides());
+  }
+  if (payload.state.is_terminal && payload.final) {
+    renderFinalPanel(ui.scoring, payload.final, sides());
+  } else if (mover === "ai" && payload.ai_moves && payload.ai_moves.length) {
+    // let the AI's own move stand as the headline for a beat before your turn
+    const last = payload.ai_moves[payload.ai_moves.length - 1];
+    status.set({ headline: "AI " + last.text, detail: turnDetail(), tone: "ai" });
+    await sleep(500);
+  }
+  render();
+}
+
+function sides() {
+  return [[S.human_seat, "You"], [S.ai_seat, aiLabel()]];
+}
+
+/* ----------------------------------------------------------------- animation */
+/** What your click is about to do, worked out from the position on screen. */
+function localMove(id) {
+  const source = Math.floor(id / 30);
+  const color = Math.floor((id % 30) / 6);
+  const dest = id % 6;
+  const p = preview(S.state, S.human_seat, source, color, dest);
+  return {
+    source, color, dest,
+    count: p.count, placed: p.placed, overflow: p.overflow, took_marker: p.takesMarker,
+  };
+}
+
+function lidTarget() {
+  return document.getElementById("lid-row") || ui.supply;
+}
+
+/** Where a move's tiles are going, in landing order: line, then floor, then lid. */
+function travelTargets(board, move) {
+  const targets = [];
+  if (move.dest !== FLOOR && move.placed) {
+    const slots = board.lineSlots(move.dest);
+    targets.push.apply(targets, slots.slice(Math.max(0, slots.length - move.placed)));
+  }
+  const floorSlots = board.floorSlots();
+  let taken = move.took_marker ? 1 : 0; // the marker claims the first free slot
+  while (targets.length < move.count && taken < floorSlots.length) {
+    targets.push(floorSlots[taken++]);
+  }
+  const lid = lidTarget();
+  while (targets.length < move.count) targets.push(lid); // the rest overflow to the lid
+  return targets;
+}
+
+/** Tiles leave a dish; the dish's other colours are pushed into the middle. */
+async function animateTake(move, board, table) {
+  if (prefersReducedMotion()) return;
+  const dish = table.sourceEl(move.source);
+  const row = board.lineRow(move.dest);
+  if (dish) dish.classList.add("picked");
+  if (row) row.classList.add("incoming");
+
+  const taken = table.sourceTiles(move.source, move.color, move.count);
+  const targets = travelTargets(board, move);
+  const flights = taken.map((from, i) => ({ from, to: targets[i], color: move.color }));
+
+  // leftovers slide to the middle; the marker, if taken, drops onto the floor
+  const centre = table.centerEl();
+  table.remainderTiles(move.source, move.color).forEach((from) => {
+    flights.push({ from, to: centre, color: Number(from.dataset.color) });
+  });
+  if (move.took_marker) {
+    const chip = centre.querySelector(".marker");
+    const slot = board.floorSlots()[0];
+    if (chip && slot) flights.push({ from: chip, to: slot, color: "marker" });
+  }
+
+  await flyTiles(flights, { layer: ui.fly });
+  if (dish) dish.classList.remove("picked");
+  if (row) row.classList.remove("incoming");
+}
+
+/** Round end: full lines travel to the wall, the floor line travels to the lid. */
+async function animateTiling(reports) {
+  if (prefersReducedMotion() || !reports.length) return;
+  const report = reports[reports.length - 1];
+  const wall = [];
+  const lid = [];
+  const lidEl = lidTarget();
+  [[S.human_seat, boards.human], [S.ai_seat, boards.ai]].forEach(([seat, board]) => {
+    const player = report.players[seat];
+    if (!player) return;
+    player.tiles.forEach((t) => {
+      const tiles = board.lineTiles(t.row);
+      const from = tiles[tiles.length - 1] || board.lineRow(t.row);
+      const to = board.wallCell(t.row, t.col);
+      if (from && to) wall.push({ from, to, color: t.color, hide: false });
+    });
+    board.floorTiles().forEach((from) => {
+      lid.push({ from, to: lidEl, color: Number(from.dataset.color) });
+    });
+  });
+  await flyTiles(wall, { layer: ui.fly, duration: 520, stagger: 70 });
+  if (lid.length) {
+    lidEl.classList.add("receiving");
+    await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
+    setTimeout(() => lidEl.classList.remove("receiving"), 400);
+  }
+}
+
+/** The tiles that just reached the wall glaze over as they land. */
+function flashWall(report) {
+  if (prefersReducedMotion()) return;
+  [[S.human_seat, boards.human], [S.ai_seat, boards.ai]].forEach(([seat, board]) => {
+    const player = report.players[seat];
+    if (!player) return;
+    player.tiles.forEach((t, i) => {
+      const cell = board.wallTile(t.row, t.col);
+      if (!cell) return;
+      cell.style.animationDelay = i * 70 + "ms";
+      cell.classList.add("landing");
+    });
+  });
+}
+
+/* --------------------------------------------------------------------- hints */
 async function askHint() {
   if (!S || !S.your_turn || busy) return;
   setBusy(true);
@@ -224,638 +547,21 @@ async function askHint() {
   }
 }
 
-async function refresh() {
-  try {
-    adopt(await api("/api/state"));
-  } catch (err) {
-    if (err.status === 409) { await newGame(); return; }
-    toast(err.message);
-  }
+/* ---------------------------------------------------------------- coach mode */
+function syncCoachAvailability() {
+  const available = !!(S && S.coach_available);
+  ui.coach.disabled = !available;
+  if (!available && coachOn) coachOn = false;
+  ui.coach.checked = coachOn;
+  ui.coachField.classList.toggle("off", !coachOn);
+  ui.coachField.title = available
+    ? "Score your moves with the AI's own search"
+    : "Coach mode needs a searching opponent — deal against a trained checkpoint";
+  ui.coachLegend.textContent = COACH_LEGEND;
+  ui.coachLegend.hidden = !coachOn;
 }
 
-function adopt(snapshot) {
-  S = snapshot;
-  sel = null;
-  suggestion = null;
-  render();
-}
-
-/* -------------------------------------------------------------- legality map */
-function legalSet() {
-  return new Set((S && S.human_legal_actions) || []);
-}
-
-function actionId(source, color, dest) { return source * 30 + color * 6 + dest; }
-
-function destsFor(source, color) {
-  const legal = legalSet();
-  const out = [];
-  for (let d = 0; d <= FLOOR; d++) if (legal.has(actionId(source, color, d))) out.push(d);
-  return out;
-}
-
-function poolCount(source, color) {
-  const st = S.state;
-  return source === CENTER ? st.center[color] : st.factories[source][color];
-}
-
-/** Why `dest` is closed for the held colour — the hover text on a dark row. */
-function blockedReason(color, dest) {
-  const me = S.state.players[S.human_seat];
-  const line = me.pattern_lines[dest];
-  if (line.count >= line.capacity) return "This row is already full.";
-  if (line.count > 0 && line.color !== color) return "This row holds " + COLORS[line.color] + " tiles.";
-  if (me.wall[dest][(color + dest) % 5]) return COLORS[color] + " is already on your wall in this row.";
-  return "Not playable right now.";
-}
-
-/** What playing `sel` into `dest` costs: tiles placed, spill, extra floor penalty. */
-function preview(dest) {
-  const me = S.state.players[S.human_seat];
-  const count = poolCount(sel.source, sel.color);
-  const takesMarker = sel.source === CENTER && S.state.marker_in_center;
-  let overflow = count;
-  let placed = 0;
-  if (dest !== FLOOR) {
-    const line = me.pattern_lines[dest];
-    placed = Math.min(count, line.capacity - line.count);
-    overflow = count - placed;
-  }
-  const occupied = me.floor.reduce((a, b) => a + b, 0) + (me.floor_marker ? 1 : 0);
-  const before = CUM_PENALTY[Math.min(7, occupied)];
-  const after = CUM_PENALTY[Math.min(7, occupied + overflow + (takesMarker ? 1 : 0))];
-  return { count, placed, overflow, takesMarker, penalty: after - before,
-           completes: dest !== FLOOR && placed + me.pattern_lines[dest].count === me.pattern_lines[dest].capacity };
-}
-
-/* -------------------------------------------------------------- tile factory */
-function tile(color, cls) {
-  const t = node("div", "tile" + (cls ? " " + cls : ""));
-  t.dataset.color = color;
-  return t;
-}
-
-function tileButton(source, color) {
-  const b = node("button", "tile");
-  b.type = "button";
-  b.dataset.color = color;
-  b.dataset.source = source;
-  b.dataset.key = source + ":" + color;
-  const dests = S.your_turn && !S.state.is_terminal ? destsFor(source, color) : [];
-  if (!dests.length) {
-    b.disabled = true;
-    if (S.your_turn) b.title = "Nothing you can do with these yet.";
-  } else {
-    b.title = poolCount(source, color) + " " + COLORS[color] + " — click to pick them up";
-    b.addEventListener("click", () => {
-      sel = (sel && sel.source === source && sel.color === color) ? null : { source, color };
-      suggestion = null;
-      render();
-    });
-  }
-  return b;
-}
-
-function markerChip(tiny) {
-  const m = node("div", "marker" + (tiny ? " tiny" : ""), "1");
-  m.title = "First-player marker: whoever takes it starts the next round and loses a floor slot.";
-  return m;
-}
-
-/* ------------------------------------------------------------- middle of the table */
-function renderMiddle() {
-  const st = S.state;
-  ui.factories.innerHTML = "";
-  st.factories.forEach((counts, i) => {
-    const dish = node("div", "factory");
-    dish.dataset.source = i;
-    const total = counts.reduce((a, b) => a + b, 0);
-    if (!total) {
-      dish.classList.add("empty");
-      dish.appendChild(node("span", "empty-note", "empty"));
-    } else {
-      counts.forEach((n, c) => { for (let k = 0; k < n; k++) dish.appendChild(tileButton(i, c)); });
-    }
-    const id = node("span", "fac-id", String(i + 1));
-    id.title = "Factory " + (i + 1);
-    dish.appendChild(id);
-    ui.factories.appendChild(dish);
-  });
-
-  ui.center.innerHTML = "";
-  ui.center.dataset.source = CENTER;
-  const centreTotal = st.center.reduce((a, b) => a + b, 0);
-  if (st.marker_in_center) ui.center.appendChild(markerChip(false));
-  if (!centreTotal) {
-    ui.center.appendChild(node("span", "empty-note", st.marker_in_center ? "middle — marker only" : "middle — empty"));
-  } else {
-    st.center.forEach((n, c) => {
-      if (!n) return;
-      const group = node("div", "group");
-      for (let k = 0; k < n; k++) group.appendChild(tileButton(CENTER, c));
-      ui.center.appendChild(group);
-    });
-  }
-}
-
-/* -------------------------------------------------------------------- boards */
-/** Pattern line `r` and wall row `r` are one grid row, as on the cardboard. */
-function renderBoard(host, seat, interactive) {
-  const st = S.state;
-  const me = st.players[seat];
-  host.innerHTML = "";
-  host.dataset.seat = seat;
-
-  const grid = node("div", "board-grid");
-  const open = interactive && sel ? destsFor(sel.source, sel.color) : [];
-
-  for (let r = 0; r < 5; r++) {
-    const line = me.pattern_lines[r];
-    const isOpen = open.indexOf(r) !== -1;
-    const row = node(interactive && sel ? "button" : "div", "line");
-    if (row.tagName === "BUTTON") row.type = "button";
-    row.dataset.row = r;
-
-    const note = node("span", "row-note");
-    if (interactive && sel) {
-      if (isOpen) {
-        const p = preview(r);
-        let text = "take " + p.count + " → " + p.placed + " here";
-        if (p.overflow) text += ", " + p.overflow + " spills (" + p.penalty + ")";
-        else if (p.completes) text += ", completes the row";
-        note.textContent = text;
-        row.classList.add("open");
-        row.addEventListener("click", () => play(actionId(sel.source, sel.color, r)));
-      } else {
-        row.classList.add("blocked");
-        row.title = blockedReason(sel.color, r);
-        note.textContent = row.title;
-        row.setAttribute("aria-disabled", "true");
-      }
-    } else {
-      note.textContent = line.count
-        ? line.count + "/" + line.capacity + " " + COLORS[line.color]
-        : line.capacity + (line.capacity === 1 ? " slot" : " slots");
-    }
-    row.appendChild(note);
-
-    // the line fills from the wall end backwards, so empty slots sit on the left
-    for (let k = 0; k < line.capacity - line.count; k++) row.appendChild(node("div", "slot"));
-    for (let k = 0; k < line.count; k++) row.appendChild(tile(line.color));
-    if (suggestion && interactive && suggestion.dest === r) row.classList.add("flash");
-    grid.appendChild(row);
-
-    const wallRow = node("div", "wall-row");
-    wallRow.dataset.wallRow = r;
-    if (r === 0) wallRow.classList.add("top");
-    if (r === 4) wallRow.classList.add("bottom");
-    for (let col = 0; col < 5; col++) {
-      const colour = (col - r + 5) % 5;
-      if (me.wall[r][col]) {
-        const t = tile(colour, "placed");
-        t.dataset.row = r;
-        t.dataset.col = col;
-        t.title = COLORS[colour] + " — row " + (r + 1) + ", column " + (col + 1);
-        wallRow.appendChild(t);
-      } else {
-        const cell = node("div", "cell bisque");
-        cell.dataset.color = colour;
-        cell.dataset.row = r;
-        cell.dataset.col = col;
-        cell.title = COLORS[colour] + " goes here";
-        wallRow.appendChild(cell);
-      }
-    }
-    grid.appendChild(wallRow);
-  }
-  host.appendChild(grid);
-
-  const wrap = node("div", "floor-wrap");
-  const floorOpen = interactive && sel && open.indexOf(FLOOR) !== -1;
-  const floor = node(floorOpen ? "button" : "div", "floor");
-  if (floorOpen) {
-    floor.type = "button";
-    floor.classList.add("open");
-    floor.addEventListener("click", () => play(actionId(sel.source, sel.color, FLOOR)));
-    const p = preview(FLOOR);
-    floor.title = "Dump all " + p.count + " tiles here (" + p.penalty + " this round)";
-  }
-  floor.dataset.row = FLOOR;
-  const occupants = [];
-  if (me.floor_marker) occupants.push("marker");
-  me.floor.forEach((n, c) => { for (let k = 0; k < n; k++) occupants.push(c); });
-  for (let i = 0; i < 7; i++) {
-    const cellwrap = node("div", "cellwrap");
-    const here = occupants[i];
-    if (here === "marker") cellwrap.appendChild(markerChip(true));
-    else if (here !== undefined) cellwrap.appendChild(tile(here));
-    else cellwrap.appendChild(node("div", "slot"));
-    cellwrap.appendChild(node("span", "pen", FLOOR_PENALTIES[i]));
-    floor.appendChild(cellwrap);
-  }
-  wrap.appendChild(floor);
-
-  const penalty = me.floor_penalty;
-  const note = node("span", "floor-note" + (penalty ? " warn" : ""),
-    penalty ? "Floor line: " + penalty + " at the end of this round"
-            : "Floor line: clean");
-  if (floorOpen) {
-    const p = preview(FLOOR);
-    note.textContent = "Floor line: " + penalty + " now, " + (penalty + p.penalty) + " if you dump here";
-    note.classList.add("warn");
-  }
-  wrap.appendChild(note);
-  host.appendChild(wrap);
-}
-
-/* -------------------------------------------------------------------- panels */
-function renderScores() {
-  const st = S.state;
-  const seats = [[ui.scoreHuman, S.human_seat, "You"], [ui.scoreAi, S.ai_seat, "AI · " + S.agent_name]];
-  seats.forEach(([host, seat, who]) => {
-    const me = st.players[seat];
-    host.querySelector(".score-who").textContent = who;
-    host.querySelector(".score-value").textContent = me.score;
-    const bits = [];
-    if (me.floor_penalty) bits.push(me.floor_penalty + " on the floor");
-    if (me.completed_rows) bits.push(me.completed_rows + " full row" + (me.completed_rows > 1 ? "s" : ""));
-    if (me.floor_marker) bits.push("holds the marker");
-    host.querySelector(".score-note").textContent = bits.join(" · ");
-    host.classList.toggle("to-move", !st.is_terminal && st.current_player === seat);
-  });
-}
-
-function renderSupply() {
-  const st = S.state;
-  ui.supply.innerHTML = "";
-  [["Bag", st.bag], ["Lid", st.lid]].forEach(([label, counts]) => {
-    const row = node("div", "supply-row");
-    row.appendChild(node("span", "supply-label", label));
-    counts.forEach((n, c) => {
-      const sw = node("span", "swatch");
-      const chip = node("span", "chip");
-      chip.dataset.color = c;
-      chip.title = COLORS[c];
-      sw.appendChild(chip);
-      sw.appendChild(node("span", null, String(n)));
-      row.appendChild(sw);
-    });
-    row.appendChild(node("span", "supply-total", counts.reduce((a, b) => a + b, 0) + " tiles"));
-    ui.supply.appendChild(row);
-  });
-  const row = node("div", "supply-row");
-  row.appendChild(node("span", "supply-label", "Table"));
-  row.appendChild(node("span", "swatch", st.tiles_left + " tiles still to take · round " + (st.round + 1)));
-  ui.supply.appendChild(row);
-}
-
-function renderNarration() {
-  const last = S.last_ai_move;
-  ui.lastMove.innerHTML = "";
-  if (S.state.is_terminal && S.final) {
-    ui.lastMove.textContent = S.final.headline;
-  } else if (last) {
-    ui.lastMove.append("AI " + last.text + ".");
-    // how much search went into that move — the point of the time budget
-    if (last.search_text) {
-      ui.lastMove.appendChild(node("span", "search-note", last.search_text));
-    }
-  } else {
-    ui.lastMove.textContent = "You open. Pick a colour from a factory or the middle.";
-  }
-
-  // who the human is actually facing, for a "best"/checkpoint opponent
-  ui.facing.textContent = S.opponent_blurb || "";
-  ui.facing.classList.toggle("hidden", !S.opponent_blurb);
-
-  ui.log.innerHTML = "";
-  (S.log || []).forEach((entry) => {
-    const li = node("li", entry.kind === "move" ? entry.side : entry.kind, entry.text);
-    ui.log.appendChild(li);
-  });
-  ui.log.scrollTop = ui.log.scrollHeight;
-}
-
-function renderStatus() {
-  const st = S.state;
-  const info = S.opponent_info || {};
-  const rating = typeof info.elo === "number" ? " (" + Math.round(info.elo) + " Elo)" : "";
-  ui.matchup.textContent = "you versus " + S.agent_name + rating + " · seed " + S.seed;
-  if (st.is_terminal) {
-    ui.turn.innerHTML = "";
-    ui.turn.appendChild(node("strong", null, "Game over."));
-    ui.turn.append(" " + (S.final ? S.final.headline : ""));
-    ui.prompt.textContent = "Deal again to play another.";
-  } else if (S.your_turn) {
-    ui.turn.innerHTML = "";
-    ui.turn.appendChild(node("strong", null, "Your turn"));
-    ui.turn.append(" — round " + (st.round + 1) + ", " + st.tiles_left + " tiles left on the table.");
-    ui.prompt.textContent = sel
-      ? "Now pick a row (or the floor line) for your " + COLORS[sel.color] + " tiles."
-      : "Pick a colour from a factory or the middle.";
-  } else {
-    ui.turn.innerHTML = "";
-    ui.turn.appendChild(node("strong", null, "The AI's turn"));
-    ui.turn.append(S.think_time_s ? " — it thinks for " + S.think_time_s + "s per move."
-                                  : " — it is choosing a move.");
-    ui.prompt.textContent = "";
-  }
-  ui.cancel.classList.toggle("hidden", !sel);
-  ui.hint.disabled = busy || !S.your_turn;
-}
-
-function render() {
-  if (!S) return;
-  renderStatus();
-  renderMiddle();
-  renderScores();
-  renderBoard(ui.boardHuman, S.human_seat, true);
-  renderBoard(ui.boardAi, S.ai_seat, false);
-  renderSupply();
-  renderNarration();
-
-  // held tiles ride above the table; everything else steps back
-  const buttons = ui.factories.querySelectorAll("button.tile");
-  const all = [].concat([].slice.call(buttons), [].slice.call(ui.center.querySelectorAll("button.tile")));
-  all.forEach((b) => {
-    if (!sel) return;
-    if (b.dataset.key === sel.source + ":" + sel.color) b.classList.add("taken");
-    else b.classList.add("dimmed");
-  });
-  if (suggestion) {
-    const source = suggestion.source === CENTER ? ui.center : ui.factories.querySelector('.factory[data-source="' + suggestion.source + '"]');
-    if (source) flash(source);
-  }
-}
-
-/* ----------------------------------------------------------------- animation */
-function flash(element) {
-  if (!element) return;
-  element.classList.remove("flash");
-  void element.offsetWidth; // restart the animation
-  element.classList.add("flash");
-  setTimeout(() => element.classList.remove("flash"), FLASH_MS);
-}
-
-function sourceElement(source) {
-  return source === CENTER
-    ? ui.center
-    : ui.factories.querySelector('.factory[data-source="' + source + '"]');
-}
-
-/** Where the AI's tiles are coming from: the drawn tiles of that colour. */
-function sourceTiles(source, color, count) {
-  const host = sourceElement(source);
-  if (!host) return [];
-  const all = host.querySelectorAll('.tile[data-color="' + color + '"]');
-  return [].slice.call(all, 0, count);
-}
-
-/**
- * Where they are going: the pattern line's rightmost free slots first (a line
- * fills towards the wall), then the floor line's free slots. Tiles beyond both
- * go straight to the lid, and are aimed at the floor's edge to fade out there.
- */
-function travelTargets(host, move) {
-  const targets = [];
-  if (move.dest !== FLOOR && move.placed) {
-    const row = host.querySelector('.line[data-row="' + move.dest + '"]');
-    const slots = row ? [].slice.call(row.querySelectorAll(".slot")) : [];
-    targets.push.apply(targets, slots.slice(Math.max(0, slots.length - move.placed)));
-  }
-  const floor = host.querySelector('.floor');
-  const floorSlots = floor ? [].slice.call(floor.querySelectorAll(".slot")) : [];
-  let taken = 0;
-  while (targets.length < move.count && taken < floorSlots.length) {
-    targets.push(floorSlots[taken++]);
-  }
-  const last = targets[targets.length - 1] || floor;
-  while (targets.length < move.count) targets.push(last); // overflow to the lid
-  return targets;
-}
-
-/** Fly clones of `tiles` to `targets`, staggered, and resolve when they land. */
-function flyTiles(tiles, targets) {
-  if (reducedMotion || !tiles.length) return Promise.resolve();
-  const layer = ui.fly;
-  const flights = [];
-  tiles.forEach((from, i) => {
-    const to = targets[i];
-    if (!to) return;
-    const a = from.getBoundingClientRect();
-    const b = to.getBoundingClientRect();
-    const ghost = node("div", "fly-tile tile");
-    ghost.dataset.color = from.dataset.color;
-    ghost.style.left = a.left + "px";
-    ghost.style.top = a.top + "px";
-    ghost.style.width = a.width + "px";
-    ghost.style.height = a.height + "px";
-    ghost.style.transitionDelay = (i * STAGGER_MS) + "ms";
-    layer.appendChild(ghost);
-    from.style.visibility = "hidden";
-    flights.push([ghost, b.left - a.left, b.top - a.top, b.width / (a.width || 1)]);
-  });
-  if (!flights.length) return Promise.resolve();
-  return new Promise((done) => {
-    requestAnimationFrame(() => {
-      flights.forEach(([ghost, dx, dy, scale]) => {
-        ghost.style.transform =
-          "translate(" + dx + "px, " + dy + "px) scale(" + scale.toFixed(3) + ")";
-      });
-      const total = FLIGHT_MS + flights.length * STAGGER_MS;
-      setTimeout(() => {
-        flights.forEach(([ghost]) => ghost.remove());
-        done();
-      }, total);
-    });
-  });
-}
-
-/** Highlight the source, then walk the tiles over to the AI's board. */
-async function animateAiMove(move) {
-  const source = sourceElement(move.source);
-  if (source) source.classList.add("picked");
-  const row = ui.boardAi.querySelector('.line[data-row="' + move.dest + '"]');
-  if (row) row.classList.add("incoming");
-  await sleep(PICKUP_MS);
-  const tiles = sourceTiles(move.source, move.color, move.count);
-  await flyTiles(tiles, travelTargets(ui.boardAi, move));
-  await sleep(SETTLE_MS);
-  if (source) source.classList.remove("picked");
-  if (row) row.classList.remove("incoming");
-}
-
-async function animateAiMoves(moves) {
-  for (const move of moves) await animateAiMove(move);
-}
-
-/** Round end: wall tiles light up one after another, in placement order. */
-async function animateTiling(reports) {
-  if (reducedMotion || !reports || !reports.length) return;
-  let steps = 0;
-  reports.forEach((report) => {
-    [[S.human_seat, ui.boardHuman], [S.ai_seat, ui.boardAi]].forEach(([seat, host]) => {
-      const player = report.players[seat];
-      if (!player) return;
-      player.tiles.forEach((t, i) => {
-        const cell = host.querySelector(
-          '.tile.placed[data-row="' + t.row + '"][data-col="' + t.col + '"]');
-        if (!cell) return;
-        cell.style.animationDelay = (i * TILING_STEP_MS) + "ms";
-        cell.classList.add("landing");
-        steps = Math.max(steps, i + 1);
-      });
-    });
-  });
-  if (steps) await sleep((steps - 1) * TILING_STEP_MS + TILING_LAST_MS);
-}
-
-/* ------------------------------------------------------------- thinking state */
-let thinkTimer = null;
-
-function startThinking() {
-  if (!S || S.your_turn || S.state.is_terminal) return;
-  const started = Date.now();
-  const budget = S.think_time_s || thinkSeconds;
-  const label = () => {
-    const spent = (Date.now() - started) / 1000;
-    ui.thinkingText.textContent = budget
-      ? "The AI is thinking — " + spent.toFixed(1) + "s of " + budget + "s"
-      : "The AI is thinking";
-  };
-  label();
-  ui.thinking.classList.remove("hidden");
-  ui.scoreAi.classList.add("thinking-now");
-  if (thinkTimer) clearInterval(thinkTimer);
-  thinkTimer = setInterval(label, 100);
-}
-
-function stopThinking() {
-  if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
-  ui.thinking.classList.add("hidden");
-  ui.scoreAi.classList.remove("thinking-now");
-}
-
-/* ------------------------------------------------------------------ overlays */
-function miniTile(color) {
-  const t = tile(color);
-  t.style.width = "26px";
-  t.style.height = "26px";
-  return t;
-}
-
-function tallyFor(report, seat, label) {
-  const p = report.players[seat];
-  const card = node("div", "tally-player");
-  const head = node("div", "tally-head");
-  head.appendChild(node("span", "tally-who", label));
-  head.appendChild(node("span", "tally-delta",
-    (p.delta >= 0 ? "+" + p.delta : String(p.delta)) + " → " + p.score_after + " points"));
-  card.appendChild(head);
-
-  if (p.tiles.length) {
-    const placed = node("div", "placed");
-    p.tiles.forEach((t) => {
-      const box = node("div", "placed-tile");
-      box.appendChild(miniTile(t.color));
-      box.appendChild(node("span", "pts", "+" + t.points));
-      box.appendChild(node("span", "where", "r" + (t.row + 1) + " c" + (t.col + 1)));
-      box.title = t.color_name + " → row " + (t.row + 1) + ", column " + (t.col + 1) +
-        " (run of " + t.h_run + " across, " + t.v_run + " down)";
-      placed.appendChild(box);
-    });
-    card.appendChild(placed);
-    card.appendChild(node("div", "tally-line",
-      "Wall tiles: +" + p.tiling_points + " from " + p.tiles.length + " tile" + (p.tiles.length > 1 ? "s" : "")));
-  } else {
-    card.appendChild(node("div", "tally-line", "No pattern line was full — nothing moved to the wall."));
-  }
-
-  const floorBits = [];
-  if (p.floor.tiles.length) floorBits.push(p.floor.tiles.length + " tile" + (p.floor.tiles.length > 1 ? "s" : ""));
-  if (p.floor.marker) floorBits.push("the first-player marker");
-  card.appendChild(node("div", "tally-line", floorBits.length
-    ? "Floor line: " + floorBits.join(" and ") + " → " + p.floor.penalty
-    : "Floor line: clean."));
-  if (p.carried_rows.length) {
-    card.appendChild(node("div", "tally-line", "Carried over: " + p.carried_rows
-      .map((r) => r.count + " " + COLORS[r.color] + " in row " + (r.row + 1)).join(", ")));
-  }
-  return card;
-}
-
-function queueRoundSheet(report) {
-  const body = node("div", "tally");
-  body.appendChild(tallyFor(report, S.human_seat, "You"));
-  body.appendChild(tallyFor(report, S.ai_seat, "AI · " + S.agent_name));
-  if (!report.game_over) {
-    body.appendChild(node("div", "tally-line",
-      (report.next_first_player === S.human_seat ? "You" : "The AI") + " start" +
-      (report.next_first_player === S.human_seat ? "" : "s") + " the next round."));
-  }
-  sheets.push({ title: "Round " + (report.round + 1) + " tiled", body: body, cta: "Carry on" });
-}
-
-function queueFinalSheet(final) {
-  const body = node("div");
-  const table = node("table", "bonus-table");
-  const head = node("thead");
-  const hr = node("tr");
-  ["", "Before bonus", "Rows ×2", "Columns ×7", "Colours ×10", "Bonus", "Final"]
-    .forEach((h) => hr.appendChild(node("th", null, h)));
-  head.appendChild(hr);
-  table.appendChild(head);
-  const tbody = node("tbody");
-  [[S.human_seat, "You"], [S.ai_seat, "AI · " + S.agent_name]].forEach(([seat, label]) => {
-    const b = final.bonuses[seat];
-    const tr = node("tr");
-    tr.appendChild(node("td", null, label));
-    tr.appendChild(node("td", null, String(b.score_before_bonus)));
-    tr.appendChild(node("td", null, b.rows + " (+" + b.row_points + ")"));
-    tr.appendChild(node("td", null, b.cols + " (+" + b.col_points + ")"));
-    tr.appendChild(node("td", null, b.colors + " (+" + b.color_points + ")"));
-    tr.appendChild(node("td", null, "+" + b.total));
-    const total = node("td", "final-score", String(b.final_score));
-    if (final.winner === seat) total.classList.add("win");
-    tr.appendChild(total);
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  body.appendChild(table);
-  if (final.winner === null) {
-    body.appendChild(node("p", "tally-line", "Level on score and on completed rows — the rulebook calls that a draw."));
-  }
-  if (final.exhausted) {
-    body.appendChild(node("p", "tally-line", "The bag and the lid ran dry, so the game stopped early."));
-  }
-  sheets.push({ title: final.headline, body: body, cta: "Deal another" });
-}
-
-/** Resolves once no overlay is up — tiles should never fly behind a sheet. */
-function waitForSheets() {
-  if (ui.overlay.classList.contains("hidden") && !sheets.length) return Promise.resolve();
-  return new Promise((done) => sheetWaiters.push(done));
-}
-
-function showNextSheet() {
-  const sheet = sheets.shift();
-  if (!sheet) {
-    ui.overlay.classList.add("hidden");
-    const waiting = sheetWaiters;
-    sheetWaiters = [];
-    waiting.forEach((done) => done());
-    return;
-  }
-  ui.overlayTitle.textContent = sheet.title;
-  ui.overlayBody.innerHTML = "";
-  ui.overlayBody.appendChild(sheet.body);
-  ui.overlayOk.textContent = sheet.cta || "Carry on";
-  ui.overlay.classList.remove("hidden");
-  ui.overlayOk.focus();
-}
-
-/* --------------------------------------------------------------------- wiring */
-/** Show/hide the spec + think fields and the note under the opponent dropdown. */
+/* -------------------------------------------------------------------- wiring */
 function syncOpponentFields(focusSpec) {
   const choice = ui.opponent.value;
   ui.specField.classList.toggle("hidden", choice !== "custom");
@@ -916,16 +622,16 @@ ui.opponent.addEventListener("change", () => syncOpponentFields(true));
 ui.think.addEventListener("change", () => { thinkSeconds = Number(ui.think.value) || 0; });
 ui.hint.addEventListener("click", askHint);
 ui.cancel.addEventListener("click", () => { sel = null; suggestion = null; render(); });
-ui.overlayOk.addEventListener("click", () => {
-  const wasFinal = ui.overlayOk.textContent === "Deal another";
-  showNextSheet();
-  if (wasFinal && !sheets.length) newGame();
+ui.coach.addEventListener("change", () => {
+  coachOn = ui.coach.checked;
+  syncCoachAvailability();
+  if (coachOn) toast("Coach mode on — your moves are scored by the AI's own search.", "good");
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  if (!ui.overlay.classList.contains("hidden")) showNextSheet();
-  else if (sel) { sel = null; suggestion = null; render(); }
+  if (event.key === "Escape" && sel) { sel = null; suggestion = null; render(); }
 });
 
+status.set({ headline: "Dealing…", detail: "picking up the tiles", tone: "idle" });
+syncCoachAvailability();
 loadAgentList();
 refresh().then(resumeIfPending);

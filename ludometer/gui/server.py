@@ -6,7 +6,7 @@ service). The page in ``web/play/`` is served from disk and talks to:
 ======================  ===========================================================
 ``POST /api/new``       ``{opponent_spec, human_plays_first, seed?}`` -> full state
 ``GET  /api/state``     full state, legal actions, AI's last move, game log
-``POST /api/act``       ``{action_id, defer_ai?}`` -> human move (+ AI reply)
+``POST /api/act``       ``{action_id, defer_ai?, coach?}`` -> human move (+ reply)
 ``POST /api/ai``        the AI's deferred reply, computed with its time budget
 ``GET  /api/hint``      the heuristic agent's suggestion for the human's turn
 ``GET  /api/agents``    the agent specs the dropdown offers
@@ -20,6 +20,12 @@ running game.
 board and sets ``ai_pending``; the page then calls ``POST /api/ai``, which spends
 the whole per-move time budget and reports how many positions the search visited.
 That split is what lets the page show the AI thinking and animate its move.
+
+``POST /api/act`` with ``coach`` runs the opponent's own search on the position
+*before* the move is applied and returns its verdict on it (see
+:mod:`ludometer.gui.coach`), attached to the move's log entry. That is the only
+request coach mode makes slower, by its own ~2 s budget, and the page shows a
+"rating your move" clock while it is out.
 
 ``/api/agents`` resolves the ``best`` spec (strongest rated checkpoint on disk)
 on every call and offers it as the default opponent when one exists, so the page
@@ -215,12 +221,17 @@ def create_app(play_dir: Path | None = None) -> Flask:
         defer = payload.get("defer_ai", False)
         if not isinstance(defer, bool):
             return fail("defer_ai must be true or false")
+        coach = payload.get("coach", False)
+        if not isinstance(coach, bool):
+            return fail("coach must be true or false")
         with lock:
             session = current()
             if session is None:
                 return fail("no game in progress — POST /api/new first", 409)
             try:
-                return jsonify(session.play_human(int(raw), defer_ai=defer))
+                return jsonify(
+                    session.play_human(int(raw), defer_ai=defer, coach=coach)
+                )
             except IllegalMove as exc:
                 return fail(str(exc))
             except ValueError as exc:  # engine-level rejection

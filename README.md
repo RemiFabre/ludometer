@@ -120,15 +120,39 @@ Elo ratings are measured at the trainer's own eval sims (100 per move), so at a 
 the checkpoint searches **50–100× more positions than its listed rating was measured at**
 and plays meaningfully above it. The listed Elo is a floor, not a ceiling.
 
-A turn now plays out in three beats: your move lands immediately, the AI visibly thinks for
-its budget (with the clock running under the table), then its move is animated — the source
-factory lights up and the tiles travel to its board before the position updates. Your input
-is locked while that happens, and completed pattern lines slide into the wall at round end.
+**The table, at a glance.** Nothing on this page ever covers the board — there are no
+pop-ups at all. A wide **status band** across the top always says what is happening
+(*“Your turn — pick a colour”*, *“AI is thinking — 2.1s of 5s”*, *“AI took 3 red from
+factory 2 → row 4”*, *“You won 74–68”*) and keeps the running score; when the AI is
+searching, the band itself is the clock. Both boards sit **side by side, identical** — you
+on the left, the AI on the right, same size, same rows — laid out like the cardboard one,
+pattern line row *r* level with wall row *r*, in the base game's colours (cobalt, ochre,
+terracotta, charcoal, ice) with ghosted diamonds on the empty wall squares. Round scoring
+and the end-game bonus breakdown appear **inline under the boards**, so the final position
+stays there to be inspected. The move log sits below, every entry drawn the same way.
 
-The board is laid out like the cardboard one: pattern line row *r* sits level with wall row
-*r*, right-aligned, so you can see at a glance which wall square a line is feeding. Tile
-colours match the base game (cobalt, ochre, terracotta, charcoal, ice), including the
-ghosted diamonds on the empty wall squares.
+Everything that moves is animated in a straight line, about half a second per group: tiles
+from a factory to your pattern line or floor (your own moves included), the factory's
+leftovers into the middle, full pattern lines onto the wall at round end, and the floor line
+into the lid. Input is locked only while the tiles are actually travelling.
+
+**Coach mode** (the toggle above the move log) scores *your* moves with the AI's own
+evaluation — not a metric of our own. Before your move is applied, the same PUCT search the
+opponent plays with runs on your position, and the log shows
+
+    delta = Q(your move) − max Q over the children the search explored
+
+on the network's own [−1, 1] value scale: `0.00` means you played the move the AI would have
+played, `−0.06` means the search values yours six hundredths of a win worse, and at `−0.02`
+or worse the entry also names the move it preferred. A move the search never visited is
+reported as **unrated** rather than given a made-up number. It costs a couple of seconds per
+turn (a dedicated ~2 s budget, capped at 3 s even against a 10 s opponent) and the band shows
+a *“rating your move”* clock while it thinks. It needs a searching opponent, so the toggle is
+disabled against the scripted baselines.
+
+The board, the animations, the status band, the log and the scoring panels live in
+`web/play/ui/` as framework-free modules that take state JSON and know nothing about the
+server — `web/play/ui/PORTING.md` explains how the GitHub Pages player adopts them.
 
 Same thing without the browser (the GUI, the arena and the trainer share one registry):
 

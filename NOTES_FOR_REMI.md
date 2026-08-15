@@ -4,6 +4,65 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-15 — Local GUI redesigned: no pop-ups, twin boards, inline scoring, **coach mode**
+
+`uv run ludometer-gui` looks quite different, from your notes after playing more games.
+
+- **Every pop-up is gone.** No round-end modal, no game-end modal, no overlay element left in
+  the DOM at all (a headless-Chrome check asserts that). What replaced them is a wide
+  **status band** at the top that always answers "what is happening": *"Your turn — pick a
+  colour"*, *"AI is thinking — 2.1s of 5s"* (the band's own bar fills as the budget burns),
+  *"AI took 3 red from factory 2 → row 4"*, *"Round 3 scoring"*, *"You won 74–68"*, with the
+  running score on the right.
+- **Both boards side by side, identical** — you left, AI right, same size, same rows, same
+  code path (one `createBoard()`, `interactive` is the only difference). The move log moved
+  *below* the boards and every entry is now drawn identically; the last entry is no longer
+  styled like a title.
+- **Scoring is inline.** The round tally and the end-game bonus breakdown (rows ×2, columns
+  ×7, colours ×10, per player) appear in a panel under the boards, so the final position
+  stays on screen and inspectable instead of being hidden behind a sheet.
+- **Everything that moves, moves.** Straight-line flights, ~0.5 s per group: factory →
+  pattern line/floor (**your own moves too**, which was the biggest omission), the factory's
+  leftovers → the middle, full pattern lines → the wall at round end, floor line → the lid.
+  A plain turn locks input for ~1.9 s (your flight + the AI's + a beat), a round-boundary
+  turn for ~3.3 s; measured in headless Chrome.
+
+**Coach mode** is the new toggle, above the move log. It scores your moves with *the AI's own
+evaluation* — nothing invented:
+
+> Before your move is applied, the same PUCT search the opponent plays with (same checkpoint,
+> same net, same c_puct) runs on your position, and the log entry shows
+> `delta = Q(your move) − max Q over explored children` on the net's own [−1, 1] scale.
+> `0.00` = you played its move; `−0.06` = it values yours six hundredths of a win worse. From
+> `−0.02` down, the entry also names the move it preferred. A move the search never visited
+> is **"unrated"**, never a fake number.
+
+Turn it on mid-game whenever you like; it needs a searching opponent (greyed out against the
+baselines). Decisions worth knowing:
+
+- **Where the time goes.** The rating runs inside `POST /api/act`, before the move is
+  committed — it has to see the position you chose from. Budget: your opponent's think time,
+  but **capped at 3 s** (default 2 s when the opponent replies instantly), so a 10 s opponent
+  does not double every turn. The page shows a *"rating your move — 1.2s of 2s"* clock, then
+  your tiles fly as usual.
+- **It cannot disturb the opponent.** `ludometer/gui/coach.py` subclasses MCTS
+  (`RootStatsMCTS`) purely to read the root's child statistics back out, and runs its own
+  tree over the opponent's *evaluator* — same weights, separate search, Dirichlet noise off,
+  tree reuse off. **`ludometer/train/mcts.py` was not touched**, which matters while run3 is
+  importing it live.
+- **Never costs you a move**: any failure (no torch, a bad checkpoint, a search that ran out
+  of time) comes back as an `unrated` verdict with the reason, and the move still lands.
+
+Also: `web/play/ui/` is now a clean, framework-free kit (board renderer, status band, log,
+scoring panels, flights, shared CSS) that takes state JSON and has no idea a server exists —
+`web/play/ui/PORTING.md` is the note for whoever ports it into the GitHub Pages player next.
+Tests: `tests/test_gui.py` is green (46 tests, coach mode included at 0.1 s budgets), plus a
+scripted API game with the coach on every move.
+
+One known gap, deliberately left: when the AI plays twice in a row across a round boundary,
+only its first move is animated — the page never observes the intermediate position after the
+refill. The move still appears in the log and on the board.
+
 ## 2026-08-15 — run2 retired at +2020, run3 (structured net) is training
 
 - **run2 final**: best checkpoint **ckpt-023040 at +2020 ± 39** after ~24.5k games — a hair

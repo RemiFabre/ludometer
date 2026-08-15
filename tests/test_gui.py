@@ -2,7 +2,7 @@
 
 Flask test client only — no browser. What matters here is that the API never
 lies to the page: legal action ids are playable, illegal input is a clean 400
-instead of a traceback, and the round-end reports the overlays render agree with
+instead of a traceback, and the round-end reports the scoring panels render agree with
 the engine's own scoring.
 """
 
@@ -15,10 +15,18 @@ import pytest
 
 from ludometer.agents.registry import load_agent
 from ludometer.azul.engine import CENTER, FLOOR, AzulState, encode_action
+from ludometer.gui import session as session_module
+from ludometer.gui.coach import COACH_MAX_THINK_S, MoveCoach, coach_time_for
 from ludometer.gui.moves import describe_action, final_report, round_report
 from ludometer.gui.server import PLAY_DIR, create_app
 from ludometer.gui.session import GameSession
-from ludometer.train.mcts import MCTS, TIME_CHECK_EVERY, MCTSConfig, UniformEvaluator
+from ludometer.train.mcts import (
+    MCTS,
+    TIME_CHECK_EVERY,
+    MCTSConfig,
+    RolloutEvaluator,
+    UniformEvaluator,
+)
 
 MAX_PLIES = 400  # a 2-player game is ~40 moves; this is only a runaway guard
 
@@ -46,16 +54,54 @@ def test_page_is_served(client):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert "app.js" in html and "style.css" in html
-    for asset in ("app.js", "style.css"):
+    for asset in (
+        "app.js",
+        "style.css",
+        "ui/board.css",
+        "ui/board.js",
+        "ui/dom.js",
+        "ui/animate.js",
+        "ui/status.js",
+        "ui/log.js",
+        "ui/scoring.js",
+    ):
         r = client.get("/" + asset)
         assert r.status_code == 200, asset
         assert r.get_data()
     assert client.get("/nope.js").status_code == 404
 
 
+def test_the_shared_ui_modules_are_page_agnostic():
+    """web/play/ui/ is meant to be lifted into the GitHub Pages player as-is."""
+    for name in (
+        "board.js",
+        "dom.js",
+        "animate.js",
+        "status.js",
+        "log.js",
+        "scoring.js",
+    ):
+        text = (PLAY_DIR / "ui" / name).read_text()
+        assert "/api/" not in text, f"{name} names a server endpoint"
+        assert "fetch(" not in text, f"{name} talks to a server"
+    assert (PLAY_DIR / "ui" / "PORTING.md").is_file()
+
+
 def test_page_has_no_external_resources():
     """The GUI must work offline: no CDN, no remote fonts or images."""
-    for name in ("index.html", "style.css", "app.js"):
+    names = ["index.html", "style.css", "app.js"] + [
+        f"ui/{n}"
+        for n in (
+            "board.css",
+            "board.js",
+            "dom.js",
+            "animate.js",
+            "status.js",
+            "log.js",
+            "scoring.js",
+        )
+    ]
+    for name in names:
         text = (PLAY_DIR / name).read_text()
         for needle in ("http://", "https://", "//cdn", "cdnjs", "googleapis"):
             assert needle not in text, f"{name} references {needle}"
@@ -215,7 +261,7 @@ def test_a_full_game_can_be_played_through_the_api(client, spec):
 
 
 def test_round_reports_match_the_engine(client):
-    """Every overlay number must be the engine's, not a re-derivation of it."""
+    """Every number on the scoring panel is the engine's, not a re-derivation."""
     data = start(client, opponent_spec="greedy", seed=5)
     checked = 0
     while not data["state"]["is_terminal"]:
@@ -614,3 +660,199 @@ def test_defer_ai_must_be_a_boolean(client):
 
 def test_ai_reply_needs_a_game(client):
     assert client.post("/api/ai").status_code == 409
+
+
+# ------------------------------------------------------------------ coach mode
+# Coach mode rates your move with the *opponent's own* search. A checkpoint is
+# not on disk in CI, so these use a searching agent with a rollout evaluator: the
+# same MCTSAgent class the GUI plays against, minus the net. Budgets are 0.1 s.
+COACH_BUDGET = 0.1
+
+
+def searching_agent(seed: int = 0, budget: float = COACH_BUDGET):
+    """An MCTSAgent that really searches, with no checkpoint on disk."""
+    from ludometer.train.mcts_agent import MCTSAgent
+
+    agent = MCTSAgent(
+        evaluator=RolloutEvaluator(seed=seed + 1), sims=64, seed=seed, name="searcher"
+    )
+    agent.set_time_budget(budget)
+    return agent
+
+
+def searching_session(seed: int = 17, budget: float = COACH_BUDGET) -> GameSession:
+    session = GameSession("heuristic", human_plays_first=True, seed=seed)
+    session.agent = searching_agent(seed=seed, budget=budget)
+    session.agent_name = session.agent.name
+    session.think_time_s = budget
+    session.coach_time_s = coach_time_for(budget)
+    session._coach = None
+    return session
+
+
+@pytest.fixture
+def coach_client(monkeypatch):
+    """A test client whose "searcher" opponent searches (see above)."""
+    real = session_module.load_agent
+
+    def fake(spec, seed=None):
+        if spec == "searcher":
+            return searching_agent(seed=int(seed or 0) % 1000)
+        return real(spec, seed=seed)
+
+    monkeypatch.setattr(session_module, "load_agent", fake)
+    app = create_app()
+    app.testing = True
+    with app.test_client() as c:
+        yield c
+
+
+def test_coach_budget_is_capped():
+    assert coach_time_for(0.0) > 0.0
+    assert coach_time_for(2.0) == 2.0
+    assert coach_time_for(10.0) == COACH_MAX_THINK_S  # never doubles a long turn
+
+
+def test_coach_is_only_offered_against_a_searching_opponent():
+    assert GameSession("heuristic", seed=2).coach_available is False
+    assert searching_session().coach_available is True
+
+
+def test_one_search_rates_the_best_move_at_zero_and_the_rest_below():
+    """delta = Q(your move) - max Q over explored children, in the net's units."""
+    session = searching_session(seed=23)
+    coach = session.coach()
+    state = session.state
+    analysis = coach.analyse(state)
+    assert analysis["sims"] > 0 and analysis["elapsed_s"] > 0.0
+    assert analysis["best"] is not None and analysis["children"]
+
+    best = MoveCoach.verdict(analysis, analysis["best"]["action"])
+    assert best["rated"] is True
+    assert best["delta"] == 0.0  # the AI's own choice is the reference point
+    assert best["matched_best"] is True
+    assert best["visits"] >= 1
+
+    for child in analysis["children"]:
+        verdict = MoveCoach.verdict(analysis, child["action"])
+        assert verdict["rated"] is True
+        assert verdict["delta"] <= 0.0
+        assert -2.0 <= verdict["delta"] <= 0.0  # the net's [-1, 1] value scale
+        assert verdict["best_action"] == analysis["best"]["action"]
+        assert verdict["best_text"]
+
+    # a move the search never visited is reported as unrated, never as a number
+    explored = {c["action"] for c in analysis["children"]}
+    unvisited = [a for a in state.legal_actions() if a not in explored]
+    if unvisited:
+        verdict = MoveCoach.verdict(analysis, unvisited[0])
+        assert verdict["unrated"] is True and "delta" not in verdict
+        assert "never explored" in verdict["reason"]
+
+
+def test_a_forced_move_is_rated_zero_without_searching():
+    session = searching_session(seed=31)
+    coach = session.coach()
+
+    class OneMove:
+        def legal_actions(self):
+            return [7]
+
+    rating = coach.rate(OneMove(), 7)
+    assert rating["rated"] is True and rating["forced"] is True
+    assert rating["delta"] == 0.0 and rating["sims"] == 0
+
+
+def test_the_coach_never_disturbs_the_opponents_own_search():
+    session = searching_session(seed=41)
+    opponent = session.agent.mcts
+    coach = session.coach()
+    assert coach.search is not opponent
+    assert coach.search.evaluator is session.agent.evaluator  # same net, same eval
+    assert coach.search.add_noise is False
+    assert coach.search.config.tree_reuse is False
+    before = (opponent.nodes_created, opponent.evals)
+    coach.analyse(session.state)
+    assert (opponent.nodes_created, opponent.evals) == before
+
+
+def test_a_rated_move_carries_its_verdict_into_the_log():
+    session = searching_session(seed=53)
+    action = session.legal_for_human()[0]
+    payload = session.play_human(action, defer_ai=True, coach=True)
+    rating = payload["coach"]
+    assert rating["rated"] is True
+    assert rating["delta"] <= 0.0
+    assert rating["sims"] > 0
+    entry = [e for e in payload["log"] if e.get("coach")][-1]
+    assert entry["kind"] == "move" and entry["side"] == "human"
+    assert entry["coach"] == rating
+    assert payload["human_move"]["coach"] == rating
+    assert payload["coach_available"] is True
+    assert payload["coach_time_s"] == COACH_BUDGET
+
+
+def test_coach_off_runs_no_extra_search():
+    session = searching_session(seed=59)
+    payload = session.play_human(session.legal_for_human()[0], defer_ai=True)
+    assert payload["coach"] is None
+    assert session._coach is None, "no rating search should have been built"
+    assert all("coach" not in entry for entry in payload["log"])
+    assert payload["human_move"].get("coach") is None
+
+
+def test_coach_mode_over_the_api_through_a_whole_game(coach_client):
+    """Scripted game with the coach on every human move, end to end."""
+    data = start(
+        coach_client, opponent_spec="searcher", think_time_s=COACH_BUDGET, seed=71
+    )
+    assert data["coach_available"] is True
+    assert data["coach_time_s"] == COACH_BUDGET
+    rated = 0
+    plies = 0
+    while not data["state"]["is_terminal"]:
+        action = data["human_legal_actions"][0]
+        data = coach_client.post(
+            "/api/act", json={"action_id": action, "defer_ai": True, "coach": True}
+        ).get_json()
+        rating = data["coach"]
+        assert rating is not None
+        if rating.get("rated"):
+            assert rating["delta"] <= 0.0
+            assert rating["budget_s"] == COACH_BUDGET
+            rated += 1
+        else:
+            assert rating["unrated"] is True and rating["reason"]
+        if data["ai_pending"]:
+            response = coach_client.post("/api/ai")
+            assert response.status_code == 200, response.get_json()
+            data = response.get_json()
+        plies += 1
+        assert plies < MAX_PLIES
+    assert rated >= 5
+    assert data["final"] is not None
+    coached = [e for e in data["log"] if e.get("coach")]
+    assert len(coached) == plies
+
+
+def test_coach_on_a_baseline_opponent_is_unrated_not_an_error(client):
+    """The toggle must never cost you a move, even with nothing to borrow."""
+    data = start(client)  # heuristic: no search to reuse
+    assert data["coach_available"] is False
+    response = client.post(
+        "/api/act", json={"action_id": data["human_legal_actions"][0], "coach": True}
+    )
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["coach"]["unrated"] is True
+    assert "searching opponent" in payload["coach"]["reason"]
+    assert payload["human_move"]["side"] == "human"  # the move still happened
+
+
+def test_coach_must_be_a_boolean(client):
+    data = start(client)
+    response = client.post(
+        "/api/act", json={"action_id": data["human_legal_actions"][0], "coach": "yes"}
+    )
+    assert response.status_code == 400 and "coach" in response.get_json()["error"]
+    assert client.get("/api/state").get_json()["ply"] == 0
