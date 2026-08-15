@@ -54,8 +54,14 @@
   <!-- the panel opens inline and pushes the table down; this page has no pop-ups -->
   <section id="settings" aria-label="Settings"></section>
 
-  <section class="panel">
+  <section class="panel middle-panel">
     <h2 class="panel-title">The middle of the table</h2>
+    <!-- the tiles you are holding while you choose a row; a picture of the
+         selection, gone the moment you change your mind -->
+    <div class="hand" id="hand" hidden aria-hidden="true">
+      <span class="hand-label">In hand</span>
+      <div class="hand-tiles" id="hand-tiles"></div>
+    </div>
     <div id="middle"></div>
     <div class="middle-actions">
       <span class="brand-sub" id="prompt">Loading the net — the tiles will be dealt in a moment.</span>
@@ -107,6 +113,9 @@
 </main>
 
 <div class="fly-layer" id="fly" aria-hidden="true"></div>
+<!-- score pop-ups get their own layer: a number is not a tile, and nothing that
+     counts tile flights should ever count these -->
+<div class="pop-layer" id="pops" aria-hidden="true"></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

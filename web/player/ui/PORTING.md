@@ -19,9 +19,10 @@ files, then copy them across; `tests/test_gui.py` fails if the two ever drift.
 | `log.js` | `renderLog`, `glyphRun`, `coachChip`, `formatDelta` | the move log — newest first, tiles drawn as tiles |
 | `scoring.js` | `renderRoundPanel`, `renderFinalPanel`, `clearScoring` | inline round and end-game scoring |
 | `animate.js` | `flyTiles`, `flightDuration`, `sleep`, `speed`, `setSpeed`, `initSpeed` | straight-line tile flights, and the one switch that governs motion |
-| `settings.js` | `createSettings` | the gear and its inline panel |
-| `history.js` | `createHistory`, `bindHistoryKeys` | ← / → move navigation over stored positions |
-| `board.css` | — | tiles, boards, middle, status band, settings, navigator, log, scoring, flights |
+| `settings.js` | `createSettings` | the gear and its inline panel; pass `{popups: true}` for the score pop-up switch |
+| `history.js` | `createHistory`, `bindHistoryKeys` | ← / → move navigation over stored positions; `onChange` receives `{from, to}` plies so a page can animate the step |
+| `popups.js` | `popScore`, `popupsOn`, `setPopups`, `initPopups` | score pop-ups — "+3" floating off the square that earned it |
+| `board.css` | — | tiles, boards, middle, status band, settings, navigator, log, scoring, flights, the hand tray, score pop-ups |
 
 ## The state the modules expect
 

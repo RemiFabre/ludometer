@@ -204,6 +204,15 @@ const INSTRUMENT = `
       window.__anim.durations.push(Math.round(parseFloat(d) * 1000));
     }));
   }).observe(document.getElementById("fly"), { childList: true });
+  // score pop-ups live in their own layer, counted apart from tile flights;
+  // a page without the layer keeps __pops undefined so its check skips
+  const popLayer = document.getElementById("pops");
+  if (popLayer) {
+    window.__pops = 0;
+    new MutationObserver((records) => {
+      records.forEach((r) => { window.__pops += r.addedNodes.length; });
+    }).observe(popLayer, { childList: true });
+  }
   document.addEventListener("azul:animated", (e) => {
     window.__anim.moves.push({
       ply: e.detail.ply, side: e.detail.side, at: window.__anim.flights,
@@ -319,6 +328,19 @@ async function checkContrast(page, label, errors) {
     }
     out.slots = [...document.querySelectorAll(".board .slot")].slice(0, 4).map(look);
     out.panel = look(document.querySelector("#board-human"));
+    // the wall's colour hint: the outlined diamond inside an empty square must
+    // be saturated, thick and near-opaque — visible colour on a neutral well
+    out.motifs = {};
+    for (let c = 0; c < 5; c++) {
+      const m = document.querySelector('.board .cell.empty[data-color="' + c + '"]');
+      if (!m) continue;
+      const cs = getComputedStyle(m, "::after");
+      out.motifs[c] = {
+        chroma: chroma(px(cs.borderTopColor)),
+        width: parseFloat(cs.borderTopWidth) || 0,
+        opacity: parseFloat(cs.opacity) || 0,
+      };
+    }
     return out;
   `);
 
@@ -351,6 +373,14 @@ async function checkContrast(page, label, errors) {
           `(Δchroma ${dc.toFixed(2)}, Δluma ${dl.toFixed(2)})`
       );
     }
+  });
+  Object.entries(read.motifs).forEach(([c, m]) => {
+    const chromatic = c !== "3"; // charcoal's motif is a grey by design
+    if (chromatic && m.chroma < 0.25) {
+      errors.push(`${label}: wall motif ${c} carries no colour (chroma ${m.chroma.toFixed(2)} < 0.25)`);
+    }
+    if (m.width < 2) errors.push(`${label}: wall motif ${c} is too thin (${m.width}px < 2px)`);
+    if (m.opacity < 0.8) errors.push(`${label}: wall motif ${c} is too faint (opacity ${m.opacity} < 0.8)`);
   });
   const worst = Object.entries(read.tiles)
     .filter(([c]) => read.cells[c])
@@ -543,6 +573,166 @@ async function checkEveryMoveAnimated(page, label, errors) {
   );
 }
 
+/* The v4 behaviours, on pages that have them (the hosted player; the local GUI
+ * has no hand tray, pop layer or in-page coach queue yet — it skips cleanly). */
+
+/** Picking a colour must act the selection out at once — and reversibly. */
+async function checkHeldPreview(page, label, errors) {
+  if (!(await page.eval('return !!document.getElementById("hand");'))) {
+    console.log(`    ${label}: no hand tray on this page — skipped`);
+    return;
+  }
+  await setSpeed(page, 1);
+  await until("your turn", () => page.eval(`
+    return !document.body.classList.contains("locked") &&
+      !!document.querySelector("#middle button.tile:not([disabled])");`), 60000);
+  await page.eval(`
+    window.__anim.flights = 0;
+    document.querySelector("#middle button.tile:not([disabled])").click();
+    return true;
+  `);
+  await sleep(150); // the flight counter is fed by a MutationObserver (a microtask)
+  const out = await page.eval(`
+    return {
+      flights: window.__anim.flights,
+      hand: !document.getElementById("hand").hidden,
+      slots: document.querySelectorAll("#hand-tiles .slot").length,
+    };
+  `);
+  if (!out.flights) errors.push(`${label}: picking a colour flew nothing`);
+  if (!out.hand || !out.slots) errors.push(`${label}: the hand tray did not open on pick`);
+  const back = await page.eval(`
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    return {
+      hand: !document.getElementById("hand").hidden,
+      ghosts: document.querySelectorAll("#fly .fly-tile").length,
+      hidden: [...document.querySelectorAll("#middle .tile")]
+        .filter((t) => t.style.visibility === "hidden").length,
+    };
+  `);
+  if (back.hand) errors.push(`${label}: Escape left the hand tray open`);
+  if (back.ghosts) errors.push(`${label}: Escape left parked tile clones behind`);
+  if (back.hidden) errors.push(`${label}: Escape left dish tiles hidden`);
+  console.log(`    ${label}: pick acted out ${out.flights} tiles into the tray; Escape reset it`);
+}
+
+/** With coach mode on, the move must land at once — the verdict follows. */
+async function checkCoachImmediate(page, label, errors) {
+  if (!(await page.eval('return !!document.getElementById("pops");'))) return;
+  const available = await page.eval(`
+    const box = document.getElementById("coach");
+    if (box.disabled) return false;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    return true;
+  `);
+  if (!available) return;
+  const before = await page.eval(
+    'return document.querySelectorAll(\'#log .log-entry[data-kind="move"]\').length;'
+  );
+  let outcome = "wait";
+  for (let i = 0; i < 20 && outcome !== "played"; i++) {
+    outcome = await page.eval(PLAY_ONE);
+    if (outcome !== "played") await sleep(250);
+  }
+  if (outcome !== "played") {
+    errors.push(`${label}: could not play a coached move (${outcome})`);
+    return;
+  }
+  const t0 = Date.now();
+  let landed = null;
+  try {
+    await until("the coached move to land", () => page.eval(
+      `return document.querySelectorAll('#log .log-entry[data-kind="move"]').length > ${before};`
+    ), 5000);
+    landed = Date.now() - t0;
+  } catch {
+    errors.push(`${label}: the coached move never landed`);
+  }
+  // the old flow rated first (2s search) and only then moved; the new one must
+  // put the move on the table in well under a second of search time
+  if (landed !== null && landed > 1600) {
+    errors.push(`${label}: with coach on, the move took ${landed}ms to land`);
+  }
+  const grade = await page.eval(`
+    const chip = document.querySelector("#log .coach-chip");
+    return chip ? chip.dataset.grade : null;
+  `);
+  if (!grade) errors.push(`${label}: the coached move has no chip at all`);
+  await until("the turn to finish", () =>
+    page.eval('return !document.body.classList.contains("locked");'), 90000);
+  try {
+    await until("the coach verdict", () => page.eval(`
+      const chip = document.querySelector("#log .coach-chip");
+      return chip && chip.dataset.grade !== "pending";`), 30000);
+  } catch {
+    errors.push(`${label}: the coach verdict never filled in`);
+  }
+  await page.eval(`
+    const box = document.getElementById("coach");
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    return true;
+  `);
+  console.log(`    ${label}: coached move landed in ${landed}ms, verdict filled in behind it`);
+}
+
+/** Round scoring must have popped its numbers where they were earned. */
+async function checkScorePops(page, label, errors) {
+  const pops = await page.eval("return window.__pops === undefined ? null : window.__pops;");
+  if (pops === null) return;
+  const rounds = await page.eval(
+    'return document.querySelectorAll(\'#log .log-entry[data-kind="round"]\').length;'
+  );
+  if (rounds && !pops) {
+    errors.push(`${label}: ${rounds} round(s) scored but no score pop-up ever appeared`);
+  }
+  console.log(`    ${label}: ${pops} score pop-up(s) over ${rounds} scored round(s)`);
+}
+
+/** Stepping through the history must animate the step. */
+async function checkNavAnimation(page, label, errors) {
+  if (!(await page.eval('return !!document.getElementById("pops");'))) return;
+  await setSpeed(page, 2);
+  const key = (k) => page.eval(`
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "${k}", bubbles: true, cancelable: true }));
+    return true;
+  `);
+  await page.eval("window.__anim.flights = 0; return true;");
+  // a step that crosses a round boundary redraws without flying (deliberate),
+  // so allow a few steps in each direction before concluding nothing animates
+  await key("ArrowLeft");
+  const entered = await page.eval(
+    'return document.body.classList.contains("viewing");'
+  );
+  await sleep(420);
+  let back = await page.eval("return window.__anim.flights;");
+  for (let i = 0; i < 3 && !back; i++) {
+    await key("ArrowLeft");
+    await sleep(420);
+    back = await page.eval("return window.__anim.flights;");
+  }
+  let forward = back;
+  for (let i = 0; i < 4 && forward <= back; i++) {
+    const browsing = await page.eval('return document.body.classList.contains("viewing");');
+    if (!browsing) break;
+    await key("ArrowRight");
+    await sleep(420);
+    forward = await page.eval("return window.__anim.flights;");
+  }
+  await key("End");
+  await sleep(450);
+  const stranded = await page.eval(`
+    return [...document.querySelectorAll(".board .tile, #middle .tile")]
+      .filter((t) => t.style.visibility === "hidden").length;
+  `);
+  if (!entered) errors.push(`${label}: ← did not enter the history`);
+  if (!back) errors.push(`${label}: stepping back animated nothing`);
+  if (forward <= back) errors.push(`${label}: stepping forward animated nothing`);
+  if (stranded) errors.push(`${label}: a history step left ${stranded} tile(s) hidden`);
+  console.log(`    ${label}: history steps flew ${forward} tiles (${back} back, ${forward - back} forward)`);
+}
+
 /* ------------------------------------------------------------------- the pages */
 async function checkPage({ name, url, deal, errors, shots }) {
   console.log(`\n== ${name} — ${url}`);
@@ -597,6 +787,13 @@ async function checkPage({ name, url, deal, errors, shots }) {
     await checkLog(page, name, errors);
     await checkCoach(page, name, errors);
     await checkHistory(page, name, errors);
+
+    // 4b. The v4 behaviours: the acted-out selection, the coach that never
+    //     blocks a move, score pop-ups, and animated history steps.
+    await checkScorePops(page, name, errors);
+    await checkNavAnimation(page, name, errors);
+    await checkHeldPreview(page, name, errors);
+    await checkCoachImmediate(page, name, errors);
 
     // 5. Nothing may cover the board, settings panel included.
     const overlays = await page.eval(`

@@ -67,12 +67,20 @@
   /* ========================================================== empty slots ==
    * One neutral, for every empty square on the board. Deliberately duller and
    * darker than any glaze and than the plaster around it, so a hole looks like
-   * a hole. `--slot-motif` is how strongly the wall's colour hint shows. */
+   * a hole. `--slot-motif` is how strongly the wall's colour hint shows, and
+   * `--cN-motif` is the ink it is drawn in — the full glaze by default, so you
+   * can read which colour belongs in a square from across the table. The square
+   * stays a neutral well; only the outlined diamond in it carries the hue. */
   --slot: #c6bda9;
   --slot-lo: #b0a58e;
   --slot-rim: #978b73;
   --slot-shade: rgba(72, 56, 30, .34);
-  --slot-motif: .55;
+  --slot-motif: .9;
+  --c0-motif: var(--c0);
+  --c1-motif: var(--c1);
+  --c2-motif: var(--c2);
+  --c3-motif: var(--c3);
+  --c4-motif: var(--c4);
 
   /* ============================================================== fixtures ==
    * The bowls the tiles sit in, the marker chip, the lid. */
@@ -181,7 +189,10 @@
   --slot-lo: #2b2823;
   --slot-rim: #514b41;
   --slot-shade: rgba(0, 0, 0, .5);
-  --slot-motif: .62;
+  --slot-motif: .9;
+  /* charcoal's glaze is darker than the dusk slot it sits in, so its motif is
+   * drawn in the charcoal *ink* instead — same hue, readable at night */
+  --c3-motif: var(--c3-ink);
 
   --dish: #514c44;
   --dish-hi: #605a50;

@@ -23,8 +23,12 @@ hidden among them. Now:
   it stands *on* the board;
 * an **empty slot** is `--slot`: one neutral, everywhere, sunk into the board
   with an inset shadow — it is a hole *in* the board;
-* the wall keeps its pattern as a thin **outlined** diamond in `--cN-ink`, at
-  `--slot-motif` opacity. Enough to plan with. Never enough to look like a tile.
+* the wall keeps its pattern as a thick **outlined** diamond in `--cN-motif`
+  (the full glaze by default, so the colour reads from across the table), with
+  a `--cN-wash` inside it, at `--slot-motif` opacity. Outlined, never filled —
+  enough to plan with, never enough to look like a tile. A skin whose slot is
+  too close to a glaze re-points that colour's motif (dusk does this for
+  charcoal: `--c3-motif: var(--c3-ink)`).
 
 Keep that contrast, whatever else you change. `web/play/test/gui.test.mjs`
 checks it numerically: every empty square must be near-neutral (low chroma)
@@ -37,7 +41,7 @@ square must be visibly recessed while every tile is visibly raised.
 |---|---|---|
 | the table | cloth, plaster, mortar, ink | `--linen`, `--plaster`, `--grout`, `--ink-soft` |
 | the five glazes | one set of five per tile colour | `--c0` … `--c4`, plus `-hi` `-lo` `-rim` `-ink` `-wash` |
-| empty slots | the neutral well | `--slot`, `--slot-lo`, `--slot-rim`, `--slot-shade`, `--slot-motif` |
+| empty slots | the neutral well | `--slot`, `--slot-lo`, `--slot-rim`, `--slot-shade`, `--slot-motif`, `--cN-motif` |
 | fixtures | factory dishes, the centre, the marker, the lid | `--dish`, `--marker-face`, `--lid-receiving` |
 | meaning | what the status band and the coach are *about* | `--tone-you`, `--tone-ai`, `--grade-blunder`, `--gain` |
 | chrome | panels, buttons, fields, focus | `--panel-top`, `--btn-primary-top`, `--focus-ring` |

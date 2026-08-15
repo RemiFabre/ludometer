@@ -1,17 +1,20 @@
 /* The settings panel: a gear, and what is behind it.
  *
  * Inline, never a pop-up — it opens by pushing the table down, the same way
- * everything else on this page reports itself. There is exactly one setting so
- * far, animation speed, and it exists because the alternative was letting the
- * operating system decide (see animate.js for that story).
+ * everything else on this page reports itself. Animation speed is always here
+ * (it exists because the alternative was letting the operating system decide —
+ * see animate.js for that story); a page that shows score pop-ups asks for
+ * their switch too with `{popups: true}`.
  *
- *   const settings = createSettings(host);   // host is an empty <section>
+ *   const settings = createSettings(host);                  // speed only
+ *   const settings = createSettings(host, {popups: true});  // + score pop-ups
  *
- * `createSettings` reads the stored speed through animate.js and writes it back
- * on every click, so a reload keeps whatever you chose.
+ * Every control reads its stored value through its own module and writes it
+ * back on every click, so a reload keeps whatever you chose.
  */
 
 import { SPEEDS, initSpeed, prefersReducedMotion, setSpeed, speed } from "./animate.js";
+import { initPopups, popupsOn, setPopups } from "./popups.js";
 import { node } from "./dom.js";
 
 const LABELS = { 0: "Off", 0.5: "0.5×", 1: "1×", 2: "2×" };
@@ -75,6 +78,34 @@ export function createSettings(host, options = {}) {
     return b;
   });
 
+  let popFlags = [];
+  if (options.popups) {
+    initPopups();
+    panel.append(
+      node("i", "settings-gap"),
+      node("span", "settings-label", "Score pop-ups")
+    );
+    const flags = node("div", "speeds");
+    flags.setAttribute("role", "group");
+    flags.setAttribute("aria-label", "Score pop-ups");
+    popFlags = [true, false].map((value) => {
+      const b = node("button", "flag", value ? "On" : "Off");
+      b.type = "button";
+      b.dataset.pops = String(value);
+      b.title = value
+        ? "Every point floats off the square that earned it as the round is scored"
+        : "Scoring stays in the panel below the boards";
+      b.addEventListener("click", () => {
+        setPopups(value);
+        sync();
+        if (options.onChange) options.onChange(speed());
+      });
+      flags.appendChild(b);
+      return b;
+    });
+    panel.append(flags);
+  }
+
   host.append(head, panel);
 
   function sync() {
@@ -82,7 +113,12 @@ export function createSettings(host, options = {}) {
     buttons.forEach((b) => {
       b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === now));
     });
-    summary.textContent = now ? "animation " + LABELS[now] : "animation off";
+    popFlags.forEach((b) => {
+      b.setAttribute("aria-pressed", String((b.dataset.pops === "true") === popupsOn()));
+    });
+    const bits = [now ? "animation " + LABELS[now] : "animation off"];
+    if (options.popups) bits.push(popupsOn() ? "pop-ups on" : "pop-ups off");
+    summary.textContent = bits.join(" · ");
     hint.textContent = prefersReducedMotion()
       ? "Your system asks apps to reduce motion. The tiles still move here, because " +
         "this switch — not that one — decides. Pick Off if you would rather they did not."
