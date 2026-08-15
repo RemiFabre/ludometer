@@ -65,6 +65,40 @@ one ply per move is exactly right. A tournament agent sees the position again
 only after the opponent has replied, which would need a second descent, so
 :class:`~ludometer.train.mcts_agent.MCTSAgent` deliberately leaves it off.
 
+Decisive play (opt-in: a net with a margin head)
+------------------------------------------------
+A win/draw/loss value head is *indifferent* between winning by one point and
+winning by forty, so once a game is decided the search plays whichever winning
+move it happens to have visited most — technically correct, and it looks broken.
+
+When the evaluator advertises ``has_margin`` (see
+:class:`~ludometer.train.net.NetEvaluator`) every simulation backs up a **pair**:
+the usual win value ``v`` and a score margin ``m = tanh(score_diff / 20)``, both in
+player 0's frame and both converted per node. Terminal nodes contribute the real
+final margin, not an estimate.
+
+Two things stay untouched, on purpose:
+
+* **PUCT is still driven by the win value alone.** The margin never steers the
+  tree, so search effort is never spent buying points at the cost of a win, and
+  the visit counts — i.e. the *policy targets* — are exactly what they would have
+  been without the head;
+* **the visit distribution is the policy target, unchanged.** The lexicographic
+  pick below only decides which move is *played*. In late self-play that means a
+  position can be labelled with a visit distribution that does not peak on the
+  played move; that is intended (the target still says what search believed, the
+  move says what a human would expect) and it is why the head does not need its
+  own exploration machinery.
+
+:func:`select_play_action` is the pick used whenever a move is played for real
+(temperature-0 self-play moves, ``MCTSAgent.act``, the arena, the GUI): among the
+root children that are *adequately visited* (at least ``decisive_min_visit_frac``
+of the best child's visits) it takes the best win-Q, keeps everyone within
+``decisive_eps`` of it, and plays the one with the highest margin-Q. Winning stays
+lexicographically first; the margin is only ever a tie-break. Without a margin
+head the function is exactly ``select_action(result.policy, ...)``, so run1/run2/
+run3 checkpoints keep bit-identical behaviour.
+
 Time budget (opt-in, GUI only)
 ------------------------------
 ``search(state, time_limit_s=...)`` keeps simulating until the wall clock runs
@@ -80,7 +114,7 @@ import math
 import random
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -88,6 +122,7 @@ import numpy as np
 from ludometer.azul.engine import ACTION_SPACE, CENTER, AzulState
 
 __all__ = [
+    "MARGIN_SCALE",
     "MAX_GAME_MOVES",
     "MCTS",
     "STALL_ROUNDS",
@@ -97,8 +132,22 @@ __all__ = [
     "RolloutEvaluator",
     "SearchResult",
     "UniformEvaluator",
+    "decisive_action",
+    "margin_target",
     "select_action",
+    "select_play_action",
 ]
+
+# Points that saturate the margin target: tanh(diff / 20) is ~0.76 at 20 points
+# and ~0.96 at 40, so ordinary Azul margins land on the informative part of the
+# curve instead of pinning the head at +/-1.
+MARGIN_SCALE = 20.0
+
+
+def margin_target(score_diff: float) -> float:
+    """``tanh(score_diff / 20)`` — the margin head's target and MCTS's backup."""
+    return math.tanh(score_diff / MARGIN_SCALE)
+
 
 # A game where neither side ever completes a pattern line never terminates (no
 # wall tile is placed, so no row is ever completed and tiles just cycle through
@@ -114,7 +163,9 @@ MAX_GAME_MOVES = 400
 TIME_CHECK_EVERY = 8
 
 # An evaluator maps (state, legal actions) to (priors aligned with `legal`,
-# value in [-1, 1] for the player to move).
+# value in [-1, 1] for the player to move) — or, with a margin head, to a
+# 3-tuple that appends the margin, also in [-1, 1] and also for the player to
+# move. An evaluator that returns 3-tuples sets `has_margin = True` on itself.
 Evaluator = Callable[[AzulState, Sequence[int]], "tuple[np.ndarray, float]"]
 
 
@@ -129,6 +180,13 @@ class MCTSConfig:
     chance_children: int = 4
     fpu: float = 0.0  # Q assumed for an unvisited edge (parent's frame)
     tree_reuse: bool = False  # keep the chosen child's subtree between moves
+    # Decisive play (margin-head nets only; see the module docstring). A child is
+    # a candidate if it has at least `decisive_min_visit_frac` of the best child's
+    # visits, and it stays one if its win-Q is within `decisive_eps` of the best
+    # candidate's. 0.03 of a [-1, 1] value is well inside the noise of a 512-sim
+    # root, so the tie-break only ever fires between moves search calls equal.
+    decisive_eps: float = 0.03
+    decisive_min_visit_frac: float = 0.1
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> MCTSConfig:
@@ -141,6 +199,8 @@ class MCTSConfig:
             "chance_children",
             "fpu",
             "tree_reuse",
+            "decisive_eps",
+            "decisive_min_visit_frac",
         )
         kwargs: dict[str, Any] = {}
         for key in keys:
@@ -161,10 +221,12 @@ class Node:
         "children",
         "expanded",
         "legal",
+        "margins",
         "n_visits",
         "player",
         "priors",
         "state",
+        "terminal_m0",
         "terminal_v0",
         "visits",
         "wins",
@@ -177,12 +239,17 @@ class Node:
         self.priors: list[float] = []
         self.visits: list[int] = []
         self.wins: list[float] = []  # total value in THIS node's player frame
+        self.margins: list[float] = []  # total margin, same frame (run4 nets)
         self.children: list[Any] = []  # Node | dict[bytes, Node] | None
         self.expanded = False
         self.n_visits = 0
         self.terminal_v0 = 0.0
+        self.terminal_m0 = 0.0
         if state.is_terminal:
             self.terminal_v0 = float(state.outcome() or 0.0)
+            # A finished game knows its margin exactly, so the tie-break is fed
+            # facts wherever the search actually reached the end.
+            self.terminal_m0 = margin_target(state.scores[0] - state.scores[1])
 
     @property
     def is_terminal(self) -> bool:
@@ -193,6 +260,7 @@ class Node:
         self.priors = [float(p) for p in priors] if n else []
         self.visits = [0] * n
         self.wins = [0.0] * n
+        self.margins = [0.0] * n
         self.children = [None] * n
         self.expanded = True
 
@@ -206,6 +274,11 @@ class SearchResult:
     visits: dict[int, int]  # action -> visit count
     sims: int
     elapsed_s: float = 0.0  # wall clock spent in the simulation loop
+    # Margin-head nets only (see the module docstring); empty otherwise.
+    has_margin: bool = False
+    q: dict[int, float] = field(default_factory=dict)  # action -> win-Q, visited
+    margins: dict[int, float] = field(default_factory=dict)  # action -> margin-Q
+    margin: float = 0.0  # root margin estimate for the player to move
 
 
 # --------------------------------------------------------------- evaluators
@@ -271,6 +344,9 @@ class MCTS:
         self.evaluator = evaluator
         self.config = config or MCTSConfig()
         self.add_noise = add_noise
+        # Set once: a margin-head evaluator returns 3-tuples, and the whole
+        # margin backup (an extra float per edge) is skipped when it does not.
+        self.has_margin = bool(getattr(evaluator, "has_margin", False))
         self.seed(seed)
         self.nodes_created = 0
         self.evals = 0
@@ -354,18 +430,28 @@ class MCTS:
         root = self._reuse_for(state)
         self.reused_visits = root.n_visits if root is not None else 0
         value = 0.0
+        margin = 0.0
         if root is None:
             root = self._new_node(state.clone())
             if root.is_terminal:
                 raise ValueError("cannot search a terminal state")
-            value = self._expand(root)
+            value, margin = self._expand(root)
         self._root = root
         if len(root.legal) == 1:
             policy = np.zeros(ACTION_SPACE, dtype=np.float32)
             policy[root.legal[0]] = 1.0
             if root.n_visits:
                 value = sum(root.wins) / root.n_visits
-            return SearchResult(policy, float(value), {root.legal[0]: 1}, 0, 0.0)
+                margin = sum(root.margins) / root.n_visits
+            return SearchResult(
+                policy,
+                float(value),
+                {root.legal[0]: 1},
+                0,
+                0.0,
+                has_margin=self.has_margin,
+                margin=float(margin),
+            )
         if noise:
             self._apply_noise(root)
         # A reused root keeps its visits, so the budget is a total: the tree ends
@@ -390,13 +476,30 @@ class MCTS:
         total = root.n_visits
         policy = np.zeros(ACTION_SPACE, dtype=np.float32)
         visits: dict[int, int] = {}
+        q: dict[int, float] = {}
+        margins: dict[int, float] = {}
+        want_margin = self.has_margin
         for i, action in enumerate(root.legal):
             n = root.visits[i]
             visits[action] = n
             if n and total:
                 policy[action] = n / total
+            if want_margin and n:
+                q[action] = root.wins[i] / n
+                margins[action] = root.margins[i] / n
         root_value = (sum(root.wins) / total) if total else value
-        return SearchResult(policy, float(root_value), visits, total, float(elapsed))
+        root_margin = (sum(root.margins) / total) if total else margin
+        return SearchResult(
+            policy,
+            float(root_value),
+            visits,
+            total,
+            float(elapsed),
+            has_margin=want_margin,
+            q=q,
+            margins=margins,
+            margin=float(root_margin),
+        )
 
     # ------------------------------------------------------------------ guts
     def _reuse_for(self, state: AzulState) -> Node | None:
@@ -417,12 +520,21 @@ class MCTS:
         self.nodes_created += 1
         return Node(state)
 
-    def _expand(self, node: Node) -> float:
-        """Evaluate ``node`` and initialise its edges; returns its value."""
-        priors, value = self.evaluator(node.state, node.legal)
+    def _expand(self, node: Node) -> tuple[float, float]:
+        """Evaluate ``node`` and initialise its edges; returns ``(value, margin)``.
+
+        ``margin`` is 0.0 for an evaluator without a margin head, and nothing
+        downstream reads it in that case.
+        """
+        out = self.evaluator(node.state, node.legal)
         self.evals += 1
+        if len(out) == 3:
+            priors, value, margin = out  # type: ignore[misc]
+        else:
+            priors, value = out  # type: ignore[misc]
+            margin = 0.0
         node.init_edges(priors)
-        return float(value)
+        return float(value), float(margin)
 
     def _apply_noise(self, root: Node) -> None:
         n = len(root.legal)
@@ -514,14 +626,25 @@ class MCTS:
         while True:
             if node.is_terminal:
                 v0 = node.terminal_v0
+                m0 = node.terminal_m0
                 break
             if not node.expanded:
-                value = self._expand(node)
-                v0 = value if node.player == 0 else -value
+                value, margin = self._expand(node)
+                flip = 1.0 if node.player == 0 else -1.0
+                v0 = value * flip
+                m0 = margin * flip
                 break
             index = self._select(node)
             path.append((node, index))
             node = self._child(node, index)
+        if self.has_margin:
+            for parent, index in path:
+                parent.visits[index] += 1
+                parent.n_visits += 1
+                flip = 1.0 if parent.player == 0 else -1.0
+                parent.wins[index] += v0 * flip
+                parent.margins[index] += m0 * flip
+            return
         for parent, index in path:
             parent.visits[index] += 1
             parent.n_visits += 1
@@ -557,3 +680,52 @@ def select_action(
         if draw <= acc:
             return i
     return int(np.argmax(probs))  # pragma: no cover - float rounding
+
+
+def decisive_action(
+    result: SearchResult,
+    eps: float = 0.03,
+    min_visit_frac: float = 0.1,
+) -> int:
+    """Best win-Q first, biggest margin second — the run4 play-time pick.
+
+    Winning is lexicographically prior: the candidate set is *only* the root
+    children whose win-Q is within ``eps`` of the best, so the margin can never
+    trade a win away. ``min_visit_frac`` keeps a barely-visited child, whose Q is
+    one or two backups of noise, from defining "the best".
+
+    Ties (equal margin) fall back to visits and then to the lowest action index,
+    so the choice is deterministic and reproducible across processes.
+    """
+    if not result.has_margin or not result.q:
+        return int(np.argmax(result.policy))
+    best_visits = max(result.visits.values(), default=0)
+    if best_visits <= 0:  # pragma: no cover - defensive: nothing was searched
+        return int(np.argmax(result.policy))
+    floor = min_visit_frac * best_visits
+    candidates = [a for a, n in result.visits.items() if n >= floor and a in result.q]
+    if not candidates:  # pragma: no cover - defensive
+        return int(np.argmax(result.policy))
+    best_q = max(result.q[a] for a in candidates)
+    keep = [a for a in candidates if result.q[a] >= best_q - eps]
+    return max(keep, key=lambda a: (result.margins[a], result.visits[a], -a))
+
+
+def select_play_action(
+    result: SearchResult,
+    temperature: float = 0.0,
+    rng: random.Random | np.random.Generator | None = None,
+    eps: float = 0.03,
+    min_visit_frac: float = 0.1,
+) -> int:
+    """The move to actually play: sampled when exploring, decisive when not.
+
+    ``temperature > 0`` is the exploration path and is untouched — the visit
+    distribution is sampled exactly as before. At temperature 0 a margin-head
+    search uses :func:`decisive_action`; anything else is the historical
+    ``argmax`` over visits, which is what makes run1/run2/run3 checkpoints play
+    bit-identically to before this head existed.
+    """
+    if temperature > 0.0 or not result.has_margin:
+        return select_action(result.policy, temperature, rng)
+    return decisive_action(result, eps=eps, min_visit_frac=min_visit_frac)

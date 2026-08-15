@@ -113,6 +113,10 @@ class TrainConfig:
     body_blocks: int = 1
     policy_rank: int = 32
     policy_global: bool = True
+    # run4: a third head predicting tanh(final score diff / 20). The value head
+    # then goes back to pure win/draw/loss, which is why `margin_head` and a
+    # non-zero `value_score_weight` are mutually exclusive (see validate()).
+    margin_head: bool = False
 
     # self-play search
     sims: int = 160
@@ -126,6 +130,9 @@ class TrainConfig:
     stall_rounds: int = STALL_ROUNDS
     max_game_moves: int = MAX_GAME_MOVES
     value_score_weight: float = 0.15
+    # play-time tie-break among equally-winning root children (margin nets only)
+    decisive_eps: float = 0.03
+    decisive_min_visit_frac: float = 0.1
 
     # loop
     games_per_iter: int = 64
@@ -143,6 +150,7 @@ class TrainConfig:
     lr_total_steps: int = 0  # 0 -> derive from total_games
     weight_decay: float = 1e-4
     value_weight: float = 1.0
+    margin_weight: float = 0.25  # weight of the margin MSE (margin_head only)
     grad_clip: float = 1.0
 
     # replay
@@ -154,6 +162,10 @@ class TrainConfig:
     pretrain_epochs: int = 0
     pretrain_lr: float = 0.0  # 0 -> use `lr`
     pretrain_keep_buffer: bool = True  # keep the loaded positions for self-play
+    # The `value_score_weight` the pretraining buffer was written with, so its
+    # blended value can be split back into (outcome, margin). 0 = leave it alone
+    # and mask the margin loss on those positions. See replay.unblend_values.
+    pretrain_unblend: float = 0.0
 
     # evaluation
     eval_every_games: int = 512
@@ -196,6 +208,14 @@ class TrainConfig:
             raise ValueError("replay_capacity must be >= batch_size")
         if self.pretrain and self.pretrain_epochs < 1:
             raise ValueError("pretrain needs pretrain_epochs >= 1")
+        if self.margin_head:
+            if self.arch != "structured":
+                raise ValueError("margin_head needs arch='structured' (net2.py)")
+            if self.value_score_weight:
+                raise ValueError(
+                    "with margin_head the value target is the pure outcome: "
+                    "set value_score_weight to 0 (the margin has its own head)"
+                )
         self.net_config()  # architecture keys are validated by the net configs
 
     def to_dict(self) -> dict[str, Any]:
@@ -215,6 +235,8 @@ class TrainConfig:
                 dirichlet_eps=self.dirichlet_eps,
                 chance_children=self.chance_children,
                 tree_reuse=self.tree_reuse,
+                decisive_eps=self.decisive_eps,
+                decisive_min_visit_frac=self.decisive_min_visit_frac,
             ),
             temp_moves=self.temp_moves,
             temperature=self.temperature,
@@ -453,11 +475,11 @@ class Trainer:
 
         # ---------------------------------------------------- 2. optimize
         steps = self._steps_for(added)
-        loss_p = loss_v = 0.0
+        loss_p = loss_v = loss_m = 0.0
         done_steps = 0
         t_train = time.monotonic()
         if len(self.buffer) >= max(cfg.min_buffer, cfg.batch_size) and steps > 0:
-            loss_p, loss_v, done_steps = self._train(steps, prefix)
+            loss_p, loss_v, loss_m, done_steps = self._train(steps, prefix)
         train_time = time.monotonic() - t_train
 
         moves = sum(r.moves for r in records)
@@ -470,9 +492,10 @@ class Trainer:
                     "t": round(self.t, 1),
                     "games": self.games,
                     "steps": self.steps,
-                    "loss": round(loss_p + loss_v, 4),
+                    "loss": round(loss_p + loss_v + loss_m, 4),
                     "loss_p": round(loss_p, 4),
                     "loss_v": round(loss_v, 4),
+                    "loss_m": round(loss_m, 4),
                     "buffer": len(self.buffer),
                     "lr": self._lr_at(self.steps),
                 },
@@ -482,8 +505,10 @@ class Trainer:
             f"{moves} moves"
             + (f", {truncated} truncated" if truncated else "")
             + f") | {done_steps} steps in {train_time:.1f}s | "
-            f"loss {loss_p + loss_v:.4f} (p {loss_p:.4f} v {loss_v:.4f}) | "
-            f"buffer {len(self.buffer)} | games {self.games}"
+            f"loss {loss_p + loss_v + loss_m:.4f} "
+            f"(p {loss_p:.4f} v {loss_v:.4f}"
+            + (f" m {loss_m:.4f}" if self.net.has_margin else "")
+            + f") | buffer {len(self.buffer)} | games {self.games}"
         )
 
         # ---------------------------------------------------- 3. checkpoint
@@ -510,6 +535,13 @@ class Trainer:
         default they stay there: early self-play then trains on a mix of its own
         fresh games and the inherited ones instead of on a nearly empty buffer.
 
+        A pre-run4 buffer has no margin column, so those positions come in with a
+        zero ``margin_mask`` and the margin head simply gets no gradient from
+        them — a run4 net can still be pretrained on run1/run2/run3 data. Setting
+        ``pretrain_unblend`` to the weight that produced the file recovers the
+        margin exactly instead (see :func:`ludometer.train.replay.unblend_values`),
+        which is what ``configs/run4.json`` does with run3's 0.15.
+
         Returns the number of optimizer steps taken. These do **not** advance
         ``self.steps``: the self-play learning-rate schedule is meant to start at
         its peak when self-play starts.
@@ -522,13 +554,16 @@ class Trainer:
         if not target.exists():
             raise FileNotFoundError(f"pretrain buffer not found: {target}")
         self._write_status(note=f"pretrain: loading {target}", force=True)
-        n = self.buffer.load(target)
-        self._log(f"pretrain: loaded {n:,} positions from {target}")
+        n = self.buffer.load(target, unblend=cfg.pretrain_unblend)
+        covered = self.buffer.stats()["margin_targets"]
+        self._log(
+            f"pretrain: loaded {n:,} positions from {target}"
+            + (f" ({covered:,} with a margin target)" if self.net.has_margin else "")
+        )
         if n < cfg.batch_size:
             raise ValueError(f"pretrain buffer has only {n} positions")
 
         lr = cfg.pretrain_lr or cfg.lr
-        device = self.device
         net = self.net
         rng = np.random.default_rng(cfg.seed ^ 0xB00C)
         steps_per_epoch = n // cfg.batch_size
@@ -536,17 +571,17 @@ class Trainer:
         for epoch in range(1, epochs + 1):
             net.train()
             order = rng.permutation(n)
-            sum_p = sum_v = 0.0
+            sum_p = sum_v = sum_m = 0.0
             for i in range(steps_per_epoch):
                 idx = np.sort(order[i * cfg.batch_size : (i + 1) * cfg.batch_size])
-                x = torch.from_numpy(self.buffer.states[idx]).to(device)
-                target_p = torch.from_numpy(self.buffer.policies[idx]).to(device)
-                target_v = torch.from_numpy(self.buffer.values[idx]).to(device)
-                logits, value = net(x)
-                logp = torch.log_softmax(logits, dim=-1)
-                loss_p = -(target_p * logp).sum(dim=1).mean()
-                loss_v = torch.nn.functional.mse_loss(value, target_v)
-                loss = loss_p + cfg.value_weight * loss_v
+                loss_p, loss_v, loss_m = self._losses(
+                    self.buffer.states[idx],
+                    self.buffer.policies[idx],
+                    self.buffer.values[idx],
+                    self.buffer.margins[idx],
+                    self.buffer.margin_mask[idx],
+                )
+                loss = loss_p + cfg.value_weight * loss_v + cfg.margin_weight * loss_m
                 for group in self.optimizer.param_groups:
                     group["lr"] = lr
                 self.optimizer.zero_grad(set_to_none=True)
@@ -556,6 +591,7 @@ class Trainer:
                 self.optimizer.step()
                 sum_p += float(loss_p.detach())
                 sum_v += float(loss_v.detach())
+                sum_m += float(loss_m.detach())
                 self.pretrain_steps += 1
                 if (i + 1) % max(1, cfg.chunk_steps) == 0:
                     self.heartbeat(
@@ -575,18 +611,20 @@ class Trainer:
                     "steps": self.steps,
                     "epoch": epoch,
                     "pretrain_steps": self.pretrain_steps,
-                    "loss": round(sum_p / done + sum_v / done, 4),
+                    "loss": round((sum_p + sum_v + sum_m) / done, 4),
                     "loss_p": round(sum_p / done, 4),
                     "loss_v": round(sum_v / done, 4),
+                    "loss_m": round(sum_m / done, 4),
                     "buffer": len(self.buffer),
                     "lr": lr,
                 },
             )
             self._log(
                 f"pretrain epoch {epoch}/{epochs}: "
-                f"loss {sum_p / done + sum_v / done:.4f} "
-                f"(p {sum_p / done:.4f} v {sum_v / done:.4f}) "
-                f"in {time.monotonic() - t_start:.0f}s"
+                f"loss {(sum_p + sum_v + sum_m) / done:.4f} "
+                f"(p {sum_p / done:.4f} v {sum_v / done:.4f}"
+                + (f" m {sum_m / done:.4f}" if net.has_margin else "")
+                + f") in {time.monotonic() - t_start:.0f}s"
             )
             if self._stop:
                 break
@@ -629,27 +667,54 @@ class Trainer:
             1.0 + math.cos(math.pi * frac)
         )
 
-    def _train(self, steps: int, prefix: str) -> tuple[float, float, int]:
+    def _losses(
+        self,
+        states: np.ndarray,
+        policies: np.ndarray,
+        values: np.ndarray,
+        margins: np.ndarray,
+        mask: np.ndarray,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """``(policy CE, value MSE, margin MSE)`` for one minibatch.
+
+        The margin term is a **masked** mean: positions inherited from a pre-run4
+        replay buffer have no margin target, so they contribute nothing to it
+        instead of pulling the head towards a fabricated zero. With no margin
+        head, or no masked-in position in the batch, it is exactly 0 and carries
+        no gradient.
+        """
+        device = self.device
+        x = torch.from_numpy(states).to(device, non_blocking=True)
+        target_p = torch.from_numpy(policies).to(device, non_blocking=True)
+        target_v = torch.from_numpy(values).to(device, non_blocking=True)
+        logits, value, margin = self.net.forward_heads(x)
+        logp = torch.log_softmax(logits, dim=-1)
+        loss_p = -(target_p * logp).sum(dim=1).mean()
+        loss_v = torch.nn.functional.mse_loss(value, target_v)
+        if margin is None:
+            return loss_p, loss_v, torch.zeros((), device=device)
+        target_m = torch.from_numpy(margins).to(device, non_blocking=True)
+        weights = torch.from_numpy(mask).to(device, non_blocking=True)
+        total = weights.sum()
+        loss_m = ((margin - target_m).square() * weights).sum() / total.clamp(min=1.0)
+        return loss_p, loss_v, loss_m
+
+    def _train(self, steps: int, prefix: str) -> tuple[float, float, float, int]:
         cfg = self.config
         device = self.device
         net = self.net
         net.train()
         sum_p = torch.zeros((), device=device)
         sum_v = torch.zeros((), device=device)
+        sum_m = torch.zeros((), device=device)
         done = 0
         chunk = max(1, cfg.chunk_steps)
         while done < steps:
             todo = min(chunk, steps - done)
             for _ in range(todo):
-                states, policies, values = self.buffer.sample(cfg.batch_size)
-                x = torch.from_numpy(states).to(device, non_blocking=True)
-                target_p = torch.from_numpy(policies).to(device, non_blocking=True)
-                target_v = torch.from_numpy(values).to(device, non_blocking=True)
-                logits, value = net(x)
-                logp = torch.log_softmax(logits, dim=-1)
-                loss_p = -(target_p * logp).sum(dim=1).mean()
-                loss_v = torch.nn.functional.mse_loss(value, target_v)
-                loss = loss_p + cfg.value_weight * loss_v
+                batch = self.buffer.sample(cfg.batch_size)
+                loss_p, loss_v, loss_m = self._losses(*batch)
+                loss = loss_p + cfg.value_weight * loss_v + cfg.margin_weight * loss_m
                 lr = self._lr_at(self.steps)
                 for group in self.optimizer.param_groups:
                     group["lr"] = lr
@@ -660,6 +725,7 @@ class Trainer:
                 self.optimizer.step()
                 sum_p += loss_p.detach()
                 sum_v += loss_v.detach()
+                sum_m += loss_m.detach()
                 self.steps += 1
             done += todo
             self.heartbeat(f"{prefix}: training {done}/{steps} steps")
@@ -667,8 +733,8 @@ class Trainer:
                 break
         net.eval()
         if done == 0:  # pragma: no cover - defensive
-            return 0.0, 0.0, 0
-        return float(sum_p) / done, float(sum_v) / done, done
+            return 0.0, 0.0, 0.0, 0
+        return float(sum_p) / done, float(sum_v) / done, float(sum_m) / done, done
 
     # ------------------------------------------------------------- checkpoints
     def _save_state(self, final: bool = False) -> Path:

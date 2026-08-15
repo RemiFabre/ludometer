@@ -22,7 +22,7 @@ import torch
 
 from ludometer.agents.base import Agent
 from ludometer.azul.engine import AzulState
-from ludometer.train.mcts import MCTS, STALL_ROUNDS, MCTSConfig, select_action
+from ludometer.train.mcts import MCTS, STALL_ROUNDS, MCTSConfig, select_play_action
 from ludometer.train.net import NetEvaluator, PolicyValueNet, load_net
 
 __all__ = ["TIMED_SIMS_CAP", "MCTSAgent", "MCTSAgentSpec"]
@@ -45,7 +45,13 @@ def _cached_net(path: str | os.PathLike[str], device: str) -> PolicyValueNet:
 
 
 class MCTSAgent(Agent):
-    """Plays the arg-max (or sampled) visit count of a PUCT search."""
+    """Plays the arg-max (or sampled) visit count of a PUCT search.
+
+    With a margin-head checkpoint the temperature-0 pick becomes lexicographic —
+    best win-Q first, biggest score margin among the ties — via
+    :func:`~ludometer.train.mcts.select_play_action`. Everything else, including
+    every run1/run2/run3 checkpoint, plays exactly as it always did.
+    """
 
     def __init__(
         self,
@@ -137,12 +143,22 @@ class MCTSAgent(Agent):
             "budget_s": None if not budget else float(budget),
             "forced": False,
         }
+        if result.has_margin:
+            # what the GUI's table talk can say about how big the win looks
+            self.last_search["margin"] = float(result.margin)
         temperature = self.temperature
         if state.round_index >= self.stall_rounds:
             # Two arg-max players can loop forever (see mcts.STALL_ROUNDS):
             # a pathologically long game gets randomised so that it terminates.
             temperature = max(temperature, 1.0)
-        return select_action(result.policy, temperature, self.mcts.rng)
+        cfg = self.mcts.config
+        return select_play_action(
+            result,
+            temperature,
+            self.mcts.rng,
+            eps=cfg.decisive_eps,
+            min_visit_frac=cfg.decisive_min_visit_frac,
+        )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<MCTSAgent {self.name} sims={self.mcts.config.sims}>"

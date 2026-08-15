@@ -53,6 +53,26 @@ Value head: readout vector (globals token, which has attended over the whole
 board, concatenated with the mean token) -> residual MLP body -> tanh, in
 [-1, 1] for the player to move (same convention as ``net.py``).
 
+Margin head (run4, ``margin_head: true``)
+-----------------------------------------
+A **third** head off the same body, ``Linear -> ReLU -> Linear -> tanh``, trained
+on ``m = tanh((final own score - final opponent score) / 20)`` from the player to
+move's point of view. It exists because a value head that only predicts win/draw/
+loss is indifferent between winning by one point and winning by forty, so once the
+game is decided the search happily plays a move that looks broken to a human. With
+the margin split off, the value head can stay a *pure* win/draw/loss estimate (run4
+sets ``value_score_weight`` to 0) — the blended target that run1-run3 used is no
+longer needed — and
+:func:`ludometer.train.mcts.select_play_action` breaks ties on it: among the root
+children that are equally winning it plays the one that wins by the most.
+
+The head is opt-in and additive, which is what makes checkpoints compatible in
+both directions. ``margin_head`` defaults to ``False``, so a run3 checkpoint (whose
+``net_config`` has no such key, and whose ``state_dict`` has no ``margin_*``
+tensors) rebuilds exactly the net it always did, and everything downstream —
+``load_net``, the GUI, the arena, the ONNX exporter — is unchanged for it.
+``version`` records which shape a checkpoint is: 1 = two heads, 2 = three.
+
 Budget
 ------
 Self-play workers run this single-threaded on CPU, one position at a time, so
@@ -107,6 +127,7 @@ from ludometer.train.net import BaseNet
 
 __all__ = [
     "DEST_TOKENS",
+    "MARGIN_VERSION",
     "NUM_TOKENS",
     "StructuredConfig",
     "StructuredNet",
@@ -114,6 +135,10 @@ __all__ = [
 ]
 
 ARCH = "structured"
+
+# net_config["version"]: 1 = policy + value (run3), 2 = + margin head (run4).
+BASE_VERSION = 1
+MARGIN_VERSION = 2
 
 NUM_SOURCES = NUM_FACTORIES + 1  # 5 factories + centre
 NUM_DESTS = NUM_ROWS + 1  # 5 pattern lines + floor
@@ -237,6 +262,11 @@ class StructuredConfig:
     value_hidden: int = 128
     policy_rank: int = 32  # k in <A[s, c], B[d]>
     policy_global: bool = True  # add a 180-wide correction from the body
+    margin_head: bool = False  # run4's third head (see the module docstring)
+    # Shape version, not a format version: 1 = policy + value, 2 = + margin. A
+    # run3 checkpoint has no such key, hence the default; asking for the margin
+    # head bumps it in __post_init__ so a checkpoint always says what it holds.
+    version: int = BASE_VERSION
 
     _INT_FIELDS = (
         "input_size",
@@ -249,7 +279,18 @@ class StructuredConfig:
         "body_blocks",
         "value_hidden",
         "policy_rank",
+        "version",
     )
+    _BOOL_FIELDS = ("policy_global", "margin_head")
+
+    def __post_init__(self) -> None:
+        # version and margin_head are two views of one fact; keep them in step so
+        # neither a config file nor a checkpoint can describe a net that is not
+        # the one `StructuredNet` would build.
+        if self.margin_head and self.version < MARGIN_VERSION:
+            object.__setattr__(self, "version", MARGIN_VERSION)
+        elif self.version >= MARGIN_VERSION and not self.margin_head:
+            object.__setattr__(self, "margin_head", True)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> StructuredConfig:
@@ -258,8 +299,9 @@ class StructuredConfig:
         known: dict[str, Any] = {
             k: int(v) for k, v in data.items() if k in cls._INT_FIELDS
         }
-        if "policy_global" in data:
-            known["policy_global"] = bool(data["policy_global"])
+        for key in cls._BOOL_FIELDS:
+            if key in data:
+                known[key] = bool(data[key])
         cfg = replace(cls(), **known)
         cfg.validate()
         return cfg
@@ -383,6 +425,14 @@ class StructuredNet(BaseNet):
         )
         self.value_fc = nn.Linear(cfg.body, cfg.value_hidden)
         self.value_head = nn.Linear(cfg.value_hidden, 1)
+        # Third head, opt-in: same shape as the value head, different target.
+        # Absent for a run3 config, so the state dict has no `margin_*` keys and
+        # a run3 checkpoint still loads with `strict=True`.
+        self.has_margin = bool(cfg.margin_head)
+        self.margin_fc = (
+            nn.Linear(cfg.body, cfg.value_hidden) if cfg.margin_head else None
+        )
+        self.margin_out = nn.Linear(cfg.value_hidden, 1) if cfg.margin_head else None
         self._init_weights()
         self.float()
 
@@ -396,7 +446,10 @@ class StructuredNet(BaseNet):
         nn.init.zeros_(self.embed_b)
         # Start near a uniform policy and a neutral value, exactly like net.py:
         # the first self-play batch is then driven by search, not by noise.
-        for module in (self.src_proj, self.dst_proj, self.value_head):
+        heads = [self.src_proj, self.dst_proj, self.value_head]
+        if self.margin_out is not None:
+            heads.append(self.margin_out)  # start at "the game is level"
+        for module in heads:
             nn.init.normal_(module.weight, std=0.01)
             nn.init.zeros_(module.bias)
         if self.policy_global is not None:
@@ -416,7 +469,22 @@ class StructuredNet(BaseNet):
         return self.mix(torch.relu(h))
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        """``(policy_logits [B, 180], value [B])`` — value in [-1, 1]."""
+        """``(policy_logits [B, 180], value [B])`` — value in [-1, 1].
+
+        Deliberately still two outputs: this is what the GUI, the arena and the
+        ONNX wrapper call, and a run4 net must answer them exactly like a run3
+        one. The margin comes from :meth:`forward_heads`.
+        """
+        logits, value, _margin = self._heads(x, margin=False)
+        return logits, value
+
+    def forward_heads(self, x: Tensor) -> tuple[Tensor, Tensor, Tensor | None]:
+        """``(logits, value, margin)``; ``margin`` is ``None`` without the head."""
+        return self._heads(x, margin=self.has_margin)
+
+    def _heads(
+        self, x: Tensor, margin: bool = False
+    ) -> tuple[Tensor, Tensor, Tensor | None]:
         b = x.shape[0]
         h = self.tokens(x)
         for block in self.trunk:
@@ -447,4 +515,7 @@ class StructuredNet(BaseNet):
             logits = logits + self.policy_global(g)
 
         value = torch.tanh(self.value_head(torch.relu(self.value_fc(g)))).squeeze(-1)
-        return logits, value
+        if not margin or self.margin_fc is None or self.margin_out is None:
+            return logits, value, None
+        m = torch.tanh(self.margin_out(torch.relu(self.margin_fc(g)))).squeeze(-1)
+        return logits, value, m

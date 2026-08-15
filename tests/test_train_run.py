@@ -33,7 +33,17 @@ STATUS_KEYS = {
     "steps",
     "note",
 }
-TRAIN_KEYS = {"t", "games", "steps", "loss", "loss_p", "loss_v", "buffer", "lr"}
+TRAIN_KEYS = {
+    "t",
+    "games",
+    "steps",
+    "loss",
+    "loss_p",
+    "loss_v",
+    "loss_m",  # run4's margin head; 0.0 for a net without one
+    "buffer",
+    "lr",
+}
 ELO_KEYS = {"t", "games", "ckpt", "elo", "elo_err", "vs", "n_games", "pool"}
 
 
@@ -90,7 +100,10 @@ def check_train_lines(lines: list[dict]) -> None:
     assert lines
     for row in lines:
         assert set(row) == TRAIN_KEYS
-        assert row["loss"] == pytest.approx(row["loss_p"] + row["loss_v"], abs=1e-3)
+        assert row["loss"] == pytest.approx(
+            row["loss_p"] + row["loss_v"] + row["loss_m"], abs=1e-3
+        )
+        assert row["loss_m"] == 0.0, "no margin head in this config"
         assert row["buffer"] > 0
         assert 0.0 < row["lr"] <= 1.0
         assert row["t"] >= 0.0

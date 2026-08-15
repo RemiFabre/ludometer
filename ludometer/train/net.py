@@ -102,9 +102,23 @@ class BaseNet(nn.Module):
 
     config: Any
 
+    #: does this net have the run4 margin head? (see net2.StructuredNet)
+    has_margin: bool = False
+
     @property
     def num_params(self) -> int:
         return sum(p.numel() for p in self.parameters())
+
+    def forward_heads(self, x: Tensor) -> tuple[Tensor, Tensor, Tensor | None]:
+        """``(logits, value, margin)`` — ``margin`` is ``None`` without the head.
+
+        Every architecture keeps a two-output :meth:`forward` (that is what the
+        GUI, the arena and the ONNX wrapper have always called); training and the
+        margin-aware evaluator go through this method instead, so a run3 net and a
+        run4 net can be driven by exactly the same code.
+        """
+        logits, value = self(x)
+        return logits, value, None
 
     @torch.inference_mode()
     def evaluate_batch(self, states: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -299,6 +313,11 @@ class NetEvaluator:
 
     ``priors`` is a numpy array aligned with the ``legal`` list (softmax over the
     legal logits) and ``value`` is a float in [-1, 1] for the player to move.
+
+    With a margin-head net (:attr:`has_margin`) the call returns one more item,
+    ``(priors, value, margin)``, and :class:`~ludometer.train.mcts.MCTS` backs the
+    margin up alongside the value. Nets without the head return the same 2-tuple
+    they always did, which is what keeps run1/run2/run3 checkpoints bit-identical.
     """
 
     def __init__(self, net: BaseNet, device: str = "cpu") -> None:
@@ -306,6 +325,7 @@ class NetEvaluator:
         self.device = torch.device(device)
         self.net.to(self.device)
         self.net.eval()
+        self.has_margin = bool(getattr(net, "has_margin", False))
         self._buf = torch.zeros(
             1, net.config.input_size, dtype=torch.float32, device=self.device
         )
@@ -313,21 +333,28 @@ class NetEvaluator:
     @torch.inference_mode()
     def __call__(
         self, state: AzulState, legal: Sequence[int]
-    ) -> tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, float] | tuple[np.ndarray, float, float]:
         self._buf[0].copy_(torch.from_numpy(state.encode()))
-        logits, value = self.net(self._buf)
+        if self.has_margin:
+            logits, value, margin = self.net.forward_heads(self._buf)
+            m = float(margin[0])  # type: ignore[index]
+        else:
+            logits, value = self.net(self._buf)
+            m = 0.0
         v = float(value[0])
         if not legal:
-            return np.zeros(0, dtype=np.float32), v
+            empty = np.zeros(0, dtype=np.float32)
+            return (empty, v, m) if self.has_margin else (empty, v)
         row = logits[0].to("cpu", copy=True).numpy()
         sel = row[np.asarray(legal, dtype=np.int64)]
         sel = sel - sel.max()
         np.exp(sel, out=sel)
-        return sel / sel.sum(), v
+        priors = sel / sel.sum()
+        return (priors, v, m) if self.has_margin else (priors, v)
 
     def full_policy(self, state: AzulState, legal: Sequence[int]) -> np.ndarray:
         """180-long masked probability vector (debugging / tests)."""
-        priors, _ = self(state, legal)
+        priors = self(state, legal)[0]
         out = np.zeros(self.net.config.action_space, dtype=np.float32)
         if len(legal):
             out[np.asarray(legal, dtype=np.int64)] = priors

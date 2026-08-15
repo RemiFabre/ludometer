@@ -9,9 +9,16 @@ the raw visit distribution.
 The value target is the win/draw/loss outcome blended with a little of the final
 score margin: ``(1 - w) * outcome + w * tanh(score_diff / SCORE_SCALE)`` with
 ``w = value_score_weight``. ``w = 0`` gives the textbook AlphaZero target; a small
-positive ``w`` matters here because a weak early policy produces piles of 0-0
-games, and a pure win/loss target on a drawn game carries no gradient at all
+positive ``w`` mattered in run1-run3 because a weak early policy produces piles of
+0-0 games, and a pure win/loss target on a drawn game carries no gradient at all
 (the margin term keeps the sign of the winner, it only grades the size).
+
+**run4 sets ``w = 0``**: the score margin has its own head and its own target
+(:func:`margin_targets`, ``tanh(score_diff / 20)`` per seat), so the value head goes
+back to being a pure win/draw/loss estimate and the two questions stop fighting
+over one output. Every record carries the margin array whatever ``w`` is — it costs
+one tanh per game — so a buffer written by this module is always usable by a
+margin-head net.
 
 Parallelism: ``N`` ``spawn``-ed worker processes, each with its own CPU copy of
 the net and ``torch.set_num_threads(1)`` (8 single-threaded workers beat 1
@@ -33,6 +40,7 @@ import multiprocessing as mp
 import queue
 import signal
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Self
 
@@ -40,15 +48,19 @@ import numpy as np
 
 from ludometer.azul.engine import ACTION_SPACE, AzulState
 from ludometer.train.mcts import (
+    MARGIN_SCALE,
     MAX_GAME_MOVES,
     MCTS,
     STALL_ROUNDS,
     MCTSConfig,
-    select_action,
+    margin_target,
+    select_play_action,
 )
 from ludometer.train.net import NetEvaluator, make_net
 
-SCORE_SCALE = 20.0  # points that saturate the score-margin part of the value
+# Points that saturate the score margin — one constant for the legacy blended
+# value and for run4's margin head, so the two never drift apart.
+SCORE_SCALE = MARGIN_SCALE
 
 __all__ = [
     "GameRecord",
@@ -56,6 +68,7 @@ __all__ = [
     "SelfPlayConfig",
     "SelfPlayPool",
     "make_selfplay",
+    "margin_targets",
     "play_selfplay_game",
     "value_target",
 ]
@@ -68,6 +81,7 @@ class GameRecord:
     states: np.ndarray  # (T, 182) float32
     policies: np.ndarray  # (T, 180) float32
     values: np.ndarray  # (T,) float32, player-to-move perspective
+    margins: np.ndarray  # (T,) float32, tanh(score diff / 20), same perspective
     outcome: float  # +1 player 0 won, -1 player 1 won, 0 draw
     scores: tuple[int, int]
     moves: int
@@ -114,6 +128,12 @@ def value_target(outcome: float, score_diff: int, config: SelfPlayConfig) -> flo
     return (1.0 - w) * outcome + w * margin
 
 
+def margin_targets(score_diff: int, players: Sequence[int]) -> np.ndarray:
+    """Per-position margin targets: ``tanh(diff / 20)``, flipped per seat."""
+    m0 = margin_target(score_diff)
+    return np.array([m0 if p == 0 else -m0 for p in players], dtype=np.float32)
+
+
 def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> GameRecord:
     """Play one full game against itself; never mutates anything shared."""
     started = time.perf_counter()
@@ -142,8 +162,16 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
             explore = (
                 move < config.temp_moves or state.round_index >= config.stall_rounds
             )
-            action = select_action(
-                policy, config.temperature if explore else 0.0, mcts.rng
+            # Temperature 0 with a margin-head net is the decisive pick: same
+            # visit counts (so `policy`, the training target, is untouched), but
+            # the move played is the biggest-margin one among the equally winning
+            # ones. See ludometer.train.mcts, "Decisive play".
+            action = select_play_action(
+                result,
+                config.temperature if explore else 0.0,
+                mcts.rng,
+                eps=config.mcts.decisive_eps,
+                min_visit_frac=config.mcts.decisive_min_visit_frac,
             )
         policies.append(policy)
         state.apply(action)
@@ -155,12 +183,14 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
 
     truncated = not state.is_terminal
     outcome = float(state.outcome() or 0.0)  # a truncated game counts as a draw
-    v0 = value_target(outcome, state.scores[0] - state.scores[1], config)
+    score_diff = state.scores[0] - state.scores[1]
+    v0 = value_target(outcome, score_diff, config)
     values = np.array([v0 if p == 0 else -v0 for p in players], dtype=np.float32)
     return GameRecord(
         states=np.asarray(states, dtype=np.float32),
         policies=np.asarray(policies, dtype=np.float32),
         values=values,
+        margins=margin_targets(score_diff, players),
         outcome=outcome,
         scores=(int(state.scores[0]), int(state.scores[1])),
         moves=move,

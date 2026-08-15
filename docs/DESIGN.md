@@ -95,6 +95,31 @@ load any run's checkpoints without knowing which net produced them:
   self-attention, read out by a factorised source x colour x destination policy head and a
   tanh value head.
 
+**Margin head + decisive play** (`"margin_head": true`, run4) answers "the AI plays lazy
+moves once the win is decided". `net2.py` grows a third head predicting
+`m = tanh((own final score - opponent final score) / 20)` from the player to move's point of
+view; the value head goes back to being a *pure* win/draw/loss estimate (`value_score_weight`
+must then be 0 — the blend it used to do is exactly what the new head does properly).
+
+- **Training**: margin MSE with weight `margin_weight` (0.25), masked per position. Replay
+  buffers carry `margins` and `margin_mask`; a pre-run4 `replay.npz` has neither, so those
+  positions load with mask 0 and simply do not train the head. `pretrain_unblend: 0.15`
+  recovers run3's margin exactly from its blended value instead (`replay.unblend_values`).
+- **Search is unchanged**: PUCT still descends on the win value alone, so visit counts — the
+  policy targets — are exactly what they would have been. MCTS additionally backs up the
+  margin per edge, and terminal nodes contribute the true final margin.
+- **Move selection** (`mcts.select_play_action`, used by temperature-0 self-play moves,
+  `MCTSAgent.act`, the arena and the GUI) is lexicographic: among root children with at least
+  `decisive_min_visit_frac` (0.1) of the top child's visits, keep those within
+  `decisive_eps` (0.03) of the best win-Q, and play the one with the largest margin-Q.
+  Winning is always first; the margin is only ever a tie-break. A net without the head takes
+  the identical old code path, so run1/run2/run3 checkpoints play bit-identically.
+- **Checkpoints are compatible both ways**: `net_config["margin_head"]`/`["version"]` (1 =
+  two heads, 2 = three) are absent from run3 files and default to the old net, and a run4
+  file loads in every existing consumer. The ONNX export appends a third named output
+  `margin` only when the checkpoint has the head; `policy` and `value` keep their names and
+  positions, so the deployed page is unaffected either way.
+
 **Tree reuse** (`"tree_reuse": true`) keeps the chosen child's subtree as the next self-play
 search root and tops it up to `sims` total visits; it is dropped across refill (chance)
 boundaries and re-mixes Dirichlet noise at the new root. Self-play only — see `mcts.py`.
@@ -126,8 +151,9 @@ Everything observable lives in `runs/<run_name>/`. Exact schemas (one JSON objec
 
 Conventions: all timestamps are UTC ISO-8601 with explicit offset (e.g. `2026-08-14T15:04:05Z`).
 Where fields are duplicated, `status.json` is authoritative over `config.json` and over the last
-`train.jsonl` line. Draws count as half-wins in every win rate. `loss` = `loss_p + loss_v`
-(any regularization lives in the optimizer, not the reported loss).
+`train.jsonl` line. Draws count as half-wins in every win rate. `loss` = `loss_p + loss_v +
+loss_m` (any regularization lives in the optimizer, not the reported loss; `loss_m` is 0 for a
+net without a margin head, and absent altogether from run1-run3 logs).
 
 - `config.json` — run hyperparameters, free-form dict, plus `"run"`, `"started"` (ISO time).
 - `status.json` — heartbeat, rewritten atomically by the trainer:
@@ -135,7 +161,8 @@ Where fields are duplicated, `status.json` is authoritative over `config.json` a
     "error": <str|null>, "games", "steps", "note"}`
 - `train.jsonl` — appended every logging interval:
   `{"t": <sec since run start>, "games": <total self-play games>, "steps": <optimizer steps>,
-    "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "buffer": <replay size>, "lr": <lr>}`
+    "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "loss_m": <margin, run4+>,
+    "buffer": <replay size>, "lr": <lr>}`
 - `elo.jsonl` — appended after each checkpoint evaluation:
   `{"t": <sec>, "games": <self-play games at ckpt>, "ckpt": "<name>", "elo": <float>,
     "elo_err": <float>, "vs": {"<opponent>": <winrate 0..1>, ...}, "n_games": <eval games>,

@@ -14,6 +14,14 @@ from the point of view of the player to move. Masking to the legal actions and
 the softmax stay on the JavaScript side, exactly as :class:`NetEvaluator` does
 them in Python — the graph itself knows nothing about legality.
 
+A run4 checkpoint (margin head, see :mod:`ludometer.train.net2`) adds a **third**
+output, ``margin`` ``[batch, 1]``, also in [-1, 1] and also from the player to
+move's point of view: ``tanh(score difference / 20)``. It is appended, never
+inserted, and only when the checkpoint has the head — so ``policy`` and ``value``
+keep their names *and* their positions, a run3 export is byte-for-byte what it
+always was, and the deployed page (which reads outputs by name) keeps working
+whichever kind of checkpoint is published.
+
 Parity is checked before the file is accepted: ~100 observations taken from real
 random games are run through both torch and onnxruntime and the maximum absolute
 difference must stay under ``--tol`` (1e-4 by default). onnxruntime is optional
@@ -48,11 +56,14 @@ from ludometer.train.net import PolicyValueNet, load_net
 
 __all__ = [
     "DEFAULT_OUT_DIR",
+    "MARGIN_OUTPUT",
+    "OUTPUT_NAMES",
     "ExportResult",
     "ExportWrapper",
     "collect_observations",
     "export_checkpoint",
     "main",
+    "output_names",
     "verify_parity",
 ]
 
@@ -68,20 +79,37 @@ DEFAULT_REFERENCE = (
 OPSET = 17  # widely supported by onnxruntime-web 1.x; the net only needs matmul/norm
 
 
+OUTPUT_NAMES = ("policy", "value")
+MARGIN_OUTPUT = "margin"
+
+
 class ExportWrapper(nn.Module):
     """``PolicyValueNet`` with a web-friendly signature: value stays 2-D.
 
     :meth:`PolicyValueNet.forward` squeezes the value to ``[B]``; keeping it at
     ``[B, 1]`` means the JS side reads ``value.data[0]`` whatever the batch is.
+    The margin, when the net has one, is shaped and appended the same way.
     """
 
     def __init__(self, net: PolicyValueNet) -> None:
         super().__init__()
         self.net = net
+        self.has_margin = bool(getattr(net, "has_margin", False))
 
-    def forward(self, obs: Tensor) -> tuple[Tensor, Tensor]:
-        logits, value = self.net(obs)
-        return logits, value.reshape(-1, 1)
+    def forward(self, obs: Tensor) -> tuple[Tensor, ...]:
+        if not self.has_margin:
+            logits, value = self.net(obs)
+            return logits, value.reshape(-1, 1)
+        logits, value, margin = self.net.forward_heads(obs)
+        return logits, value.reshape(-1, 1), margin.reshape(-1, 1)
+
+
+def output_names(net: Any) -> list[str]:
+    """Graph outputs for ``net``, in order (the margin is always last)."""
+    names = list(OUTPUT_NAMES)
+    if getattr(net, "has_margin", False):
+        names.append(MARGIN_OUTPUT)
+    return names
 
 
 # --------------------------------------------------------------------- fixtures
@@ -134,30 +162,37 @@ def verify_parity(
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     net.eval()
     with torch.inference_mode():
-        t_logits, t_value = net(torch.from_numpy(samples))
+        t_logits, t_value, t_margin = net.forward_heads(torch.from_numpy(samples))
     ref_logits = t_logits.numpy()
     ref_value = t_value.reshape(-1, 1).numpy()
+    ref_margin = None if t_margin is None else t_margin.reshape(-1, 1).numpy()
 
     p_diff = 0.0
     v_diff = 0.0
+    m_diff = 0.0
     # one row at a time: batch 1 is what the browser runs, so that is what we check
     for i in range(samples.shape[0]):
         out = session.run(None, {"obs": samples[i : i + 1]})
         p_diff = max(p_diff, float(np.abs(out[0] - ref_logits[i : i + 1]).max()))
         v_diff = max(v_diff, float(np.abs(out[1] - ref_value[i : i + 1]).max()))
-    worst = max(p_diff, v_diff)
+        if ref_margin is not None:
+            m_diff = max(m_diff, float(np.abs(out[2] - ref_margin[i : i + 1]).max()))
+    worst = max(p_diff, v_diff, m_diff)
     if worst > tol:
         raise AssertionError(
             f"ONNX/torch parity failed: max |diff| = {worst:.3e} > {tol:.1e} "
-            f"(policy {p_diff:.3e}, value {v_diff:.3e})"
+            f"(policy {p_diff:.3e}, value {v_diff:.3e}, margin {m_diff:.3e})"
         )
-    return {
+    report = {
         "checked": True,
         "n": int(samples.shape[0]),
         "policy_max_abs_diff": p_diff,
         "value_max_abs_diff": v_diff,
         "tol": tol,
     }
+    if ref_margin is not None:
+        report["margin_max_abs_diff"] = m_diff
+    return report
 
 
 def write_torch_reference(
@@ -173,7 +208,7 @@ def write_torch_reference(
     """
     net.eval()
     with torch.inference_mode():
-        logits, value = net(torch.from_numpy(samples))
+        logits, value, margin = net.forward_heads(torch.from_numpy(samples))
     payload = {
         "checkpoint": meta.get("checkpoint"),
         "onnx_sha256": meta.get("onnx_sha256"),
@@ -182,6 +217,8 @@ def write_torch_reference(
         "policy": logits.numpy().astype(np.float32).tolist(),
         "value": value.reshape(-1).numpy().astype(np.float32).tolist(),
     }
+    if margin is not None:
+        payload["margin"] = margin.reshape(-1).numpy().astype(np.float32).tolist()
     path.parent.mkdir(parents=True, exist_ok=True)
     import gzip
 
@@ -235,6 +272,11 @@ def export_checkpoint(
     wrapper = ExportWrapper(net).eval()
     dummy = torch.zeros(1, net.config.input_size, dtype=torch.float32)
 
+    names = output_names(net)
+    axes: dict[str, dict[int, str]] = {"obs": {0: "batch"}}
+    for output in names:
+        axes[output] = {0: "batch"}
+
     tmp = out / "model.onnx.tmp"
     # dynamo=False on purpose: the TorchScript exporter is deprecated but it emits
     # the plain Gemm/LayerNormalization graph onnxruntime-web is happiest with,
@@ -247,12 +289,8 @@ def export_checkpoint(
             (dummy,),
             str(tmp),
             input_names=["obs"],
-            output_names=["policy", "value"],
-            dynamic_axes={
-                "obs": {0: "batch"},
-                "policy": {0: "batch"},
-                "value": {0: "batch"},
-            },
+            output_names=names,
+            dynamic_axes=axes,
             opset_version=OPSET,
             do_constant_folding=True,
             dynamo=False,
@@ -275,6 +313,8 @@ def export_checkpoint(
         "action_space": int(net.config.action_space),
         "net_config": net.config.to_dict(),
         "num_params": int(net.num_params),
+        "outputs": names,
+        "has_margin": bool(getattr(net, "has_margin", False)),
         "opset": OPSET,
         "onnx_bytes": target.stat().st_size,
         "onnx_sha256": digest,
