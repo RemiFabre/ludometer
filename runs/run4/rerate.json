@@ -1,0 +1,111 @@
+{
+  "agents": {
+    "run2": "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100",
+    "run3": "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100",
+    "run4a": "mcts:runs/run4/checkpoints/ckpt-042496.pt?sims=100",
+    "run4b": "mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100"
+  },
+  "games": 40,
+  "matches": [
+    {
+      "a": "run2",
+      "b": "run3",
+      "n_games": 40,
+      "wins": 7,
+      "draws": 1,
+      "losses": 32,
+      "win_rate": 0.1875,
+      "mean_score_diff": -9.95,
+      "mean_score_a": 44.425,
+      "mean_score_b": 54.375,
+      "mean_moves": 53.8,
+      "base_seed": 1005151
+    },
+    {
+      "a": "run2",
+      "b": "run4a",
+      "n_games": 40,
+      "wins": 6,
+      "draws": 0,
+      "losses": 34,
+      "win_rate": 0.15,
+      "mean_score_diff": -19.825,
+      "mean_score_a": 35.875,
+      "mean_score_b": 55.7,
+      "mean_moves": 54.55,
+      "base_seed": 2005151
+    },
+    {
+      "a": "run2",
+      "b": "run4b",
+      "n_games": 40,
+      "wins": 2,
+      "draws": 0,
+      "losses": 38,
+      "win_rate": 0.05,
+      "mean_score_diff": -15.475,
+      "mean_score_a": 38.975,
+      "mean_score_b": 54.45,
+      "mean_moves": 53.825,
+      "base_seed": 3005151
+    },
+    {
+      "a": "run3",
+      "b": "run4a",
+      "n_games": 40,
+      "wins": 16,
+      "draws": 0,
+      "losses": 24,
+      "win_rate": 0.4,
+      "mean_score_diff": -1.775,
+      "mean_score_a": 45.375,
+      "mean_score_b": 47.15,
+      "mean_moves": 52.5,
+      "base_seed": 6005151
+    },
+    {
+      "a": "run3",
+      "b": "run4b",
+      "n_games": 40,
+      "wins": 17,
+      "draws": 1,
+      "losses": 22,
+      "win_rate": 0.4375,
+      "mean_score_diff": -2.725,
+      "mean_score_a": 48.725,
+      "mean_score_b": 51.45,
+      "mean_moves": 54.225,
+      "base_seed": 7005151
+    },
+    {
+      "a": "run4a",
+      "b": "run4b",
+      "n_games": 40,
+      "wins": 16,
+      "draws": 1,
+      "losses": 23,
+      "win_rate": 0.4125,
+      "mean_score_diff": -1.05,
+      "mean_score_a": 45.8,
+      "mean_score_b": 46.85,
+      "mean_moves": 54.15,
+      "base_seed": 11005151
+    }
+  ],
+  "elo": {
+    "run2": 2020.3,
+    "run3": 2254.7,
+    "run4a": 2312.8419126738263,
+    "run4b": 2360.6073542553545
+  },
+  "elo_err": {
+    "run2": 0.0,
+    "run3": 0.0,
+    "run4a": 37.96184267884509,
+    "run4b": 39.20527348381185
+  },
+  "anchors": {
+    "run2": 2020.3,
+    "run3": 2254.7
+  }
+}

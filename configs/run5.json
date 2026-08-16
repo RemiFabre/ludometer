@@ -3,9 +3,7 @@
   "note": "the superhuman push: a 7.0M-parameter structured net (4 attention layers at width 256) fed by batched GPU self-play, warm-started from run4's replay buffer",
   "seed": 20260818,
   "device": "auto",
-
   "_note_why": "run3 and run4 both flattened out around +2290 internal Elo and stayed there for 30k+ games. Two measurements say that is the net, not the search. (1) The browser player's profile: 92% of a 5-second think is the net, and an infinitely fast engine would buy +2%. (2) run4's own curve: the margin head changed what the AI plays without moving the ceiling. So run5 spends everything on capacity - and the only reason capacity was unaffordable before was that self-play evaluated ONE position per forward pass on a CPU thread.",
-
   "_note_selfplay": "THE ENABLING CHANGE. selfplay=batched runs `selfplay_games` games concurrently inside each of `workers` driver processes and puts every tree's next leaf into ONE forward pass on the GPU (ludometer/train/selfplay_batched.py). Measured on this M3 Pro, per round trip (numpy in, numpy out, no pipelining - the loop cannot descend again until the values are home): run4's 1.81M net costs 0.66 ms/position one at a time on a CPU thread, but 128 positions cost 8.7 ms in one MPS pass - 1,500/s against 14,700/s. run5's 7.04M net is ~1,000/s on a CPU thread and 8,300/s at batch 128 on MPS. That is the whole budget for the bigger net. Each tree still searches strictly SEQUENTIALLY (search_batch=1), so a batched game's trajectory is bit-identical to what the run1-run4 engine would have played from the same seed; tests/test_selfplay_batched.py asserts that game for game. Within-tree virtual-loss batching exists (search_batch > 1, ramped by search_batch_ramp so the batch never exceeds a sixteenth of the tree) but is deliberately off: with 128 concurrent games there is already a full tensor to fill, and the browser measured a flat within-tree batch LOSING 3-17 at equal simulations - quantity bought at a price in quality that is not worth paying when quantity is free.",
   "_note_shape": "6 x 128 was measured, not guessed, with run4 still training on the same machine throughout (so every number here is pessimistic). Positions/s, 8-worker sequential CPU baseline vs batched, same net, same 512-sim search: OLD 8 x ~1,300 = ~10,400/s (5,800/s measured while the machine also carried run4's 8 workers); BATCHED 6 drivers x 192 games = 29,400/s with run4's net, i.e. 2.8x the old path's best case and 5.1x like-for-like. With run5's 7.04M net, 6 x 128 gives 14,300/s - so the SAME positions/s as the old path had with a net a quarter of the size, and ~63 games/min projected against run4's measured 44-47. Why 128 and not 192 per driver: at G=192 the MPS caching allocator jumps to 1.14 GB per driver, at G=128 it sits at 127 MB, for 8% less throughput. Why 6 drivers: the descents are pure Python (~60-90 us per simulation) so one driver is CPU-bound long before the GPU is, and throughput scaled linearly to 6 (no per-driver loss at all).",
   "selfplay": "batched",
@@ -17,7 +15,6 @@
   "search_min_batch": 1,
   "virtual_loss": 1.0,
   "workers": 6,
-
   "_note_net": "7.04M parameters, 3.9x run4's 1.81M, and the increase is deliberately NOT spread evenly. run3/run4 put 4% of their weights in the relational trunk (one attention layer, width 96, 4 heads = 74k) and 58% in a pooled MLP that only ever sees one vector; run5 makes the trunk 4 layers of width 256 with 8 heads and a 3x feed-forward = 2.6M, a 35x increase in the part of the net that can compare two entities. Azul decisions ARE pairwise ('is the black tile on factory 3 useful for my row 2, and does taking it hand the centre to my opponent'), which is the argument net2.py makes for having attention at all - run3 just never had enough of it. Width over depth is a measurement, not a preference: with 22 tokens each attention layer is kernel-launch-bound on MPS, so at equal parameters 4 wide layers beat 6 narrow ones by 15-25% throughput. The readout body goes 1024 -> 1536 because pooled-MLP width is nearly free on the GPU (2048 costs 5% more for 2.5M more weights) but is NOT pushed further: those are the least valuable parameters per unit of time and they inflate the ONNX. value_hidden 256 and policy_rank 64 follow the trunk width. Re-run `python -m ludometer.train.benchmark --config configs/run5.json` if you touch any of it.",
   "arch": "structured",
   "margin_head": true,
@@ -29,7 +26,6 @@
   "body_blocks": 1,
   "value_hidden": 256,
   "policy_rank": 64,
-
   "_note_search": "Unchanged from run3 and run4 on purpose. run5 is a change of CAPACITY, not of search, and keeping sims, tree reuse, c_puct and the noise identical is what makes run5's Elo curve directly comparable with run3's and run4's - any Elo the bigger net buys is then visible rather than confounded with a deeper search. There WAS throughput to spare for more sims (the measured 14,300 positions/s projects to ~63 games/min against run4's 44-47) and it is deliberately spent on games/min instead: the plateau hypothesis is that the net has run out of capacity, and a 3.9x bigger net wants more data far more than it wants more depth per position. If the curve flattens again with the bigger net, sims is the next knob and the headroom is already measured.",
   "sims": 512,
   "tree_reuse": true,
@@ -45,14 +41,12 @@
   "decisive_eps": 0.03,
   "decisive_min_visit_frac": 0.1,
   "margin_weight": 0.25,
-
   "_note_pretrain": "run4's buffer is 500k positions played at 512 sims by a ~2290-Elo net with a margin head, so unlike run4 there is nothing to unblend: value_score_weight was already 0 when the file was written and it carries native `margins` and `margin_mask` arrays. pretrain_unblend MUST stay 0 - the values in this file are pure win/draw/loss and running run4's 0.15 recovery on them would fabricate margins from nothing. Verified against the actual file before launch. Three epochs of supervised policy CE + value MSE + margin MSE fit the new architecture to what run4 knows before a single self-play game.",
   "pretrain": "runs/run4/checkpoints/replay.npz",
   "pretrain_epochs": 3,
   "pretrain_lr": 0.0005,
   "pretrain_keep_buffer": true,
   "pretrain_unblend": 0.0,
-
   "_note_loop": "games_per_iter is 768 = workers x selfplay_games: one full wave of concurrent games per iteration, so every slot is seated from the first forward pass and the weights refresh once per wave. That is 12x run4's 64 and it is the one real cost of batching - self-play data is played by a net up to 768 games old instead of 64. In optimizer terms that is ~470 of ~18,500 steps (2.5%) per refresh, which is far fresher than the thousands of games between refreshes an AlphaZero-style run normally uses. eval_every_games matches it so a checkpoint lands on an iteration boundary.",
   "games_per_iter": 768,
   "total_games": 60000,
@@ -60,7 +54,6 @@
   "batch_size": 256,
   "steps_per_position": 1.5,
   "chunk_steps": 25,
-
   "_note_lr": "60000 games x 52 positions x 1.5 replays / 256 per batch = ~18.3k self-play steps, so lr_total_steps=18500 lands the cosine on lr_min at the end of the game budget - same arithmetic as run3 and run4, with 52 measured off run4's trained net (52 moves/game, 260 evaluations per move after tree reuse) instead of the 55 those configs assumed. Peak 5e-4 rather than run3's 6e-4 for a new architecture: this trunk is four pre-LN attention layers deep instead of one, which is more sensitive to a large peak, and the warm start is the strongest yet (run4's own 512-sim buffer, margin targets included). lr_min 5e-5 as in run3/run4.",
   "lr": 0.0005,
   "lr_min": 5e-05,
@@ -69,10 +62,8 @@
   "weight_decay": 0.0001,
   "value_weight": 1.0,
   "grad_clip": 1.0,
-
   "replay_capacity": 500000,
   "save_buffer": true,
-
   "_note_anchors": "run1 (+2014), run2 (+2020.3) and run3 (+2254.7, the re-rated honest number) are pinned so run5's curve shares the scale every earlier run was measured on. ADD RUN4'S BEST HERE AT LAUNCH: append \"mcts:runs/run4/checkpoints/ckpt-XXXXXX.pt?sims=100\" to eval_anchors and the same string with its Elo to anchor_elos. Do NOT take that Elo from the best line of runs/run4/elo.jsonl - with ~80 evaluations at +/-26 Elo each, the maximum of the series is an order statistic and overstates the truth by roughly the noise (run4's headline +2338 sits inside one standard error of several neighbours, which is exactly what that looks like). Re-rate it first against the anchors that are already on the scale and paste the fitted number: nice -n 19 uv run python -m ludometer.eval.gauntlet --games 40 --workers 8 --seed 5151 --json runs/run4/rerate.json --anchor run2=2020.3 --anchor run3=2254.7 run2=mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100 run3=mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100 run4a=mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100 run4b=mcts:runs/run4/checkpoints/ckpt-039424.pt?sims=100 -- 6 pairings x 40 = 240 games; swap run4a/run4b for whichever two checkpoints top runs/run4/elo.jsonl when run4 actually finishes, and anchor on the better of the two.",
   "eval_every_games": 768,
   "eval_games": 40,
@@ -84,7 +75,8 @@
     "heuristic",
     "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100",
     "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100",
-    "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100"
+    "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100",
+    "mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100"
   ],
   "eval_frozen": 2,
   "anchor_elos": {
@@ -93,7 +85,8 @@
     "heuristic": 1378.0,
     "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100": 2014.0,
     "mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100": 2020.3,
-    "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100": 2254.7
+    "mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100": 2254.7,
+    "mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100": 2360.6
   },
   "eval_at_start": true,
   "heartbeat": 20.0
