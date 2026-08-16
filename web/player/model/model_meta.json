@@ -1,9 +1,9 @@
 {
-  "run": "run3",
-  "checkpoint": "ckpt-020992",
-  "elo": 2336.2,
-  "games": 20992,
-  "exported_at": "2026-08-15T21:43:18Z",
+  "run": "run4",
+  "checkpoint": "ckpt-019968",
+  "elo": 2272.0,
+  "games": 19968,
+  "exported_at": "2026-08-16T09:17:00Z",
   "input_size": 182,
   "action_space": 180,
   "net_config": {
@@ -18,19 +18,28 @@
     "body_blocks": 1,
     "value_hidden": 128,
     "policy_rank": 32,
-    "policy_global": true
+    "policy_global": true,
+    "margin_head": true,
+    "version": 2
   },
-  "num_params": 1679002,
+  "num_params": 1810331,
+  "outputs": [
+    "policy",
+    "value",
+    "margin"
+  ],
+  "has_margin": true,
   "opset": 17,
-  "onnx_bytes": 6805183,
-  "onnx_sha256": "e81e525165f220bc862f1cd06ba502faf9d59fbf9e044de5d2c8b6c1c7c11165",
+  "onnx_bytes": 7329526,
+  "onnx_sha256": "d11df5dfa3d6a1d1803bc3b4021f6afeece8dcfcf57bdd566d986c98add8f033",
   "parity": {
     "checked": true,
     "n": 100,
-    "policy_max_abs_diff": 9.417533874511719e-06,
-    "value_max_abs_diff": 7.748603820800781e-07,
-    "tol": 0.0001
+    "policy_max_abs_diff": 1.33514404296875e-05,
+    "value_max_abs_diff": 1.3113021850585938e-06,
+    "tol": 0.0001,
+    "margin_max_abs_diff": 8.046627044677734e-07
   },
-  "source_checkpoint": "/Users/remi/ludometer/runs/run3/checkpoints/ckpt-020992.pt",
+  "source_checkpoint": "runs/run4/checkpoints/ckpt-019968.pt",
   "torch_reference": "/Users/remi/ludometer/web/player/test/fixtures/torch_reference.json.gz"
 }
