@@ -4,8 +4,10 @@
  * everything else on this page reports itself. Animation speed is always here
  * (it exists because the alternative was letting the operating system decide —
  * see animate.js for that story); a page that shows score pop-ups asks for
- * their switch with `{popups: true}`, and a page that places moves before
- * playing them asks for the confirm switch with `{confirm: true}`.
+ * their switch with `{popups: true}`, a page that places moves before
+ * playing them asks for the confirm switch with `{confirm: true}`, and a
+ * page with the side-by-side table asks for the board-size − / + row with
+ * `{boards: true}` (see layout.js).
  *
  *   const settings = createSettings(host);                  // speed only
  *   const settings = createSettings(host, {popups: true, confirm: true});
@@ -16,6 +18,7 @@
 
 import { SPEEDS, initSpeed, prefersReducedMotion, setSpeed, speed } from "./animate.js";
 import { confirmOn, initConfirm, setConfirm } from "./confirm.js";
+import { boardsMode, initBoards, setBoardsMode } from "./layout.js";
 import { initPopups, popupsOn, setPopups } from "./popups.js";
 import { node } from "./dom.js";
 
@@ -135,6 +138,36 @@ export function createSettings(host, options = {}) {
     );
   }
 
+  /* Board size is a − / + pair, not On/Off: − keeps the whole game on one
+   * screen (factories left, both boards beside them), + gives the big boards
+   * back, one under the other. The page's stylesheet reads the choice off
+   * <body data-boards>. */
+  let boardButtons = [];
+  if (options.boards) {
+    initBoards();
+    panel.append(node("i", "settings-gap"), node("span", "settings-label", "Board size"));
+    const sizes = node("div", "speeds");
+    sizes.setAttribute("role", "group");
+    sizes.setAttribute("aria-label", "Board size");
+    boardButtons = [
+      ["side", "−", "Everything on one screen: the factories left, both boards beside them"],
+      ["stack", "+", "Big boards, one under the other below the factories"],
+    ].map(([mode, label, title]) => {
+      const b = node("button", "flag", label);
+      b.type = "button";
+      b.dataset.boards = mode;
+      b.title = title;
+      b.addEventListener("click", () => {
+        setBoardsMode(mode);
+        sync();
+        if (options.onChange) options.onChange(speed());
+      });
+      sizes.appendChild(b);
+      return b;
+    });
+    panel.append(sizes);
+  }
+
   host.append(head, panel);
 
   function sync() {
@@ -147,9 +180,13 @@ export function createSettings(host, options = {}) {
         b.setAttribute("aria-pressed", String((b.dataset[dataKey] === "true") === get()));
       });
     });
+    boardButtons.forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.boards === boardsMode()));
+    });
     const bits = [now ? "animation " + LABELS[now] : "animation off"];
     if (options.popups) bits.push(popupsOn() ? "pop-ups on" : "pop-ups off");
     if (options.confirm) bits.push(confirmOn() ? "confirm on" : "confirm off");
+    if (options.boards) bits.push(boardsMode() === "stack" ? "boards +" : "boards −");
     summary.textContent = bits.join(" · ");
     hint.textContent = prefersReducedMotion()
       ? "Your system asks apps to reduce motion. The tiles still move here, because " +

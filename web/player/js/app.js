@@ -76,7 +76,7 @@ const ui = {
   engineText: el("engine-text"), aboutMeta: el("about-meta"), middle: el("middle"),
   prompt: el("prompt"), hint: el("hint"), cancel: el("cancel"), fly: el("fly"),
   scoring: el("scoring"), log: el("log"), coach: el("coach"),
-  coachField: el("coach-field"), coachLegend: el("coach-legend"), supply: el("supply"),
+  coachField: el("coach-field"), coachLegend: el("coach-legend"), counts: el("counts"),
   settings: el("settings"), nav: el("nav"),
   hand: el("hand"), handTiles: el("hand-tiles"), pops: el("pops"),
   confirm: el("confirm"), confirmBar: el("confirm-bar"),
@@ -102,7 +102,7 @@ let navToken = 0;      // invalidates a history-step animation when another step
 
 initSpeed(); // before anything can animate: the stored speed, or 1×
 const status = createStatus(el("status"));
-const settings = createSettings(ui.settings, { popups: true, confirm: true });
+const settings = createSettings(ui.settings, { popups: true, confirm: true, boards: true });
 const middle = createMiddle(ui.middle, { onPick: pick });
 const boards = {
   human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: route }),
@@ -353,7 +353,7 @@ function render() {
     title: aiLabel(),
     toMove: live && !base.is_terminal && base.current_player === S.ai_seat,
   });
-  renderSupply(st);
+  renderCounts(st);
   renderLog(ui.log, (live ? S.log : frame.log) || []);
   ui.cancel.classList.toggle("hidden", !live || !sel || !!placed);
   ui.hint.disabled = busy || !engineReady || !live || !S.your_turn || !!placed;
@@ -374,7 +374,7 @@ function drawPosition(st) {
   middle.render({ state: st, legalActions: [], canPick: false, selection: null });
   boards.human.render({ state: st, title: "You", toMove: false });
   boards.ai.render({ state: st, title: aiLabel(), toMove: false });
-  renderSupply(st);
+  renderCounts(st);
 }
 
 function renderStatus(frame) {
@@ -445,28 +445,16 @@ function turnDetail() {
   return bits.join(" · ");
 }
 
-function renderSupply(st) {
-  ui.supply.innerHTML = "";
-  [["Bag", st.bag, null], ["Lid", st.lid, "lid-row"]].forEach(([label, counts, id]) => {
-    const row = node("div", "supply-row");
-    if (id) row.id = id;
-    row.appendChild(node("span", "supply-label", label));
-    counts.forEach((n, c) => {
-      const sw = node("span", "swatch");
-      const chip = node("span", "chip");
-      chip.dataset.color = c;
-      chip.title = COLORS[c];
-      sw.appendChild(chip);
-      sw.appendChild(node("span", null, String(n)));
-      row.appendChild(sw);
-    });
-    row.appendChild(node("span", "supply-total", counts.reduce((a, b) => a + b, 0) + " tiles"));
-    ui.supply.appendChild(row);
-  });
-  const row = node("div", "supply-row");
-  row.appendChild(node("span", "supply-label", "Table"));
-  row.appendChild(node("span", "swatch", st.tiles_left + " tiles still to take"));
-  ui.supply.appendChild(row);
+/* One quiet line of totals — never per-colour counts, Rémi retired those. The
+ * lid keeps a real element (#lid-row) because discarded tiles fly to it. */
+function renderCounts(st) {
+  const sum = (counts) => counts.reduce((a, b) => a + b, 0);
+  ui.counts.innerHTML = "";
+  ui.counts.appendChild(node("span", "count", "Bag " + sum(st.bag)));
+  const lid = node("span", "count", "Lid " + sum(st.lid));
+  lid.id = "lid-row";
+  ui.counts.appendChild(lid);
+  ui.counts.appendChild(node("span", "count", st.tiles_left + " on the table"));
 }
 
 /* -------------------------------------------------------------- game control */
@@ -1097,7 +1085,7 @@ async function askHint() {
 
 /* ----------------------------------------------------------------- animation */
 function lidTarget() {
-  return document.getElementById("lid-row") || ui.supply;
+  return document.getElementById("lid-row") || ui.counts;
 }
 
 /** Where a move's tiles are going, in landing order: line, then floor, then lid. */

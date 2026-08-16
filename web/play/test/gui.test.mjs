@@ -844,6 +844,81 @@ async function checkConfirmMove(page, label, errors) {
   console.log(`    ${label}: place → cancel-all → place → confirm behaved; off-switch commits at once`);
 }
 
+/* The playfield (player page only): the whole game on one screen. In the
+ * default "side" layout the factories sit left with both boards beside them —
+ * on a desktop AND on a phone — and the settings + gives the big stacked
+ * boards back. Also holds the retirements: no per-colour supply counts, and
+ * the AI's clock lives at the bottom of the page, not the top bar. */
+async function checkLayout(page, label, errors) {
+  if (!(await page.eval('return !!document.querySelector(".playfield");'))) {
+    console.log(`    ${label}: no playfield on this page — skipped`);
+    return;
+  }
+  const GEO = `
+    const r = (sel) => {
+      const e = document.querySelector(sel);
+      if (!e) return null;
+      const b = e.getBoundingClientRect();
+      return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+    };
+    return {
+      middle: r(".middle-panel"), boards: r(".boards"),
+      you: r("#board-human"), ai: r("#board-ai"), status: r("#status"),
+      think: r("#think"),
+      supply: !!document.getElementById("supply"),
+      chips: document.querySelectorAll(".swatch .chip").length,
+      lid: !!document.getElementById("lid-row"),
+      thinkInTopbar: !!document.querySelector(".topbar #think"),
+      mode: document.body.dataset.boards,
+      scrollW: document.scrollingElement.scrollWidth,
+      innerW: window.innerWidth,
+    };`;
+  const sideBySide = (g) =>
+    g.middle.left < g.boards.left && g.boards.left >= g.middle.right - 1 &&
+    g.you.bottom <= g.ai.top + 1; // boards stacked, both beside the factories
+  const setWidth = (w, h, mobile) =>
+    page.send("Emulation.setDeviceMetricsOverride", {
+      width: w, height: h, deviceScaleFactor: 1, mobile,
+    });
+
+  for (const [w, h, mobile, name] of [[1500, 1180, false, "desktop"], [390, 844, true, "phone"]]) {
+    await setWidth(w, h, mobile);
+    await sleep(300);
+    const g = await page.eval(GEO);
+    if (g.supply || g.chips) errors.push(`${label}: ${name} still shows per-colour supply counts`);
+    if (!g.lid) errors.push(`${label}: ${name} lost #lid-row, the discard flight target`);
+    if (g.thinkInTopbar) errors.push(`${label}: ${name} keeps "AI thinks for" in the top bar`);
+    if (!g.think || g.think.top < g.boards.bottom) {
+      errors.push(`${label}: ${name} does not put "AI thinks for" below the table`);
+    }
+    if (g.mode !== "side") errors.push(`${label}: ${name} default board mode is ${g.mode}, not side`);
+    if (!sideBySide(g)) errors.push(`${label}: ${name} side layout is not factories-left, boards-right`);
+    if (g.scrollW > g.innerW) errors.push(`${label}: ${name} scrolls sideways (${g.scrollW} > ${g.innerW})`);
+    if (name === "phone" && g.status.bottom - g.status.top > 100) {
+      errors.push(`${label}: phone status band is ${Math.round(g.status.bottom - g.status.top)}px tall — not the small one`);
+    }
+  }
+
+  // the +: big boards, one under the other, below the factories — and persisted
+  await page.eval('document.querySelector(\'.flag[data-boards="stack"]\').click(); return true;');
+  await sleep(300);
+  const stacked = await page.eval(GEO);
+  const stored = await page.eval('return window.localStorage.getItem("ludometer.boards");');
+  if (stacked.mode !== "stack" || stored !== "stack") {
+    errors.push(`${label}: the + did not switch and persist stack mode (${stacked.mode}/${stored})`);
+  }
+  if (stacked.boards.top < stacked.middle.bottom - 1) {
+    errors.push(`${label}: in stack mode the boards do not sit below the factories`);
+  }
+  if (stacked.scrollW > stacked.innerW) {
+    errors.push(`${label}: stack mode scrolls sideways (${stacked.scrollW} > ${stacked.innerW})`);
+  }
+  await page.eval('document.querySelector(\'.flag[data-boards="side"]\').click(); return true;');
+  await setWidth(1500, 1180, false);
+  await sleep(200);
+  console.log(`    ${label}: side layout holds on desktop and phone; the + stacks and persists`);
+}
+
 /* ------------------------------------------------------------------- the pages */
 async function checkPage({ name, url, deal, errors, shots }) {
   console.log(`\n== ${name} — ${url}`);
@@ -906,6 +981,9 @@ async function checkPage({ name, url, deal, errors, shots }) {
     await checkHeldPreview(page, name, errors);
     await checkConfirmMove(page, name, errors);
     await checkCoachImmediate(page, name, errors);
+
+    // 4c. The layout: the whole game on one screen, on a desktop and a phone.
+    await checkLayout(page, name, errors);
 
     // 5. Nothing may cover the board, settings panel included.
     const overlays = await page.eval(`
