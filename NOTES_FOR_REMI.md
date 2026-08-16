@@ -4,6 +4,25 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-16 — Morning report: run4 at +2181 after 10k games, endgames now decisive
+
+- **run4 overnight**: pretrained start +2092 → currently **+2181 at 10,240 games** (peak +2219),
+  after a brief dip while run3's pretraining data aged out of the replay buffer. It beats
+  run2's best 90% and trades roughly evenly with run3's re-rated best — on a *stricter ruler*
+  than before (honest re-rated anchors + calibrated greedy/heuristic pins), so numbers read
+  slightly lower than run3's inflated late-night ones.
+- **Your endgame fix is in and training**: the margin head + lexicographic play ("win first,
+  win big second"). This mostly changes *style*, not headline Elo — the sloppy-looking
+  endgame moves should be gone. Judge it at the board.
+- **To play run4 explicitly today**: the "Strongest (auto)" dropdown still points at run3's
+  ckpt-020992 (its recorded +2336 spike still tops the log even though its true strength is
+  +2255). Until run4's recorded rating passes that, pick run4 by hand:
+  `mcts:runs/run4/checkpoints/<latest ckpt>.pt?sims=400&think=5` — it will play decisively;
+  the public site also auto-detects the margin head the moment I export a run4 model.
+- run4 continues toward 60k games. Next decision point: whether the +2255-level plateau breaks
+  with more games, or whether run5 should be the "bigger net on GPU" step the WebGPU
+  measurements opened up.
+
 ## 2026-08-16 — "Would a faster language help?" — **no, and here is the profile**. The browser player now uses your GPU
 
 You asked whether re-implementing the search in a much faster language, to explore more
