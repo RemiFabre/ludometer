@@ -1251,17 +1251,20 @@ async function flyNavStep(plan, token) {
 }
 
 /** Round end: full lines travel to the wall, the floor line travels to the lid —
- * each wall tile popping its points as it lands, each floor line its bill. */
+ * each wall tile popping its points as it lands, each floor line its bill.
+ * One player is scored completely — wall, floor bill, lid — before the other
+ * starts, the way a table is counted in real life, so you can follow along. */
 async function animateTiling(report) {
   if (!report) return;
-  const wall = [];
-  const pops = [];
-  const lid = [];
   const lidEl = lidTarget();
-  const floorBills = [];
-  [[S.human_seat, boards.human], [S.ai_seat, boards.ai]].forEach(([seat, board]) => {
+  // with the tiles not animating, the pops still tell the arithmetic one step
+  // at a time — this offset keeps the second player's count after the first's
+  let beatOffset = 0;
+  for (const [seat, board] of [[S.human_seat, boards.human], [S.ai_seat, boards.ai]]) {
     const player = report.players[seat];
-    if (!player) return;
+    if (!player) continue;
+    const wall = [];
+    const pops = [];
     player.tiles.forEach((t) => {
       const tiles = board.lineTiles(t.row);
       const from = tiles[tiles.length - 1] || board.lineRow(t.row);
@@ -1272,26 +1275,29 @@ async function animateTiling(report) {
         pops.push({ at: to.getBoundingClientRect(), text: "+" + t.points });
       }
     });
-    board.floorTiles().forEach((from) => {
-      lid.push({ from, to: lidEl, color: Number(from.dataset.color) });
+    const lid = board.floorTiles().map((from) => ({
+      from, to: lidEl, color: Number(from.dataset.color),
+    }));
+    // each "+N" appears as its tile touches down — or on a steady beat when
+    // the tiles are not animating
+    const land = scaled(520);
+    const beat = scaled(70);
+    pops.forEach((p, i) => {
+      setTimeout(
+        () => popScore(ui.pops, p.at, p.text),
+        land ? land + i * beat : beatOffset + i * 240
+      );
     });
+    beatOffset += pops.length * 240;
+    await flyTiles(wall, { layer: ui.fly, duration: 520, stagger: 70 });
     if (player.floor.penalty) {
-      floorBills.push([board.floorEl(), String(player.floor.penalty).replace("-", "−")]);
+      popScore(ui.pops, board.floorEl(), String(player.floor.penalty).replace("-", "−"), "loss");
     }
-  });
-  // each "+N" appears as its tile touches down — or on a steady beat when the
-  // tiles are not animating, so the arithmetic is still told one step at a time
-  const land = scaled(520);
-  const beat = scaled(70);
-  pops.forEach((p, i) => {
-    setTimeout(() => popScore(ui.pops, p.at, p.text), land ? land + i * beat : i * 240);
-  });
-  await flyTiles(wall, { layer: ui.fly, duration: 520, stagger: 70 });
-  floorBills.forEach(([floorEl, bill]) => popScore(ui.pops, floorEl, bill, "loss"));
-  if (lid.length) {
-    lidEl.classList.add("receiving");
-    await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
-    setTimeout(() => lidEl.classList.remove("receiving"), 400);
+    if (lid.length) {
+      lidEl.classList.add("receiving");
+      await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
+      setTimeout(() => lidEl.classList.remove("receiving"), 400);
+    }
   }
 }
 
