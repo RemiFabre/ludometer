@@ -574,27 +574,28 @@ async function animateTake(move, board, table) {
 /** Round end: full lines travel to the wall, the floor line travels to the lid. */
 async function animateTiling(report) {
   if (!report) return;
-  const wall = [];
-  const lid = [];
   const lidEl = lidTarget();
-  [[S.human_seat, boards.human], [S.ai_seat, boards.ai]].forEach(([seat, board]) => {
+  // one player is scored completely — wall, then lid — before the other
+  // starts, the way a table is counted in real life
+  for (const [seat, board] of [[S.human_seat, boards.human], [S.ai_seat, boards.ai]]) {
     const player = report.players[seat];
-    if (!player) return;
+    if (!player) continue;
+    const wall = [];
     player.tiles.forEach((t) => {
       const tiles = board.lineTiles(t.row);
       const from = tiles[tiles.length - 1] || board.lineRow(t.row);
       const to = board.wallCell(t.row, t.col);
       if (from && to) wall.push({ from, to, color: t.color, hide: false });
     });
-    board.floorTiles().forEach((from) => {
-      lid.push({ from, to: lidEl, color: Number(from.dataset.color) });
-    });
-  });
-  await flyTiles(wall, { layer: ui.fly, duration: 520, stagger: 70 });
-  if (lid.length) {
-    lidEl.classList.add("receiving");
-    await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
-    setTimeout(() => lidEl.classList.remove("receiving"), 400);
+    const lid = board.floorTiles().map((from) => ({
+      from, to: lidEl, color: Number(from.dataset.color),
+    }));
+    await flyTiles(wall, { layer: ui.fly, duration: 520, stagger: 70 });
+    if (lid.length) {
+      lidEl.classList.add("receiving");
+      await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
+      setTimeout(() => lidEl.classList.remove("receiving"), 400);
+    }
   }
 }
 
