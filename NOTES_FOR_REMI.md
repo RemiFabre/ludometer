@@ -4,6 +4,72 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-16 — run5 is ready to launch: **self-play now batches onto the GPU, so the net could get 4x bigger**
+
+run3 and run4 both flattened out around +2290 and stayed there for 30k+ games. The browser
+profile already said the ceiling is the net, not the search (92% of a think is the net; an
+infinitely fast engine would buy +2%). The reason a bigger net was unaffordable was not the
+net — it was that **self-play asked for one position per forward pass**, on a CPU thread, in
+each of 8 processes. That is the cheapest thing a GPU-shaped machine can possibly do.
+
+### What changed
+
+`ludometer/train/selfplay_batched.py`: `selfplay_games` games are searched **concurrently**
+inside one process, every tree's next leaf goes into **one tensor**, one forward pass answers
+all of them, and `workers` such drivers run side by side. It is selected by one config key
+(`"selfplay": "batched"`); every old config still says `"workers"` and is bit-for-bit
+unaffected.
+
+The important property, and the one the tests pin down: **each tree still searches strictly
+sequentially.** Batching across games changes the schedule, not the search — a batched game is
+*bit-identical*, state for state and visit for visit, to the game the run1-run4 engine would
+have played from the same seed. Within-tree virtual-loss batching (the browser's trick, ramp
+included) is implemented too, but run5 leaves it off: with 128 concurrent games there is
+already a full tensor to fill without paying its price in search quality.
+
+### Measured, with run4 still training on the same machine (so all of it is pessimistic)
+
+| | positions/s | games/min |
+| --- | --- | --- |
+| old path, 8 CPU workers, run4's 1.81M net | ~10,400 (5,800 measured under that load) | 44-47 |
+| batched, 6 drivers x 192 games, **same net** | **29,400** | ~130 |
+| batched, 6 drivers x 128 games, **run5's 7.04M net** | **14,300** | ~63 |
+
+So the bigger net runs self-play at the positions/s the old path got with a net a quarter of
+the size — and *faster* in games/min than run4 is managing right now.
+
+Two findings worth keeping:
+
+- **Python's garbage collector was costing 40%.** 128 concurrent 512-simulation trees keep
+  ~100k node objects alive, and CPython's generation-2 collection walks every one of them
+  every ~70k allocations. Pushing generations 1 and 2 out for the duration of a self-play
+  batch took one driver from 2,803 to 4,255 positions/s. (Fully disabling the collector gives
+  4,466; not worth betting the process on nothing anywhere making a cycle.)
+- **Cloning the engine's RNG was costing 20% of the search, in every path.**
+  `AzulState.clone` built a `random.Random()` — which seeds itself from the OS *twice* — only
+  to throw that away with `setstate`. Allocating without seeding is bit-identical and takes
+  clone from 30.1 to 11.0 us. Sequential self-play got 25% faster too, for free.
+
+### run5's net: 7.04M parameters, and *where* they go is the point
+
+run3/run4 put **4%** of their weights in the relational trunk (one attention layer, width 96)
+and 58% in a pooled MLP that only ever sees a single vector. run5's trunk is 4 layers of width
+256, 8 heads, 3x feed-forward = **2.6M, a 35x increase** in the only part of the net that can
+compare two entities — which is what Azul decisions actually are. Width beats depth here by
+measurement, not taste: with 22 tokens each attention layer is kernel-launch-bound on MPS, so
+4 wide layers beat 6 narrow ones by 15-25% throughput at equal parameters.
+
+The ONNX exporter needed no changes and round-trips it to 1e-7: **28.3 MB, 24.7 MB gzipped**
+(against ~6.5 MB today). That is a real decision for the browser later — not made here, and
+nothing is deployed.
+
+### To launch it
+
+`configs/run5.json` is ready except for one hole, marked in `_note_anchors`: run4's best
+checkpoint has to be **re-rated** before it is used as an anchor, because the maximum of ~80
+noisy ratings overstates the truth (same winner's-curse correction run3 needed). The exact
+gauntlet command is in the config note.
+
 ## 2026-08-16 — Morning report: run4 at +2181 after 10k games, endgames now decisive
 
 - **run4 overnight**: pretrained start +2092 → currently **+2181 at 10,240 games** (peak +2219),

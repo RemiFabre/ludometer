@@ -106,6 +106,44 @@ out, checking it every :data:`TIME_CHECK_EVERY` simulations, with
 ``config.sims`` acting as the upper bound. The default is ``None``: training and
 the arena keep running exactly ``config.sims`` simulations, so results stay
 reproducible.
+
+Batched search (run5: :mod:`ludometer.train.selfplay_batched`)
+--------------------------------------------------------------
+:meth:`MCTS.search` owns its loop: it *calls* the evaluator, one position at a
+time. That is exactly what makes a GPU useless to it — a Metal dispatch costs the
+same ~1.7 ms whether it carries 1 position or 128 — so run5 turns the loop inside
+out. The same tree, the same PUCT, the same chance handling, driven by four
+methods the caller pumps instead of one method that blocks:
+
+    mcts.start_search(state)
+    while not mcts.search_done():
+        leaves = mcts.leaf_requests(max_leaves)   # descend, collect
+        mcts.apply_leaves(evaluate(leaves))       # one forward pass, backed up
+    result = mcts.finish_search()
+
+The caller can therefore interleave *many* trees and put every tree's leaves in
+one tensor. See :mod:`ludometer.train.selfplay_batched` for the driver.
+
+Two levels of batching compose, and they are not equally safe:
+
+* **across games** — G independent trees contribute one leaf each per pass. Every
+  tree still runs a strictly sequential search, so the search is *bit-identical*
+  to :meth:`search` (the test suite asserts exactly that). This is the free win.
+* **within one tree** (``search_batch > 1``) — several descents before one pass,
+  each laying a **virtual loss** (``virtual_loss``, in the value's own [-1, 1]
+  units) on the edges it walks so the next descent is pushed elsewhere; the loss
+  is taken off again when the real value is backed up, which makes the
+  bookkeeping exact rather than approximate. This one costs search quality, so it
+  is off by default and ramped when on: the browser player measured a **flat**
+  batch of 64 losing 3-17 to a batch-1 search at equal simulations, because with
+  an empty tree virtual loss shoves all 64 descents down 64 different branches.
+  The damage is a function of batch / tree, so the batch never exceeds
+  ``root.n_visits / search_batch_ramp`` (16, the browser's rule) and starts at
+  ``search_min_batch``.
+
+Tree reuse composes with cross-game batching untouched: reuse is a property of
+one tree between two moves, batching is a property of many trees within one
+move, and neither reads the other's state.
 """
 
 from __future__ import annotations
@@ -127,6 +165,7 @@ __all__ = [
     "MCTS",
     "STALL_ROUNDS",
     "TIME_CHECK_EVERY",
+    "LeafRequest",
     "MCTSConfig",
     "Node",
     "RolloutEvaluator",
@@ -187,6 +226,13 @@ class MCTSConfig:
     # root, so the tie-break only ever fires between moves search calls equal.
     decisive_eps: float = 0.03
     decisive_min_visit_frac: float = 0.1
+    # Within-tree batching (batched self-play only; see the module docstring).
+    # search_batch = 1 is one leaf per forward pass, i.e. a search that is
+    # bit-identical to the sequential one — which is why it is the default.
+    search_batch: int = 1  # ceiling on leaves gathered per forward pass
+    search_batch_ramp: int = 16  # ...and never more than root visits / this
+    search_min_batch: int = 1  # ...but never fewer than this
+    virtual_loss: float = 1.0  # discouragement on an edge with a pending descent
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> MCTSConfig:
@@ -201,6 +247,10 @@ class MCTSConfig:
             "tree_reuse",
             "decisive_eps",
             "decisive_min_visit_frac",
+            "search_batch",
+            "search_batch_ramp",
+            "search_min_batch",
+            "virtual_loss",
         )
         kwargs: dict[str, Any] = {}
         for key in keys:
@@ -211,6 +261,10 @@ class MCTSConfig:
             raise ValueError("sims must be >= 1")
         if cfg.chance_children < 1:
             raise ValueError("chance_children must be >= 1")
+        if cfg.search_batch < 1 or cfg.search_min_batch < 1:
+            raise ValueError("search_batch and search_min_batch must be >= 1")
+        if cfg.search_batch_ramp < 1:
+            raise ValueError("search_batch_ramp must be >= 1")
         return cfg
 
 
@@ -263,6 +317,62 @@ class Node:
         self.margins = [0.0] * n
         self.children = [None] * n
         self.expanded = True
+
+
+class LeafRequest:
+    """One position waiting for the network, plus the descents that want it.
+
+    ``paths`` holds every descent that stopped at this node in the current
+    gather — two descents can reach the same unexpanded leaf, and both are real
+    simulations that must both be backed up with the same value. ``is_root`` marks
+    the root's own evaluation, which has no path to back up at all.
+    """
+
+    __slots__ = ("is_root", "node", "paths")
+
+    def __init__(self, node: Node, is_root: bool = False) -> None:
+        self.node = node
+        self.paths: list[list[tuple[Node, int]]] = []
+        self.is_root = is_root
+
+    @property
+    def state(self) -> AzulState:
+        return self.node.state
+
+    @property
+    def legal(self) -> list[int]:
+        return self.node.legal
+
+
+class _BatchSearch:
+    """Bookkeeping for one in-flight :meth:`MCTS.start_search`."""
+
+    __slots__ = (
+        "by_node",
+        "cap",
+        "done",
+        "forced",
+        "need_root",
+        "noise",
+        "queue",
+        "root",
+        "root_margin",
+        "root_value",
+        "started",
+    )
+
+    def __init__(self, root: Node, noise: bool, cap: int, started: float) -> None:
+        self.root = root
+        self.noise = noise
+        self.cap = cap
+        self.started = started
+        self.done = 0
+        self.need_root = not root.expanded
+        self.forced = False
+        self.queue: list[LeafRequest] = []
+        self.by_node: dict[Node, LeafRequest] = {}
+        self.root_value = 0.0
+        self.root_margin = 0.0
 
 
 @dataclass(frozen=True)
@@ -365,6 +475,7 @@ class MCTS:
         self._reuse_root: Node | None = None
         self._reuse_fp: tuple[Any, ...] | None = None
         self.reused_visits = 0  # visits inherited by the last search
+        self._search: _BatchSearch | None = None  # in-flight batched search
 
     @staticmethod
     def _fingerprint(state: AzulState) -> tuple[Any, ...]:
@@ -471,8 +582,16 @@ class MCTS:
                 done += chunk
                 if time.perf_counter() >= deadline:
                     break
-        elapsed = time.perf_counter() - started
+        return self._result(root, value, margin, time.perf_counter() - started)
 
+    def _result(
+        self, root: Node, value: float, margin: float, elapsed: float
+    ) -> SearchResult:
+        """Read the root's edge statistics out as a :class:`SearchResult`.
+
+        ``value``/``margin`` are the root's own network estimate and are only used
+        for a root that was never simulated from.
+        """
         total = root.n_visits
         policy = np.zeros(ACTION_SPACE, dtype=np.float32)
         visits: dict[int, int] = {}
@@ -500,6 +619,187 @@ class MCTS:
             margins=margins,
             margin=float(root_margin),
         )
+
+    # ------------------------------------------------------- batched interface
+    def start_search(self, state: AzulState, add_noise: bool | None = None) -> None:
+        """Open a search the caller will drive (see the module docstring).
+
+        Does the same setup :meth:`search` does — reuse the kept subtree or clone
+        a fresh root, work out the simulation budget — but stops before the first
+        evaluation instead of calling the evaluator itself.
+        """
+        if self._search is not None:  # pragma: no cover - defensive
+            raise RuntimeError("a batched search is already in progress")
+        noise = self.add_noise if add_noise is None else add_noise
+        started = time.perf_counter()
+        root = self._reuse_for(state)
+        self.reused_visits = root.n_visits if root is not None else 0
+        if root is None:
+            root = self._new_node(state.clone())
+            if root.is_terminal:
+                raise ValueError("cannot search a terminal state")
+        self._root = root
+        self._search = _BatchSearch(
+            root, noise, max(0, self.config.sims - root.n_visits), started
+        )
+        if not self._search.need_root:
+            self._open_root()
+
+    def _open_root(self) -> None:
+        """Root is expanded: settle the forced case, then mix in the noise.
+
+        Same order as :meth:`search`, which returns on a forced root *before* it
+        touches the priors — so a one-move root never consumes Dirichlet noise in
+        either path, and the two RNG streams stay in step.
+        """
+        st = self._search
+        assert st is not None
+        if len(st.root.legal) == 1:
+            st.forced = True
+            return
+        if st.noise:
+            self._apply_noise(st.root)
+
+    def search_done(self) -> bool:
+        """Has the open search spent its budget? (False with none open.)"""
+        st = self._search
+        if st is None or st.need_root:
+            return False
+        return st.forced or st.done >= st.cap
+
+    def leaf_requests(self, max_leaves: int = 0) -> list[LeafRequest]:
+        """Descend until at least one position needs the net; return them.
+
+        ``max_leaves`` (0 = no extra cap) bounds how many descents this call may
+        make, which is how the driver keeps one game from monopolising a batch.
+        The returned list is owned by the search: pass its evaluations straight
+        back to :meth:`apply_leaves`.
+        """
+        st = self._search
+        if st is None:  # pragma: no cover - defensive
+            raise RuntimeError("no batched search in progress")
+        if st.queue:  # already gathered, still waiting for its evaluations
+            return st.queue
+        if st.need_root:
+            st.queue.append(LeafRequest(st.root, is_root=True))
+            return st.queue
+        cfg = self.config
+        floor = min(cfg.search_min_batch, cfg.search_batch)
+        while not st.queue and not self.search_done():
+            # As big as the tree can afford, never bigger than the caller wants:
+            # a flat batch on a small tree is what made the browser's first
+            # attempt weaker than no batching at all.
+            want = max(
+                floor, min(cfg.search_batch, st.root.n_visits // cfg.search_batch_ramp)
+            )
+            want = min(want, st.cap - st.done)
+            if max_leaves > 0:
+                want = min(want, max_leaves)
+            want = max(1, want)
+            for _ in range(want):
+                self._collect(st)
+            st.done += want
+        return st.queue
+
+    def apply_leaves(
+        self,
+        results: Sequence[tuple[np.ndarray, float] | tuple[np.ndarray, float, float]],
+    ) -> None:
+        """Expand every gathered leaf with its evaluation and back the values up."""
+        st = self._search
+        if st is None:  # pragma: no cover - defensive
+            raise RuntimeError("no batched search in progress")
+        queue = st.queue
+        if len(results) != len(queue):
+            raise ValueError(f"expected {len(queue)} evaluations, got {len(results)}")
+        for request, out in zip(queue, results):
+            node = request.node
+            if len(out) == 3:
+                priors, value, margin = out  # type: ignore[misc]
+            else:
+                priors, value = out  # type: ignore[misc]
+                margin = 0.0
+            node.init_edges(priors)
+            self.evals += 1
+            if request.is_root:
+                st.root_value = float(value)
+                st.root_margin = float(margin)
+                continue
+            flip = 1.0 if node.player == 0 else -1.0
+            v0 = float(value) * flip
+            m0 = float(margin) * flip
+            for path in request.paths:
+                self._backup(path, v0, m0)
+        st.queue = []
+        st.by_node.clear()
+        if st.need_root:
+            st.need_root = False
+            self._open_root()
+
+    def finish_search(self) -> SearchResult:
+        """Close the open search and report it, exactly like :meth:`search`."""
+        st = self._search
+        if st is None:  # pragma: no cover - defensive
+            raise RuntimeError("no batched search in progress")
+        self._search = None
+        root = st.root
+        if st.forced:
+            policy = np.zeros(ACTION_SPACE, dtype=np.float32)
+            policy[root.legal[0]] = 1.0
+            value, margin = st.root_value, st.root_margin
+            if root.n_visits:
+                value = sum(root.wins) / root.n_visits
+                margin = sum(root.margins) / root.n_visits
+            return SearchResult(
+                policy,
+                float(value),
+                {root.legal[0]: 1},
+                0,
+                0.0,
+                has_margin=self.has_margin,
+                margin=float(margin),
+            )
+        return self._result(
+            root, st.root_value, st.root_margin, time.perf_counter() - st.started
+        )
+
+    def _collect(self, st: _BatchSearch) -> None:
+        """One descent, laying virtual loss; ends at a terminal or a new leaf."""
+        vl = self.config.virtual_loss
+        node = st.root
+        path: list[tuple[Node, int]] = []
+        while True:
+            if node.is_terminal:
+                self._backup(path, node.terminal_v0, node.terminal_m0)
+                return
+            if not node.expanded:
+                request = st.by_node.get(node)
+                if request is None:
+                    request = LeafRequest(node)
+                    st.by_node[node] = request
+                    st.queue.append(request)
+                request.paths.append(path)
+                return
+            index = self._select(node)
+            # The visit is taken now and the loss assumed now; `_backup` gives the
+            # assumed loss back and credits the real value, so a finished batch
+            # leaves the tree exactly where the same evaluations would have left
+            # it one at a time.
+            node.visits[index] += 1
+            node.n_visits += 1
+            node.wins[index] -= vl
+            path.append((node, index))
+            node = self._child(node, index)
+
+    def _backup(self, path: list[tuple[Node, int]], v0: float, m0: float) -> None:
+        """Undo the virtual loss along ``path`` and credit the real result."""
+        vl = self.config.virtual_loss
+        margin = self.has_margin
+        for parent, index in path:
+            flip = 1.0 if parent.player == 0 else -1.0
+            parent.wins[index] += vl + v0 * flip
+            if margin:
+                parent.margins[index] += m0 * flip
 
     # ------------------------------------------------------------------ guts
     def _reuse_for(self, state: AzulState) -> Node | None:

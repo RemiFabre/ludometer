@@ -9,6 +9,7 @@ from __future__ import annotations
 
 __all__ = [
     "MCTS",
+    "BatchedSelfPlay",
     "MCTSAgent",
     "MCTSConfig",
     "NetConfig",
@@ -20,6 +21,10 @@ __all__ = [
 
 
 def __getattr__(name: str):  # pragma: no cover - lazy re-exports (torch is heavy)
+    if name == "BatchedSelfPlay":
+        from ludometer.train.selfplay_batched import BatchedSelfPlay
+
+        return BatchedSelfPlay
     if name in ("NetConfig", "PolicyValueNet"):
         from ludometer.train import net as _net
 

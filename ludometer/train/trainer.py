@@ -99,6 +99,22 @@ class TrainConfig:
     workers: int = 8
     note: str = ""
 
+    # self-play engine: "workers" is run1-run4's (one position per forward pass,
+    # `workers` CPU processes) and stays the default so every old config is
+    # untouched; "batched" is run5's (see ludometer.train.selfplay_batched) —
+    # `selfplay_games` concurrent trees per driver process, every tree's leaf in
+    # one forward pass on `selfplay_device`, `workers` driver processes.
+    selfplay: str = "workers"
+    selfplay_games: int = 64  # concurrent games per driver process
+    selfplay_device: str = "auto"  # auto|mps|cpu|cuda — inference for self-play
+    selfplay_max_batch: int = 0  # cap on rows per forward pass (0 = no cap)
+    # Within-tree batching. 1 keeps each tree's search bit-identical to the
+    # sequential one; above 1 costs search quality (see mcts.py) and is ramped.
+    search_batch: int = 1
+    search_batch_ramp: int = 16
+    search_min_batch: int = 1
+    virtual_loss: float = 1.0
+
     # net: "mlp" (run1/run2) uses hidden/blocks; "structured" (net2.py) uses the
     # embed/layers/... block below. Both share `value_hidden`.
     arch: str = "mlp"
@@ -208,6 +224,12 @@ class TrainConfig:
             raise ValueError("replay_capacity must be >= batch_size")
         if self.pretrain and self.pretrain_epochs < 1:
             raise ValueError("pretrain needs pretrain_epochs >= 1")
+        if self.selfplay not in ("workers", "batched"):
+            raise ValueError(
+                f"unknown selfplay engine {self.selfplay!r} (workers | batched)"
+            )
+        if self.selfplay_games < 1:
+            raise ValueError("selfplay_games must be >= 1")
         if self.margin_head:
             if self.arch != "structured":
                 raise ValueError("margin_head needs arch='structured' (net2.py)")
@@ -237,6 +259,10 @@ class TrainConfig:
                 tree_reuse=self.tree_reuse,
                 decisive_eps=self.decisive_eps,
                 decisive_min_visit_frac=self.decisive_min_visit_frac,
+                search_batch=self.search_batch,
+                search_batch_ramp=self.search_batch_ramp,
+                search_min_batch=self.search_min_batch,
+                virtual_loss=self.virtual_loss,
             ),
             temp_moves=self.temp_moves,
             temperature=self.temperature,
@@ -290,7 +316,13 @@ class Trainer:
             capacity=config.replay_capacity, seed=config.seed ^ 0x5EED
         )
         self.selfplay = make_selfplay(
-            config.net_config(), config.selfplay_config(), config.workers
+            config.net_config(),
+            config.selfplay_config(),
+            config.workers,
+            kind=config.selfplay,
+            games=config.selfplay_games,
+            device=config.selfplay_device,
+            max_batch=config.selfplay_max_batch,
         )
 
     # -------------------------------------------------------------- properties
@@ -403,8 +435,14 @@ class Trainer:
                 if cfg.arch == "structured"
                 else f"{cfg.blocks}x{cfg.hidden}"
             )
+            engine = (
+                f"batched({cfg.selfplay_games}x{cfg.workers} on "
+                f"{getattr(self.selfplay, 'device', cfg.selfplay_device)})"
+                if cfg.selfplay == "batched"
+                else f"workers({cfg.workers})"
+            )
             self._log(
-                f"run {cfg.run}: device={self.device} workers={cfg.workers} "
+                f"run {cfg.run}: device={self.device} selfplay={engine} "
                 f"arch={cfg.arch} net={shape} params={self.net.num_params:,} "
                 f"target={target} games"
             )

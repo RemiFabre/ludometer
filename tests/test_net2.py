@@ -294,12 +294,12 @@ def test_make_net_builds_the_shipped_configs() -> None:
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    for name in ("run3", "smoke3", "run4", "smoke4"):
+    for name in ("run3", "smoke3", "run4", "smoke4", "run5", "smoke5"):
         data = json.loads((root / "configs" / f"{name}.json").read_text())
         built = make_net(data)
         assert isinstance(built, StructuredNet), name
         logits, value = built(torch.zeros(2, ENCODED_SIZE))
         assert logits.shape == (2, ACTION_SPACE)
         assert value.shape == (2,)
-        # run4's margin head must not change what forward() returns
-        assert built.has_margin == name.endswith("4"), name
+        # the margin head (run4 onwards) must not change what forward() returns
+        assert built.has_margin == name.endswith(("4", "5")), name

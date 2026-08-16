@@ -285,6 +285,11 @@ def _worker_loop(
 class SelfPlayPool:
     """A pool of persistent self-play workers with refreshable weights."""
 
+    #: entry point each worker process runs; overridden by the batched pool
+    worker_main: Any = staticmethod(_worker_loop)
+    #: extra positional arguments appended to the worker's argument list
+    worker_extra: tuple[Any, ...] = ()
+
     def __init__(
         self,
         net_config: Any,
@@ -309,8 +314,15 @@ class SelfPlayPool:
         for wid in range(self.workers):
             cmd_q = self._ctx.Queue()
             proc = self._ctx.Process(
-                target=_worker_loop,
-                args=(wid, self.net_config, self.config, cmd_q, self._result_q),
+                target=self.worker_main,
+                args=(
+                    wid,
+                    self.net_config,
+                    self.config,
+                    cmd_q,
+                    self._result_q,
+                    *self.worker_extra,
+                ),
                 daemon=True,
                 name=f"selfplay-{wid}",
             )
@@ -343,8 +355,7 @@ class SelfPlayPool:
             raise RuntimeError("pool not started")
         if n_games <= 0:
             return []
-        for i in range(n_games):
-            self._cmd_qs[i % self.workers].put(("play", [seed_start + i]))
+        self._dispatch(n_games, seed_start)
         out: list[GameRecord] = []
         while len(out) < n_games:
             try:
@@ -366,6 +377,11 @@ class SelfPlayPool:
             if should_stop is not None and should_stop():
                 break
         return out
+
+    def _dispatch(self, n_games: int, seed_start: int) -> None:
+        """Hand the seeds out, one game per message, round robin."""
+        for i in range(n_games):
+            self._cmd_qs[i % self.workers].put(("play", [seed_start + i]))
 
     def _check_alive(self) -> None:
         for proc in self._procs:
@@ -405,9 +421,41 @@ class SelfPlayPool:
 
 
 def make_selfplay(
-    net_config: Any, config: SelfPlayConfig, workers: int
-) -> SelfPlayPool | InlineSelfPlay:
-    """``workers <= 1`` runs in-process (tests, debugging); otherwise a pool."""
+    net_config: Any,
+    config: SelfPlayConfig,
+    workers: int,
+    kind: str = "workers",
+    games: int = 64,
+    device: str = "auto",
+    max_batch: int = 0,
+) -> Any:
+    """The self-play engine a run asked for.
+
+    ``kind="workers"`` is the run1-run4 path and the default for every old
+    config: one game at a time per process, ``workers <= 1`` running in-process.
+    ``kind="batched"`` is run5's — ``games`` concurrent trees per driver process,
+    all of their leaves evaluated in one forward pass on ``device``.
+    """
+    if kind == "batched":
+        from ludometer.train.selfplay_batched import (  # lazy: torch/MPS at import
+            BatchedSelfPlay,
+            BatchedSelfPlayPool,
+        )
+
+        if workers <= 1:
+            return BatchedSelfPlay(
+                net_config, config, games=games, device=device, max_batch=max_batch
+            )
+        return BatchedSelfPlayPool(
+            net_config,
+            config,
+            workers=workers,
+            games=games,
+            device=device,
+            max_batch=max_batch,
+        )
+    if kind != "workers":
+        raise ValueError(f"unknown selfplay engine {kind!r} (workers | batched)")
     if workers <= 1:
         return InlineSelfPlay(net_config, config)
     return SelfPlayPool(net_config, config, workers=workers)

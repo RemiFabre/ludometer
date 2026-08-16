@@ -21,6 +21,13 @@ even when the absolute numbers drift by 2x.
 what the reuse flag is worth in practice (fewer evaluator calls per move for the
 same number of root visits).
 
+``--batched`` — the run5 question instead of the run1-run4 one. Batched self-play
+(:mod:`ludometer.train.selfplay_batched`) never evaluates one position at a time,
+so ``ms/position`` on a CPU thread stops being the constraint; what binds is the
+**round-trip latency of one batch** on the self-play device, because the driver
+cannot descend again until the values are home. This mode reports that, per batch
+size, and it is the number to look at before changing run5's net size.
+
 Run it niced (``--nice``, on by default) so it never steals time from a live run.
 """
 
@@ -31,6 +38,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +49,7 @@ from ludometer.train.mcts import MCTSConfig
 from ludometer.train.net import NetConfig, NetEvaluator, PolicyValueNet, make_net
 from ludometer.train.selfplay import SelfPlayConfig, play_selfplay_game
 
-__all__ = ["bench_inference", "bench_selfplay", "main"]
+__all__ = ["bench_batched", "bench_inference", "bench_selfplay", "main"]
 
 # run1's net: 1.0M-param 3x512 MLP, the architecture that produced +2014 Elo at
 # 160 sims/move with 8 workers. Anything at or below its cost is affordable.
@@ -116,6 +124,36 @@ def bench_selfplay(
     }
 
 
+def bench_batched(
+    net: Any, batches: Sequence[int], device: str = "auto", rounds: int = 7
+) -> dict[str, Any]:
+    """Round-trip latency of one batched evaluation, per batch size.
+
+    Deliberately *not* pipelined: the batched self-play loop submits a batch and
+    then waits for it, so back-to-back dispatches would flatter the GPU by an
+    order of magnitude. The minimum over ``rounds`` is the least-contended sample.
+    """
+    from ludometer.train.selfplay_batched import BatchEvaluator, resolve_selfplay_device
+
+    resolved = resolve_selfplay_device(device)
+    evaluator = BatchEvaluator(net.eval(), device=resolved)
+    state = AzulState.new_game(seed=1)
+    legal = state.legal_actions()
+    out: dict[str, Any] = {"device": resolved, "params": net.num_params, "batches": {}}
+    for size in batches:
+        states = [state] * size
+        legals = [legal] * size
+        for _ in range(3):  # warm the kernels for this shape
+            evaluator.evaluate(states, legals)
+        best = 1e9
+        for _ in range(rounds):
+            start = time.perf_counter()
+            evaluator.evaluate(states, legals)
+            best = min(best, time.perf_counter() - start)
+        out["batches"][str(size)] = {"ms": best * 1e3, "positions_per_s": size / best}
+    return out
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ludometer.train.benchmark",
@@ -128,6 +166,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--per-round", type=int, default=200)
     parser.add_argument("--sims", type=int, default=0, help="0 -> take it from config")
     parser.add_argument("--games", type=int, default=0, help="self-play games (0=skip)")
+    parser.add_argument(
+        "--batched",
+        action="store_true",
+        help="measure batched round-trip latency (the run5 constraint)",
+    )
+    parser.add_argument(
+        "--batch-sizes",
+        default="1,32,64,128,256",
+        help="comma-separated batch sizes for --batched",
+    )
+    parser.add_argument(
+        "--selfplay-device", default="", help="device for --batched (default: config)"
+    )
     parser.add_argument("--nice", type=int, default=19, help="niceness (0 = leave)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     return parser
@@ -160,6 +211,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.games:
         out["selfplay_reuse"] = bench_selfplay(net, sims, args.games, reuse=True)
         out["selfplay_plain"] = bench_selfplay(net, sims, args.games, reuse=False)
+    if args.batched:
+        sizes = [int(x) for x in args.batch_sizes.split(",") if x.strip()]
+        out["batched"] = bench_batched(
+            net,
+            sizes,
+            device=args.selfplay_device or str(data.get("selfplay_device", "auto")),
+        )
     if args.json:
         print(json.dumps(out, indent=2))
         return 0
@@ -181,6 +239,14 @@ def main(argv: list[str] | None = None) -> int:
     if "selfplay_plain" in out:
         gain = out["selfplay_plain"]["s_per_game"] / out["selfplay_reuse"]["s_per_game"]
         print(f"tree reuse speedup: {gain:.2f}x")
+    if "batched" in out:
+        batched = out["batched"]
+        print(f"batched round trip on {batched['device']} (not pipelined):")
+        for size, row in batched["batches"].items():
+            print(
+                f"  batch {size:>4}: {row['ms']:7.2f} ms  "
+                f"{row['positions_per_s']:9,.0f} positions/s"
+            )
     return 0
 
 
