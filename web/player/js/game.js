@@ -45,7 +45,7 @@ export class GameSession {
     this.lastAiMoves = [];
     this._logEntry(
       "start",
-      `New game — you are player ${this.humanSeat + 1}, the AI (${this.agentName}) is player ${this.aiSeat + 1}. ` +
+      `New game: you are player ${this.humanSeat + 1}, the AI (${this.agentName}) is player ${this.aiSeat + 1}. ` +
         `${this.humanPlaysFirst ? "You" : "The AI"} start${this.humanPlaysFirst ? "" : "s"}.`
     );
     if (this.opponentBlurb) this._logEntry("start", this.opponentBlurb);
@@ -177,7 +177,7 @@ export class GameSession {
 
   /** Apply the human's action. The caller then asks for `aiReplies`. */
   playHuman(actionId) {
-    if (this.state.isTerminal) throw new IllegalMove("the game is over — start a new one");
+    if (this.state.isTerminal) throw new IllegalMove("the game is over, start a new one");
     if (this.state.currentPlayer !== this.humanSeat) throw new IllegalMove("it is not your turn");
     if (!Number.isInteger(actionId) || actionId < 0 || actionId >= ACTION_SPACE) {
       throw new IllegalMove(`action id must be an integer in 0..179, got ${actionId}`);

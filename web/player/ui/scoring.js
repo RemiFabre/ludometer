@@ -70,7 +70,7 @@ function roundCard(report, seat, label) {
       )
     );
   } else {
-    kids.push(line("No pattern line was full — nothing reached the wall."));
+    kids.push(line("No pattern line was full. Nothing reached the wall."));
   }
 
   const floorBits = [];
@@ -178,7 +178,7 @@ export function renderFinalPanel(host, final, sides) {
   sides.forEach(([seat, label]) => grid.appendChild(bonusCard(final, seat, label)));
   host.appendChild(grid);
   if (final.winner === null) {
-    host.appendChild(line("Level on score and on completed rows — the rulebook calls that a draw."));
+    host.appendChild(line("Level on score and on completed rows. The rulebook calls that a draw."));
   }
   if (final.exhausted) {
     host.appendChild(line("The bag and the lid ran dry, so the game stopped early."));

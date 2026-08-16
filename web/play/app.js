@@ -219,8 +219,8 @@ function renderStatus(frame) {
   if (S.your_turn) {
     status.set({
       headline: sel
-        ? "Your turn — pick a row for your " + COLORS[sel.color] + " tiles"
-        : "Your turn — pick a colour",
+        ? "Your turn: pick a row for your " + COLORS[sel.color] + " tiles"
+        : "Your turn: pick a colour",
       detail: turnDetail(),
       tone: "you",
     });
@@ -402,8 +402,8 @@ async function awaitMove(request) {
       budget: (S && S.coach_time_s) || 0,
       label: (spent, budget) =>
         budget
-          ? "Rating your move — " + spent.toFixed(1) + "s of " + budget + "s"
-          : "Rating your move — " + spent.toFixed(1) + "s",
+          ? "Rating your move: " + spent.toFixed(1) + "s of " + budget + "s"
+          : "Rating your move: " + spent.toFixed(1) + "s",
     });
   }
   const value = await done;
@@ -434,8 +434,8 @@ async function runAiTurn() {
     budget,
     label: (spent, cap) =>
       cap
-        ? "AI is thinking — " + spent.toFixed(1) + "s of " + cap + "s"
-        : "AI is thinking — " + spent.toFixed(1) + "s",
+        ? "AI is thinking: " + spent.toFixed(1) + "s of " + cap + "s"
+        : "AI is thinking: " + spent.toFixed(1) + "s",
   });
   let theirs;
   try {
@@ -639,7 +639,7 @@ function syncCoachAvailability() {
   ui.coachField.classList.toggle("off", !coachOn);
   ui.coachField.title = available
     ? "Score your moves with the AI's own search"
-    : "Coach mode needs a searching opponent — deal against a trained checkpoint";
+    : "Coach mode needs a searching opponent, deal against a trained checkpoint";
   ui.coachLegend.textContent = COACH_LEGEND;
   ui.coachLegend.hidden = !coachOn;
 }
@@ -708,7 +708,7 @@ ui.cancel.addEventListener("click", () => { sel = null; suggestion = null; rende
 ui.coach.addEventListener("change", () => {
   coachOn = ui.coach.checked;
   syncCoachAvailability();
-  if (coachOn) toast("Coach mode on — your moves are scored by the AI's own search.", "good");
+  if (coachOn) toast("Coach mode on: your moves are scored by the AI's own search.", "good");
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {

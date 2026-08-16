@@ -179,31 +179,36 @@ button, input, select { font: inherit; color: inherit; }
   margin-top: 10px;
 }
 
-/* The playfield: the factories on the left, both boards — identical, one above
- * the other — beside them, so the whole game sits on one screen. This is the
- * default ("side", the − in the settings panel). <body data-boards="stack">
- * (the +) gives the big boards back, side by side below the factories, the way
- * the table used to be drawn. */
+/* The playfield. Two ways to draw it, picked in the settings panel and
+ * defaulted per device (see ui/layout.js):
+ *   stack (the +, a desktop's default) — the classic table: big boards, side
+ *     by side below the factories;
+ *   side (the −, a phone's default) — the whole game on one screen: the
+ *     factories on the left, both boards, smaller, stacked beside them.
+ * The base rules below are the stack look, so a desktop paints correctly
+ * before any script runs; the phone media query flips its own default. */
 .playfield {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(10px, 1.4vw, 18px);
   align-items: start;
 }
 .boards {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: clamp(8px, 1vw, 14px);
-  align-items: start;
-}
-/* side layout: both boards must fit beside the factories, so they shrink */
-body:not([data-boards="stack"]) .board { --tile: clamp(13px, 2.1vw, 36px); }
-
-body[data-boards="stack"] .playfield { grid-template-columns: minmax(0, 1fr); }
-body[data-boards="stack"] .boards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(10px, 1.4vw, 18px);
+  align-items: start;
 }
+
+body[data-boards="side"] .playfield {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+}
+body[data-boards="side"] .boards {
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(8px, 1vw, 14px);
+}
+/* side layout: both boards must fit beside the factories, so they shrink */
+body[data-boards="side"] .board { --tile: clamp(13px, 2.1vw, 36px); }
 
 .below {
   display: grid;
@@ -310,7 +315,7 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
     grid-template-columns: minmax(0, 1.04fr) minmax(0, .96fr);
     gap: 6px;
   }
-  body:not([data-boards="stack"]) .boards { gap: 6px; }
+  body:not([data-boards="stack"]) .boards { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   body:not([data-boards="stack"]) .board {
     --tile: clamp(11px, calc((48vw - 50px) / 10), 38px);
     padding: 7px 6px 8px;

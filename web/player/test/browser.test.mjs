@@ -242,8 +242,8 @@ async function main() {
         const b = document.getElementById("board-ai").getBoundingClientRect();
         const m = document.querySelector(".middle-panel").getBoundingClientRect();
         return {
-          // the side layout: both boards stacked beside the factories
-          besideFactories: a.left >= m.right - 1 && a.bottom <= b.top + 1,
+          // a desktop's default: big boards side by side below the factories
+          belowFactories: a.top >= m.bottom - 1 && a.right <= b.left + 1 && Math.abs(a.top - b.top) < 2,
           sameWidth: Math.abs(a.width - b.width) < 1,
           sameHeight: Math.abs(a.height - b.height) < 1,
           width: Math.round(a.width) + "x" + Math.round(b.width),
@@ -254,8 +254,8 @@ async function main() {
     if (layout.overlays.length) {
       errors.push("this page must have no pop-ups, found: " + layout.overlays.join(", "));
     }
-    if (!layout.boards.besideFactories) {
-      errors.push("the boards are not stacked beside the factories");
+    if (!layout.boards.belowFactories) {
+      errors.push("the boards are not side by side below the factories");
     }
     if (!layout.boards.sameWidth || !layout.boards.sameHeight) {
       errors.push("the two boards are not the same size: " + JSON.stringify(layout.boards));

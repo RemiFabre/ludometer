@@ -25,7 +25,7 @@ import { node } from "./dom.js";
 const LABELS = { 0: "Off", 0.5: "0.5×", 1: "1×", 2: "2×" };
 const TITLES = {
   0: "No tile animation: positions change at once",
-  0.5: "Half speed — every tile easy to follow",
+  0.5: "Half speed: every tile easy to follow",
   1: "The default pace",
   2: "Twice as fast",
 };
@@ -151,7 +151,7 @@ export function createSettings(host, options = {}) {
     sizes.setAttribute("aria-label", "Board size");
     boardButtons = [
       ["side", "−", "Everything on one screen: the factories left, both boards beside them"],
-      ["stack", "+", "Big boards, one under the other below the factories"],
+      ["stack", "+", "The classic table: big boards below the factories"],
     ].map(([mode, label, title]) => {
       const b = node("button", "flag", label);
       b.type = "button";
@@ -190,7 +190,7 @@ export function createSettings(host, options = {}) {
     summary.textContent = bits.join(" · ");
     hint.textContent = prefersReducedMotion()
       ? "Your system asks apps to reduce motion. The tiles still move here, because " +
-        "this switch — not that one — decides. Pick Off if you would rather they did not."
+        "this switch (not that one) decides. Pick Off if you would rather they did not."
       : "Tiles always travel to where they land. Slow it down to follow a long turn, " +
         "or turn it off for instant play.";
   }
@@ -205,5 +205,7 @@ export function createSettings(host, options = {}) {
   initSpeed();
   sync();
 
-  return { el: host, sync, open: () => gear.click() };
+  // `panel` is handed back so a page can seat its own controls among these —
+  // the player page moves its "AI thinks for" clock in here
+  return { el: host, sync, open: () => gear.click(), panel };
 }

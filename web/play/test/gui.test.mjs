@@ -844,11 +844,12 @@ async function checkConfirmMove(page, label, errors) {
   console.log(`    ${label}: place → cancel-all → place → confirm behaved; off-switch commits at once`);
 }
 
-/* The playfield (player page only): the whole game on one screen. In the
- * default "side" layout the factories sit left with both boards beside them —
- * on a desktop AND on a phone — and the settings + gives the big stacked
- * boards back. Also holds the retirements: no per-colour supply counts, and
- * the AI's clock lives at the bottom of the page, not the top bar. */
+/* The playfield (player page only), drawn two ways and defaulted per device:
+ * "stack" (a desktop's default) is the classic table, big boards side by side
+ * below the factories; "side" (a phone's default) puts the factories left
+ * with both boards beside them, the whole game on one screen. Also holds the
+ * retirements: no per-colour supply counts anywhere, and the AI's clock lives
+ * in the settings panel, not the top bar. */
 async function checkLayout(page, label, errors) {
   if (!(await page.eval('return !!document.querySelector(".playfield");'))) {
     console.log(`    ${label}: no playfield on this page — skipped`);
@@ -864,42 +865,53 @@ async function checkLayout(page, label, errors) {
     return {
       middle: r(".middle-panel"), boards: r(".boards"),
       you: r("#board-human"), ai: r("#board-ai"), status: r("#status"),
-      think: r("#think"),
       supply: !!document.getElementById("supply"),
       chips: document.querySelectorAll(".swatch .chip").length,
       lid: !!document.getElementById("lid-row"),
       thinkInTopbar: !!document.querySelector(".topbar #think"),
+      thinkInSettings: !!document.querySelector(".settings-panel #think"),
       mode: document.body.dataset.boards,
       scrollW: document.scrollingElement.scrollWidth,
       innerW: window.innerWidth,
     };`;
-  const sideBySide = (g) =>
+  const sideLook = (g) =>
     g.middle.left < g.boards.left && g.boards.left >= g.middle.right - 1 &&
     g.you.bottom <= g.ai.top + 1; // boards stacked, both beside the factories
+  const stackLook = (g) =>
+    g.boards.top >= g.middle.bottom - 1 &&
+    g.you.right <= g.ai.left + 1 && Math.abs(g.you.top - g.ai.top) < 2;
   const setWidth = (w, h, mobile) =>
     page.send("Emulation.setDeviceMetricsOverride", {
       width: w, height: h, deviceScaleFactor: 1, mobile,
     });
 
-  for (const [w, h, mobile, name] of [[1500, 1180, false, "desktop"], [390, 844, true, "phone"]]) {
-    await setWidth(w, h, mobile);
-    await sleep(300);
-    const g = await page.eval(GEO);
-    if (g.supply || g.chips) errors.push(`${label}: ${name} still shows per-colour supply counts`);
-    if (!g.lid) errors.push(`${label}: ${name} lost #lid-row, the discard flight target`);
-    if (g.thinkInTopbar) errors.push(`${label}: ${name} keeps "AI thinks for" in the top bar`);
-    if (!g.think || g.think.top < g.boards.bottom) {
-      errors.push(`${label}: ${name} does not put "AI thinks for" below the table`);
-    }
-    if (g.mode !== "side") errors.push(`${label}: ${name} default board mode is ${g.mode}, not side`);
-    if (!sideBySide(g)) errors.push(`${label}: ${name} side layout is not factories-left, boards-right`);
-    if (g.scrollW > g.innerW) errors.push(`${label}: ${name} scrolls sideways (${g.scrollW} > ${g.innerW})`);
-    if (name === "phone" && g.status.bottom - g.status.top > 100) {
-      errors.push(`${label}: phone status band is ${Math.round(g.status.bottom - g.status.top)}px tall — not the small one`);
-    }
+  // a fresh profile on a desktop: the classic stacked table, clock in settings
+  await setWidth(1500, 1180, false);
+  await sleep(300);
+  const desk = await page.eval(GEO);
+  if (desk.supply || desk.chips) errors.push(`${label}: desktop still shows per-colour supply counts`);
+  if (!desk.lid) errors.push(`${label}: desktop lost #lid-row, the discard flight target`);
+  if (desk.thinkInTopbar) errors.push(`${label}: "AI thinks for" is still in the top bar`);
+  if (!desk.thinkInSettings) errors.push(`${label}: "AI thinks for" is not in the settings panel`);
+  if (desk.mode !== "stack") errors.push(`${label}: desktop default board mode is ${desk.mode}, not stack`);
+  if (!stackLook(desk)) errors.push(`${label}: the desktop default is not big boards below the factories`);
+  if (desk.scrollW > desk.innerW) errors.push(`${label}: desktop scrolls sideways`);
+
+  // the −: everything on one screen, factories left — on desktop and phone
+  await page.eval('document.querySelector(\'.flag[data-boards="side"]\').click(); return true;');
+  await sleep(300);
+  const deskSide = await page.eval(GEO);
+  if (!sideLook(deskSide)) errors.push(`${label}: desktop side layout is not factories-left, boards-right`);
+  await setWidth(390, 844, true);
+  await sleep(300);
+  const phone = await page.eval(GEO);
+  if (!sideLook(phone)) errors.push(`${label}: phone side layout is not factories-left, boards-right`);
+  if (phone.scrollW > phone.innerW) errors.push(`${label}: phone scrolls sideways (${phone.scrollW} > ${phone.innerW})`);
+  if (phone.status.bottom - phone.status.top > 100) {
+    errors.push(`${label}: phone status band is ${Math.round(phone.status.bottom - phone.status.top)}px tall — not the small one`);
   }
 
-  // the +: big boards, one under the other, below the factories — and persisted
+  // the +: the big boards back, below the factories — and persisted
   await page.eval('document.querySelector(\'.flag[data-boards="stack"]\').click(); return true;');
   await sleep(300);
   const stacked = await page.eval(GEO);
@@ -911,12 +923,23 @@ async function checkLayout(page, label, errors) {
     errors.push(`${label}: in stack mode the boards do not sit below the factories`);
   }
   if (stacked.scrollW > stacked.innerW) {
-    errors.push(`${label}: stack mode scrolls sideways (${stacked.scrollW} > ${stacked.innerW})`);
+    errors.push(`${label}: phone stack mode scrolls sideways (${stacked.scrollW} > ${stacked.innerW})`);
   }
-  await page.eval('document.querySelector(\'.flag[data-boards="side"]\').click(); return true;');
+
+  // with nothing stored, the default follows the device: side on a phone,
+  // stack on a desktop — initBoards() re-run through the page's own module
+  const DEFAULT = `
+    window.localStorage.removeItem("ludometer.boards");
+    const m = await import("./ui/layout.js");
+    m.initBoards();
+    return document.body.dataset.boards;`;
+  const phoneDefault = await page.eval(DEFAULT);
+  if (phoneDefault !== "side") errors.push(`${label}: a phone's default is ${phoneDefault}, not side`);
   await setWidth(1500, 1180, false);
+  const deskDefault = await page.eval(DEFAULT);
+  if (deskDefault !== "stack") errors.push(`${label}: a desktop's default is ${deskDefault}, not stack`);
   await sleep(200);
-  console.log(`    ${label}: side layout holds on desktop and phone; the + stacks and persists`);
+  console.log(`    ${label}: stack by default on a desktop, side on a phone; − / + switch and persist`);
 }
 
 /* ------------------------------------------------------------------- the pages */
