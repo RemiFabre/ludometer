@@ -28,15 +28,6 @@
 
   <form class="setup" id="setup" autocomplete="off">
     <label class="field field-narrow">
-      <span class="field-label">AI thinks for</span>
-      <select id="think">
-        <option value="0">Instant (no search)</option>
-        <option value="3">3 seconds</option>
-        <option value="5" selected>5 seconds</option>
-        <option value="10">10 seconds</option>
-      </select>
-    </label>
-    <label class="field field-narrow">
       <span class="field-label">Seed</span>
       <input type="text" id="seed" inputmode="numeric" placeholder="random">
     </label>
@@ -62,6 +53,11 @@
 
   <!-- the panel opens inline and pushes the table down; this page has no pop-ups -->
   <section id="settings" aria-label="Settings"></section>
+
+  <!-- the playfield: the factories on the left, both boards beside them — the
+       whole game on one screen. <body data-boards="stack"> (the + in the
+       settings panel) gives the big boards back, below the factories. -->
+  <div class="playfield">
 
   <section class="panel middle-panel">
     <h2 class="panel-title">The middle of the table</h2>
@@ -94,6 +90,8 @@
     <section id="board-ai" aria-label="The AI's board"></section>
   </div>
 
+  </div><!-- /.playfield -->
+
   <section id="scoring" hidden aria-live="polite"></section>
 
   <div class="below">
@@ -110,11 +108,6 @@
     </section>
 
     <div class="below-side">
-      <section class="panel">
-        <h2 class="panel-title">Supply</h2>
-        <div class="supply-rows" id="supply"></div>
-      </section>
-
       <section class="panel about" id="about" aria-labelledby="about-title">
         <h2 class="panel-title" id="about-title">What this is</h2>
         <p>Faïence began as a machine-learning experiment — Ludometer, a research
@@ -144,6 +137,22 @@
       </section>
     </div>
   </div>
+
+  <!-- the quiet end of the page: the AI's clock, and where discarded tiles go.
+       #counts keeps only totals (never per-colour counts) and holds #lid-row,
+       the landing target for every tile that melts into the lid. -->
+  <section class="panel bottom-bar" aria-label="Game options">
+    <label class="field field-narrow">
+      <span class="field-label">AI thinks for</span>
+      <select id="think">
+        <option value="0">Instant (no search)</option>
+        <option value="3">3 seconds</option>
+        <option value="5" selected>5 seconds</option>
+        <option value="10">10 seconds</option>
+      </select>
+    </label>
+    <div class="counts" id="counts"></div>
+  </section>
 
 </main>
 

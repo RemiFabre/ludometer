@@ -11,10 +11,12 @@
  * and "how this works" boxes, and a harder look at small screens — this one is
  * meant to be playable on a phone.
  *
- * Layout, top to bottom: header · engine strip · status band · the middle of the
- * table · the two identical boards side by side (you left, AI right) · inline
- * scoring · the move log, the supply and the about box. Nothing is ever covered
- * by anything: there is no overlay and no toast on this page.
+ * Layout, top to bottom: header · engine strip · status band · the playfield
+ * (the factories on the left, the two identical boards — you above, AI below —
+ * beside them; <body data-boards="stack">, the + in settings, restores the big
+ * boards under the factories) · inline scoring · the move log and the about
+ * box · the bottom bar (the AI's clock and the tile totals). Nothing is ever
+ * covered by anything: there is no overlay and no toast on this page.
  */
 
 @import url("../ui/board.css");
@@ -177,12 +179,30 @@ button, input, select { font: inherit; color: inherit; }
   margin-top: 10px;
 }
 
-/* the two boards, identical, side by side: you on the left, the AI on the right */
-.boards {
+/* The playfield: the factories on the left, both boards — identical, one above
+ * the other — beside them, so the whole game sits on one screen. This is the
+ * default ("side", the − in the settings panel). <body data-boards="stack">
+ * (the +) gives the big boards back, side by side below the factories, the way
+ * the table used to be drawn. */
+.playfield {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
   gap: clamp(10px, 1.4vw, 18px);
   align-items: start;
+}
+.boards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(8px, 1vw, 14px);
+  align-items: start;
+}
+/* side layout: both boards must fit beside the factories, so they shrink */
+body:not([data-boards="stack"]) .board { --tile: clamp(13px, 2.1vw, 36px); }
+
+body[data-boards="stack"] .playfield { grid-template-columns: minmax(0, 1fr); }
+body[data-boards="stack"] .boards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 1.4vw, 18px);
 }
 
 .below {
@@ -193,25 +213,27 @@ button, input, select { font: inherit; color: inherit; }
 }
 .below-side { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 18px); }
 
-/* ------------------------------------------------------------------- supply */
-.supply-rows { display: flex; flex-direction: column; gap: 8px; }
-.supply-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.supply-label {
-  min-width: 34px;
-  font-family: var(--font-label);
-  font-size: 11px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+/* --------------------------------------------------------------- bottom bar */
+/* The quiet end of the page: the AI's clock lives here (moved off the top bar,
+ * where it crowded a phone), next to one line of totals. #lid-row inside the
+ * totals is where discarded tiles fly — a target, so it keeps a real box. */
+.bottom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 22px;
 }
-.swatch { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-label); font-size: 12px; color: var(--ink-soft); }
-.swatch .chip { width: 12px; height: 12px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .18) inset, 0 1px 0 rgba(255, 255, 255, .4) inset; }
-.swatch .chip[data-color="0"] { background: var(--c0); }
-.swatch .chip[data-color="1"] { background: var(--c1); }
-.swatch .chip[data-color="2"] { background: var(--c2); }
-.swatch .chip[data-color="3"] { background: var(--c3); }
-.swatch .chip[data-color="4"] { background: var(--c4); }
-.supply-total { margin-left: auto; font-family: var(--font-label); font-size: 12px; color: var(--ink-faint); }
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding-bottom: 8px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+}
 #lid-row { border-radius: 3px; padding: 2px 4px; transition: background .3s ease; }
 #lid-row.receiving { background: var(--lid-receiving); }
 
@@ -238,42 +260,84 @@ body.locked .board-grid, body.locked .factories, body.locked .center-dish { curs
 @media (max-width: 720px) {
   /* Phone layout: the boards are the page, one above the other so neither of
    * them has to shrink below a playable tile. Every control keeps a 44px target. */
-  .topbar { gap: 10px 14px; padding: 10px 12px; }
-  .brand { width: 100%; margin-right: 0; }
-  .brand-name { font-size: 22px; }
-  .setup { width: 100%; gap: 8px 10px; }
-  .setup .field { flex: 1 1 120px; }
+  .topbar { gap: 6px 10px; padding: 8px 10px; }
+  .brand { width: 100%; margin-right: 0; gap: 8px; }
+  .brand-name { font-size: 19px; }
+  .brand-sub { font-size: 11px; }
+  /* seed, "you go first" and Deal share one row: the band, smaller */
+  .setup { width: 100%; gap: 6px 8px; align-items: center; flex-wrap: nowrap; }
+  .setup .btn { flex: 0 0 auto; padding: 10px 11px; white-space: nowrap; }
+  .setup .field { flex: 0 1 100px; }
+  .setup .field .field-label { display: none; }
+  .setup .check { flex: 0 0 auto; }
   .field select, .field input { min-width: 0; padding: 9px 8px; }
   .field-narrow select, .field-narrow input { width: auto; min-width: 0; }
   .btn { padding: 10px 14px; min-height: 44px; }
+  .engine-bar { padding: 5px 10px; font-size: 11px; gap: 4px 10px; }
+  .engine-text { min-width: 0; }
   /* the settings and the navigator are controls, so they get a tap target too */
   .gear, .speed, .nav-btn { min-height: 44px; }
   .settings-panel { gap: 8px 12px; }
   .check { padding-bottom: 0; min-height: 44px; }
   .check input { width: 20px; height: 20px; }
 
-  .table { padding: 10px 10px 32px; gap: 10px; }
+  .table { padding: 8px 8px 32px; gap: 8px; }
   .panel { padding: 11px 11px 13px; }
-  .boards { grid-template-columns: minmax(0, 1fr); }
   .scoring-grid { grid-template-columns: minmax(0, 1fr); }
-  .board { --tile: clamp(26px, 9vw, 38px); }
-  .factories { gap: 10px 12px; }
-  .factory { --dish-size: calc(var(--tile) * 2 + 22px); }
-  .middle-table { --tile: clamp(24px, 8vw, 32px); }
-
-  .board-grid { column-gap: 8px; }
-  .line { padding: 0 2px; }
-  .line .row-note { font-size: 10.5px; line-height: 1.15; }
-  .status-headline { font-size: 20px; }
-  .status-side-score { font-size: 27px; }
   .log { max-height: 190px; }
+
+  /* the status band earns its keep in one small line, not a headline */
+  .status { padding: 8px 12px 10px; gap: 10px; }
+  .status-headline { font-size: 15px; }
+  .status-detail { font-size: 10.5px; margin-top: 2px; min-height: 0; }
+  .status-side { min-width: 40px; }
+  .status-side-score { font-size: 19px; }
+  .status-dash { font-size: 15px; }
+
+  /* stack (+): the old phone table — one big board under the other */
+  body[data-boards="stack"] .boards { grid-template-columns: minmax(0, 1fr); }
+  body[data-boards="stack"] .board { --tile: clamp(26px, 9vw, 38px); }
+  body[data-boards="stack"] .factories { gap: 10px 12px; }
+  body[data-boards="stack"] .factory { --dish-size: calc(var(--tile) * 2 + 22px); }
+  body[data-boards="stack"] .middle-table { --tile: clamp(24px, 8vw, 32px); }
+  body[data-boards="stack"] .board-grid { column-gap: 8px; }
+  body[data-boards="stack"] .line { padding: 0 2px; }
+  body[data-boards="stack"] .line .row-note { font-size: 10.5px; line-height: 1.15; }
+
+  /* side (−, the default): factories left, both boards beside them. Small
+   * tiles are the accepted price of seeing the whole game at once. */
+  body:not([data-boards="stack"]) .playfield {
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, .96fr);
+    gap: 6px;
+  }
+  body:not([data-boards="stack"]) .boards { gap: 6px; }
+  body:not([data-boards="stack"]) .board {
+    --tile: clamp(11px, calc((48vw - 50px) / 10), 38px);
+    padding: 7px 6px 8px;
+    gap: 6px;
+  }
+  body:not([data-boards="stack"]) .board-grid { column-gap: 3px; }
+  body:not([data-boards="stack"]) .line { padding: 0 1px; gap: 2px; }
+  body:not([data-boards="stack"]) .line .row-note { display: none; }
+  body:not([data-boards="stack"]) .wall-row { gap: 2px; padding: 0 3px; }
+  body:not([data-boards="stack"]) .board-head { column-gap: 6px; padding-bottom: 5px; }
+  body:not([data-boards="stack"]) .board-who { font-size: 10px; letter-spacing: .1em; }
+  body:not([data-boards="stack"]) .board-score { font-size: 18px; }
+  body:not([data-boards="stack"]) .board-notes { font-size: 9.5px; min-height: 12px; }
+  body:not([data-boards="stack"]) .floor { padding: 3px 2px; gap: 2px; }
+  body:not([data-boards="stack"]) .floor .pen { font-size: 8.5px; }
+  body:not([data-boards="stack"]) .middle-panel { padding: 8px 6px 10px; }
+  body:not([data-boards="stack"]) .middle-table { --tile: clamp(17px, 5.6vw, 32px); }
+  body:not([data-boards="stack"]) .factories { gap: 8px 8px; }
+  body:not([data-boards="stack"]) .factory { --dish-size: calc(var(--tile) * 2 + 16px); }
+  body:not([data-boards="stack"]) .center-dish { padding: 8px 10px; margin-top: 8px; }
 }
 
 @media (max-width: 420px) {
-  .board { --tile: clamp(23px, 10vw, 34px); }
-  .middle-table { --tile: clamp(21px, 8.5vw, 28px); }
+  body[data-boards="stack"] .board { --tile: clamp(23px, 10vw, 34px); }
+  body[data-boards="stack"] .middle-table { --tile: clamp(21px, 8.5vw, 28px); }
   .engine-badge { font-size: 10px; letter-spacing: .08em; }
-  .status { gap: 10px; padding: 12px 12px 14px; }
+  .status { gap: 8px; }
 }
 
 /* A coarse pointer never hovers, so the hover lift just makes taps feel laggy. */
