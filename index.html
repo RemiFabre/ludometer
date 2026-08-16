@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faïence — a tile game against a neural net, in your browser</title>
-<meta name="description" content="Faïence is a free, open-source implementation of the rules of Azul (Michael Kiesling). Play against a neural net trained by self-play — it runs entirely in your browser, no server, no install.">
+<title>Faïence: a tile game against a neural net, in your browser</title>
+<meta name="description" content="Faïence is a free, open-source implementation of the rules of Azul (Michael Kiesling). Play against a neural net trained by self-play. It runs entirely in your browser, no server, no install.">
 <!-- the card a shared link unfolds into -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Faïence — a tile game against a neural net">
-<meta property="og:description" content="A free, open-source implementation of the rules of Azul. The net and its tree search run entirely in your browser — no server, no install, no account.">
+<meta property="og:title" content="Faïence: a tile game against a neural net">
+<meta property="og:description" content="A free, open-source implementation of the rules of Azul. The net and its tree search run entirely in your browser: no server, no install, no account.">
 <meta property="og:url" content="https://remifabre.github.io/ludometer/">
 <meta property="og:image" content="https://remifabre.github.io/ludometer/social.png">
 <meta property="og:image:width" content="1200">
@@ -54,9 +54,9 @@
   <!-- the panel opens inline and pushes the table down; this page has no pop-ups -->
   <section id="settings" aria-label="Settings"></section>
 
-  <!-- the playfield: the factories on the left, both boards beside them — the
-       whole game on one screen. <body data-boards="stack"> (the + in the
-       settings panel) gives the big boards back, below the factories. -->
+  <!-- the playfield, drawn two ways (settings − / +, defaulted per device in
+       ui/layout.js): "stack" = big boards below the factories, a desktop's
+       default; "side" = factories left, both boards beside them, a phone's. -->
   <div class="playfield">
 
   <section class="panel middle-panel">
@@ -69,7 +69,7 @@
     </div>
     <div id="middle"></div>
     <div class="middle-actions">
-      <span class="brand-sub" id="prompt">Loading the net — the tiles will be dealt in a moment.</span>
+      <span class="brand-sub" id="prompt">Loading the net. The tiles will be dealt in a moment.</span>
       <!-- move navigation: pure replay of positions the page already has -->
       <div id="nav" aria-label="Move navigation"></div>
       <button type="button" class="btn" id="hint" disabled>Suggest a move</button>
@@ -110,39 +110,38 @@
     <div class="below-side">
       <section class="panel about" id="about" aria-labelledby="about-title">
         <h2 class="panel-title" id="about-title">What this is</h2>
-        <p>Faïence began as a machine-learning experiment — Ludometer, a research
-        framework that measures how good a board game is from the shape of an
-        AI's learning curve. Somewhere along the way the experiment turned into
-        a genuinely pleasant opponent, so we are sharing the whole thing,
-        playable and free. Nobody earns a cent from this page: no ads, no
-        account, nothing to buy.</p>
-        <p>The opponent is a policy + value network trained from scratch by
-        self-play, exported to ONNX. Your browser downloads it once, then runs
-        the same PUCT tree search the training loop used — on your machine, in
-        a background thread.</p>
-        <p id="tally-note">The only thing that ever leaves your browser is an
-        anonymous, cookie-free tally of visits, games dealt, and how finished
-        games went — <a href="https://faience.goatcounter.com" target="_blank"
-        rel="noopener">it is public</a>, so you can read everything it
-        records.</p>
-        <p class="about-meta" id="about-meta"></p>
         <p>Faïence is a free, open-source implementation of the rules of
         <em>Azul</em>, the tile-laying game by Michael Kiesling. It is a fan
-        project for research, with its own code and artwork — not affiliated
+        project for research, with its own code and artwork, not affiliated
         with or endorsed by the game's publishers.</p>
-        <p>All of it is open source (MIT) —
+        <p>All of it is open source (MIT):
         <a href="https://github.com/RemiFabre/ludometer">code and training logs on GitHub</a>.
-        If a game made your day, a star there — or a hello in the issues — is
-        the whole tip jar.</p>
+        If you like this work, a star on the repo (or a hello in the issues)
+        is always appreciated.</p>
+        <p>Faïence began as a machine-learning experiment: Ludometer, a research
+        framework that measures how good a board game is from the shape of an
+        AI's learning curve. Somewhere along the way the experiment turned into
+        a pleasant opponent, so we are sharing it, playable and free. Nobody
+        earns a cent from this page: no ads, no account, nothing to buy.</p>
+        <p>The opponent is a neural network that learned the game from scratch
+        by playing against itself. Your browser downloads it once and runs it
+        locally.</p>
+        <p id="tally-note">The only thing that ever leaves your browser is an
+        anonymous, cookie-free tally of visits, games dealt, and how finished
+        games went. <a href="https://faience.goatcounter.com" target="_blank"
+        rel="noopener">It is public</a>, so you can read everything it
+        records.</p>
+        <p class="about-meta" id="about-meta"></p>
       </section>
     </div>
   </div>
 
-  <!-- the quiet end of the page: the AI's clock, and where discarded tiles go.
-       #counts keeps only totals (never per-colour counts) and holds #lid-row,
-       the landing target for every tile that melts into the lid. -->
-  <section class="panel bottom-bar" aria-label="Game options">
-    <label class="field field-narrow">
+  <!-- the quiet end of the page: where discarded tiles go. #counts keeps only
+       totals (never per-colour counts) and holds #lid-row, the landing target
+       for every tile that melts into the lid. The "AI thinks for" clock is
+       parsed here, then seated in the settings panel by app.js. -->
+  <section class="panel bottom-bar" aria-label="Tile counts">
+    <label class="field field-narrow" id="think-field">
       <span class="field-label">AI thinks for</span>
       <select id="think">
         <option value="0">Instant (no search)</option>
@@ -159,7 +158,7 @@
 <!-- the two round corner buttons: what is this, and the public tally -->
 <nav class="corner" aria-label="About and statistics">
   <a class="corner-btn" id="corner-stats" href="https://faience.goatcounter.com"
-     target="_blank" rel="noopener" title="Public play statistics — everything this page records">
+     target="_blank" rel="noopener" title="Public play statistics: everything this page records">
     <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="10" width="3.4" height="7" rx="1"/><rect x="8.3" y="6" width="3.4" height="11" rx="1"/><rect x="13.6" y="3" width="3.4" height="14" rx="1"/></svg>
   </a>
   <button type="button" class="corner-btn" id="corner-about" title="What is this?">?</button>

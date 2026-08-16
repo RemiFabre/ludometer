@@ -185,7 +185,7 @@ export function finalReport(state, humanSeat) {
   const outcome = state.outcome() || 0;
   const winner = outcome === 0 ? null : outcome > 0 ? 0 : 1;
   let headline;
-  if (winner === null) headline = "A draw — same score, same completed rows.";
+  if (winner === null) headline = "A draw: same score, same completed rows.";
   else if (winner === humanSeat) headline = "You win!";
   else headline = "The AI wins.";
   return {

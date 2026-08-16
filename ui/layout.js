@@ -1,9 +1,10 @@
 /* Board layout: how much room the two boards take.
  *
- * "side" (the default) keeps the whole game on one screen: the factories on
- * the left, both boards — smaller, but both visible at once — beside them.
- * "stack" gives people who prefer the old table its big boards back, one
- * under the other below the factories.
+ * "side" keeps the whole game on one screen: the factories on the left, both
+ * boards — smaller, but both visible at once — beside them. "stack" is the
+ * classic table: big boards below the factories. The default follows the
+ * device — a phone starts on "side" (Rémi's phone spec), a desktop starts on
+ * "stack" (Rémi tried "side" there and reached for the + at once).
  *
  * The choice is written onto <body data-boards="…">; the page's stylesheet
  * does the rest. Persisted like the animation speed, switched from the
@@ -13,15 +14,18 @@
 const STORE_KEY = "ludometer.boards";
 const MODES = ["side", "stack"];
 
-let current = "side";
+const defaultMode = () =>
+  window.matchMedia && window.matchMedia("(max-width: 720px)").matches ? "side" : "stack";
+
+let current = "stack";
 const listeners = [];
 
 function readStored() {
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
-    return MODES.includes(raw) ? raw : "side";
+    return MODES.includes(raw) ? raw : defaultMode();
   } catch (err) {
-    return "side"; // private mode: the compact default
+    return defaultMode(); // private mode: still the right default for the device
   }
 }
 

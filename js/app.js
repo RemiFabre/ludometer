@@ -103,6 +103,8 @@ let navToken = 0;      // invalidates a history-step animation when another step
 initSpeed(); // before anything can animate: the stored speed, or 1×
 const status = createStatus(el("status"));
 const settings = createSettings(ui.settings, { popups: true, confirm: true, boards: true });
+// the AI's clock is a setting like any other, so it sits with the other knobs
+settings.panel.append(node("i", "settings-gap"), el("think-field"));
 const middle = createMiddle(ui.middle, { onPick: pick });
 const boards = {
   human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: route }),
@@ -191,7 +193,7 @@ function engineFailed(reason) {
   ui.hint.disabled = true;
   status.set({
     headline: "The net could not be loaded",
-    detail: reason + " — reload the page to try again.",
+    detail: reason + ". Reload the page to try again.",
     tone: "end",
   });
 }
@@ -230,9 +232,9 @@ async function bootEngine() {
         const total = (meta && meta.onnx_bytes) || msg.total;
         if (!total) return;
         const pct = Math.min(100, Math.round((msg.received / total) * 100));
-        ui.engineText.textContent = `Downloading the net — ${pct}% of ${(total / 1e6).toFixed(1)} MB`;
+        ui.engineText.textContent = `Downloading the net: ${pct}% of ${(total / 1e6).toFixed(1)} MB`;
         status.set({
-          headline: `Downloading the net — ${pct}%`,
+          headline: `Downloading the net: ${pct}%`,
           detail: "nothing is sent anywhere; the net plays from your own machine",
           tone: "idle",
         });
@@ -259,7 +261,7 @@ function backendLabel() {
 
 function engineLine() {
   const where = `searching on ${backendLabel()}`;
-  if (!meta) return `Net ready — ${where}.`;
+  if (!meta) return `Net ready: ${where}.`;
   const elo = typeof meta.elo === "number" ? `${meta.elo >= 0 ? "+" : ""}${Math.round(meta.elo)} Elo` : "unrated";
   const params = meta.num_params ? `${(meta.num_params / 1e6).toFixed(1)}M parameters` : "";
   const rate =
@@ -410,7 +412,7 @@ function renderStatus(frame) {
     if (proposal) {
       status.set({
         headline: "Your move is placed",
-        detail: "This is the position it would leave — validate or cancel below.",
+        detail: "This is the position it would leave. Validate or cancel below.",
         tone: "you",
       });
       ui.prompt.textContent = "";
@@ -418,8 +420,8 @@ function renderStatus(frame) {
     }
     status.set({
       headline: sel
-        ? "Your turn — pick a row for your " + COLORS[sel.color] + " tiles"
-        : "Your turn — pick a colour",
+        ? "Your turn: pick a row for your " + COLORS[sel.color] + " tiles"
+        : "Your turn: pick a colour",
       detail: turnDetail(),
       tone: "you",
     });
@@ -724,7 +726,7 @@ function syncBanner() {
   ui.confirmBar.parentElement.classList.toggle("placing", on);
   if (on) {
     ui.confirmDetail.textContent =
-      "You " + proposal.move.text + " — nothing is final until you play it.";
+      "You " + proposal.move.text + ". Nothing is final until you play it.";
   }
 }
 
@@ -859,7 +861,7 @@ async function runAiTurn() {
       // it is your CPU doing the work, so the band says how much work that is
       const counted = liveSims ? " · " + liveSims.toLocaleString() + " positions" : "";
       return cap
-        ? "AI is thinking — " + spent.toFixed(1) + "s of " + cap + "s" + counted
+        ? "AI is thinking: " + spent.toFixed(1) + "s of " + cap + "s" + counted
         : "AI is picking a move";
     },
   });
@@ -1339,7 +1341,7 @@ ui.coach.addEventListener("change", () => {
   startAnalysis(); // switched on mid-turn: start reading this position now
   say(
     coachOn
-      ? "coach mode on — your moves are scored by the AI's own search"
+      ? "coach mode on: your moves are scored by the AI's own search"
       : "coach mode off"
   );
 });

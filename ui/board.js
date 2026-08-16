@@ -127,7 +127,7 @@ export function createBoard(host, options = {}) {
           const t = tileEl(colour, "placed");
           t.dataset.row = r;
           t.dataset.col = col;
-          t.title = COLORS[colour] + " — row " + (r + 1) + ", column " + (col + 1);
+          t.title = COLORS[colour] + ", row " + (r + 1) + ", column " + (col + 1);
           wallRow.appendChild(t);
         } else {
           // an empty square is a neutral well with the glaze only outlined in it
@@ -250,7 +250,7 @@ export function createMiddle(host, options = {}) {
       if (canPick) b.title = "Nothing you can do with these yet.";
     } else {
       b.title =
-        poolCount(state, source, color) + " " + COLORS[color] + " — click to pick them up";
+        poolCount(state, source, color) + " " + COLORS[color] + ", click to pick them up";
       b.addEventListener("click", () => {
         if (opts.onPick) opts.onPick(source, color);
       });
@@ -296,7 +296,7 @@ export function createMiddle(host, options = {}) {
           node(
             "span",
             "empty-note",
-            state.marker_in_center ? "middle — marker only" : "middle — empty"
+            state.marker_in_center ? "middle (marker only)" : "middle (empty)"
           )
         );
       } else {
