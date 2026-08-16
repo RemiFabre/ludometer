@@ -1,0 +1,6 @@
+{"phase": "pretrain", "t": 130.9, "games": 0, "steps": 0, "epoch": 1, "pretrain_steps": 1953, "loss": 2.7381, "loss_p": 1.8246, "loss_v": 0.7278, "loss_m": 0.1858, "buffer": 500000, "lr": 0.0005}
+{"phase": "pretrain", "t": 260.0, "games": 0, "steps": 0, "epoch": 2, "pretrain_steps": 3906, "loss": 2.4738, "loss_p": 1.6483, "loss_v": 0.6616, "loss_m": 0.1639, "buffer": 500000, "lr": 0.0005}
+{"phase": "pretrain", "t": 389.0, "games": 0, "steps": 0, "epoch": 3, "pretrain_steps": 5859, "loss": 2.4285, "loss_p": 1.6211, "loss_v": 0.6477, "loss_m": 0.1597, "buffer": 500000, "lr": 0.0005}
+{"t": 1453.5, "games": 768, "steps": 243, "loss": 2.4114, "loss_p": 1.6099, "loss_v": 0.6422, "loss_m": 0.1593, "buffer": 500000, "lr": 0.0004998084598910004}
+{"t": 2644.9, "games": 1536, "steps": 486, "loss": 2.4141, "loss_p": 1.6119, "loss_v": 0.638, "loss_m": 0.1642, "buffer": 500000, "lr": 0.0004992341656761204}
+{"t": 3949.0, "games": 2304, "steps": 728, "loss": 2.4299, "loss_p": 1.6247, "loss_v": 0.6391, "loss_m": 0.166, "buffer": 500000, "lr": 0.0004982828099012524}

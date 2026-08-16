@@ -1,0 +1,11 @@
+{
+  "run": "run5",
+  "state": "running",
+  "started": "2026-08-16T20:38:54Z",
+  "updated": "2026-08-16T21:48:11Z",
+  "ended": null,
+  "error": null,
+  "games": 2304,
+  "steps": 728,
+  "note": "the superhuman push: a 7.0M-parameter structured net (4 attention layers at width 256) fed by batched GPU self-play, warm-started from run4's replay buffer"
+}
