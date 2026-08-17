@@ -4,11 +4,9 @@
   "seed": 20260815,
   "device": "auto",
   "workers": 8,
-
   "hidden": 768,
   "blocks": 5,
   "value_hidden": 96,
-
   "sims": 256,
   "c_puct": 1.4,
   "dirichlet_alpha_scale": 10.0,
@@ -16,17 +14,15 @@
   "chance_children": 4,
   "temp_moves": 12,
   "temperature": 1.0,
-  "stall_rounds": 16,
+  "stall_rounds": 7,
   "max_game_moves": 400,
   "value_score_weight": 0.15,
-
   "games_per_iter": 64,
   "total_games": 60000,
   "min_buffer": 5000,
   "batch_size": 256,
   "steps_per_position": 1.5,
   "chunk_steps": 25,
-
   "lr": 0.001,
   "lr_min": 0.0001,
   "lr_schedule": "cosine",
@@ -34,18 +30,23 @@
   "weight_decay": 0.0001,
   "value_weight": 1.0,
   "grad_clip": 1.0,
-
   "replay_capacity": 500000,
   "save_buffer": true,
-
   "eval_every_games": 512,
   "eval_games": 40,
   "eval_sims": 100,
   "eval_workers": 8,
-  "eval_anchors": ["random", "greedy", "heuristic", "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100"],
+  "eval_anchors": [
+    "random",
+    "greedy",
+    "heuristic",
+    "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100"
+  ],
   "eval_frozen": 2,
-  "anchor_elos": {"random": 0.0, "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100": 2014.0},
+  "anchor_elos": {
+    "random": 0.0,
+    "mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100": 2014.0
+  },
   "eval_at_start": true,
-
   "heartbeat": 20.0
 }

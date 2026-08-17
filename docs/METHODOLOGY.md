@@ -179,7 +179,8 @@ determinism keeps the game quality high. Independently of which move is played, 
 
 There is also a stall guard: two deterministic players can loop an Azul game
 forever, because if neither ever completes a pattern line the tiles just cycle
-bag → floor → lid. From round 16 (`stall_rounds`) sampling resumes, and 400 moves
+bag → floor → lid. From round 8 (`stall_rounds: 7` — real games essentially never
+exceed 7 rounds, per Remi's play experience) sampling resumes, and 400 moves
 (`max_game_moves`) is a hard cap after which the game is scored as a draw.
 
 ### 4.4 Chance: the bag

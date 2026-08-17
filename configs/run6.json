@@ -44,7 +44,7 @@
   "chance_backup": "mean",
   "temp_moves": 12,
   "temperature": 1.0,
-  "stall_rounds": 16,
+  "stall_rounds": 7,
   "max_game_moves": 400,
   "value_score_weight": 0.0,
   "decisive_eps": 0.03,

@@ -1,11 +1,11 @@
 {
   "run": "run5",
-  "state": "done",
+  "state": "running",
   "started": "2026-08-16T20:38:54Z",
-  "updated": "2026-08-17T00:36:47Z",
-  "ended": "2026-08-17T00:36:46Z",
+  "updated": "2026-08-17T08:05:22Z",
+  "ended": null,
   "error": null,
-  "games": 6912,
-  "steps": 2191,
-  "note": "stopped (SIGTERM)"
+  "games": 11520,
+  "steps": 3651,
+  "note": "eval ckpt-011520: vs ckpt-006912 (9/9)"
 }
