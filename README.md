@@ -14,6 +14,17 @@ game through the shape of an AI agent's learning curve.
 We calibrate the method on **Azul** (Michael Kiesling, Spiel des Jahres 2018) — a game
 widely considered excellent — then reuse the framework to evaluate new board game designs.
 
+## ▶ Play it — and read how it works
+
+- **Play against the AI in your browser, no install:**
+  **[remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/)** (details below)
+- **How it all works**, explained for any engineer, every term defined:
+  **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**
+
+> **Note from the author** — This work has been done mostly autonomously by a coding
+> agent. I have been guiding it and testing a lot, but I am far from having reviewed
+> everything, so consider this an alpha version: early work.
+
 ## Components
 
 - `ludometer/azul/` — full 2-player Azul rules engine (fast, deterministic, fully tested)
