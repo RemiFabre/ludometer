@@ -4,6 +4,22 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-17 — Experiment verdict: strategic heads didn't pay (yet); back to the proven recipe
+
+- **run6 (aux strategic heads + deep policy targets) ran 10k games and underperformed**:
+  average ~+2240, winning only ~38% vs run5's best — while run5 had reached an honest
+  **+2383 in just 6.9k games and was still climbing when I paused it**. Following the
+  evidence: run6 stopped, **run5 resumed for a long run** (53k games of budget left), now
+  with run6's genuinely useful bugfixes kept (a stall-breaker hole in the decisive-move path,
+  plus an eval backstop that ends pathological marathon games — the cause of yesterday's
+  35-minute evals).
+- The aux-head idea isn't dead — it may need a lighter weight and more full searches — but
+  it doesn't get more compute until the proven capacity recipe stops paying.
+- Ladder recap (honest, re-rated ruler): run1 +2014 → run2 +2020 → run3 +2255 →
+  run4 +2361 → run5 +2383 (at only 6.9k games) → run5 continues today.
+- Also fixed overnight: the Mac went to sleep and interrupted work once — a caffeinate now
+  keeps it awake for the duration.
+
 ## 2026-08-17 — run6 is ready: **you said the tactics are good and the long game is weak, so run6 changes what the net is taught, not how big it is**
 
 Your verdict on run5 was specific, and it is not the verdict a capacity problem gives.

@@ -1,0 +1,11 @@
+{
+  "run": "run6",
+  "state": "done",
+  "started": "2026-08-17T00:44:13Z",
+  "updated": "2026-08-17T05:58:52Z",
+  "ended": "2026-08-17T05:58:51Z",
+  "error": null,
+  "games": 9984,
+  "steps": 3151,
+  "note": "stopped (SIGTERM)"
+}
