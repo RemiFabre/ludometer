@@ -20,6 +20,36 @@ over one output. Every record carries the margin array whatever ``w`` is — it 
 one tanh per game — so a buffer written by this module is always usable by a
 margin-head net.
 
+**run6 adds two more columns**, on the same "always recorded, cost nothing"
+principle:
+
+* ``aux`` — the 30 bits of :meth:`~ludometer.azul.engine.AzulState.wall_summary`
+  for both players' final walls, flipped per seat like the margin
+  (:func:`aux_targets`). This is the long-horizon label the strategic heads in
+  :mod:`ludometer.train.net2` learn from, and it is free: it is read once per
+  game off the finished board;
+* ``policy_mask`` — 1 where the visit distribution in ``policies`` came from a
+  full search, 0 where it did not.
+
+Playout-cap randomization (run6, ``pcr``)
+-----------------------------------------
+KataGo's trick, and the reason run6 can afford 1024-simulation policy targets.
+Each move independently draws "full" with probability ``pcr_full_prob``:
+
+* a **full** move searches ``pcr_full_sims`` simulations with root Dirichlet noise
+  and records its visit distribution as a policy target (mask 1);
+* a **cheap** move searches ``pcr_cheap_sims``, with **no root noise**, and enters
+  the buffer with a zeroed policy and mask 0. Its value, margin and aux labels are
+  every bit as good as a full move's — those come from the end of the game, not
+  from the search — so the position is not wasted, only its policy is.
+
+The expected cost per move is ``p * full + (1 - p) * cheap`` (run6: 0.25 * 1024 +
+0.75 * 256 = 448, *below* run5's flat 512), so the game volume is not paid for out
+of the policy target's depth. The draw uses a per-game RNG of its own, seeded from
+the game seed, so a game's schedule is reproducible and independent both of the
+search's RNG stream (a run with ``pcr`` off is bit-identical to run5) and of which
+other games shared its batches.
+
 Parallelism: ``N`` ``spawn``-ed worker processes, each with its own CPU copy of
 the net and ``torch.set_num_threads(1)`` (8 single-threaded workers beat 1
 multi-threaded one for these tiny MLPs). The parent drives them over queues:
@@ -38,6 +68,7 @@ import contextlib
 import math
 import multiprocessing as mp
 import queue
+import random
 import signal
 import time
 from collections.abc import Sequence
@@ -63,15 +94,23 @@ from ludometer.train.net import NetEvaluator, make_net
 SCORE_SCALE = MARGIN_SCALE
 
 __all__ = [
+    "PCR_RNG_SALT",
     "GameRecord",
     "InlineSelfPlay",
     "SelfPlayConfig",
     "SelfPlayPool",
+    "aux_targets",
     "make_selfplay",
     "margin_targets",
+    "pcr_rng",
+    "pcr_sims",
     "play_selfplay_game",
     "value_target",
 ]
+
+#: mixed into the game seed for the playout-cap draw, so the schedule has its own
+#: RNG stream and turning `pcr` on does not shift the search's or the sampler's.
+PCR_RNG_SALT = 0x9E3779B9
 
 
 @dataclass
@@ -82,6 +121,8 @@ class GameRecord:
     policies: np.ndarray  # (T, 180) float32
     values: np.ndarray  # (T,) float32, player-to-move perspective
     margins: np.ndarray  # (T,) float32, tanh(score diff / 20), same perspective
+    aux: np.ndarray  # (T, 30) uint8, final-wall bits, same perspective
+    policy_mask: np.ndarray  # (T,) float32, 1 where `policies` is a real target
     outcome: float  # +1 player 0 won, -1 player 1 won, 0 draw
     scores: tuple[int, int]
     moves: int
@@ -105,10 +146,22 @@ class SelfPlayConfig:
     stall_rounds: int = STALL_ROUNDS
     max_moves: int = MAX_GAME_MOVES
     value_score_weight: float = 0.15
+    # Playout-cap randomization (see the module docstring). `pcr_full_prob <= 0`
+    # is off, which is what every pre-run6 config says by omission: the search
+    # then runs `mcts.sims` on every move, with noise, exactly as before.
+    pcr_full_sims: int = 0
+    pcr_cheap_sims: int = 0
+    pcr_full_prob: float = 0.0
+
+    @property
+    def pcr(self) -> bool:
+        """Is playout-cap randomization on for this run?"""
+        return self.pcr_full_prob > 0.0 and self.pcr_cheap_sims > 0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> SelfPlayConfig:
         data = data or {}
+        pcr = dict(data.get("pcr") or {})
         return cls(
             mcts=MCTSConfig.from_dict(data),
             temp_moves=int(data.get("temp_moves", 12)),
@@ -116,6 +169,9 @@ class SelfPlayConfig:
             stall_rounds=int(data.get("stall_rounds", STALL_ROUNDS)),
             max_moves=int(data.get("max_game_moves", MAX_GAME_MOVES)),
             value_score_weight=float(data.get("value_score_weight", 0.15)),
+            pcr_full_sims=int(pcr.get("full_sims", 0)),
+            pcr_cheap_sims=int(pcr.get("cheap_sims", 0)),
+            pcr_full_prob=float(pcr.get("full_prob", 0.0)),
         )
 
 
@@ -134,6 +190,39 @@ def margin_targets(score_diff: int, players: Sequence[int]) -> np.ndarray:
     return np.array([m0 if p == 0 else -m0 for p in players], dtype=np.float32)
 
 
+def aux_targets(state: AzulState, players: Sequence[int]) -> np.ndarray:
+    """Per-position final-wall bits ``(T, 30)`` in the player-to-move frame.
+
+    ``state`` is the *finished* game. Row layout is
+    ``[me rows 5 | me cols 5 | me colours 5 | them rows 5 | them cols 5 | them
+    colours 5]``, "me" being whoever is to move in that position — the same
+    convention :meth:`~ludometer.azul.engine.AzulState.encode` uses, so the net
+    never has to work out which wall it is looking at.
+    """
+    walls = [state.wall_summary(0), state.wall_summary(1)]
+    seat = [
+        np.array(walls[p] + walls[1 - p], dtype=np.uint8) for p in (0, 1)
+    ]  # only two distinct rows exist
+    if not len(players):
+        return np.zeros((0, len(seat[0])), dtype=np.uint8)
+    return np.stack([seat[p] for p in players])
+
+
+def pcr_rng(seed: int) -> random.Random:
+    """The playout-cap draw's own RNG for a game — see :data:`PCR_RNG_SALT`."""
+    return random.Random((int(seed) * 2 + 1) ^ PCR_RNG_SALT)
+
+
+def pcr_sims(config: SelfPlayConfig, rng: random.Random) -> tuple[int | None, bool]:
+    """``(simulation budget or None, is this a full search)`` for one move."""
+    if not config.pcr:
+        return None, True
+    full = rng.random() < config.pcr_full_prob
+    if full:
+        return (config.pcr_full_sims or config.mcts.sims), True
+    return config.pcr_cheap_sims, False
+
+
 def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> GameRecord:
     """Play one full game against itself; never mutates anything shared."""
     started = time.perf_counter()
@@ -144,6 +233,8 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
     states: list[np.ndarray] = []
     policies: list[np.ndarray] = []
     players: list[int] = []
+    policy_mask: list[float] = []
+    schedule = pcr_rng(seed)
     move = 0
     while not state.is_terminal and move < config.max_moves:
         legal = state.legal_actions()
@@ -152,16 +243,20 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
         if len(legal) == 1:
             policy = np.zeros(ACTION_SPACE, dtype=np.float32)
             policy[legal[0]] = 1.0
+            policy_mask.append(1.0)
             action = legal[0]
         else:
-            result = mcts.search(state)
-            policy = result.policy
+            # Playout-cap randomization: budget and root noise are drawn per move
+            # and a cheap move's visit distribution is not a training target.
+            sims, full = pcr_sims(config, schedule)
+            result = mcts.search(state, add_noise=full, sims=sims)
+            policy = result.policy if full else np.zeros(ACTION_SPACE, dtype=np.float32)
+            policy_mask.append(1.0 if full else 0.0)
             # Two deterministic policies can keep a game going forever (nobody
             # ever completes a pattern line, so no wall tile is ever placed):
             # past `stall_rounds` we sample again, which breaks the loop.
-            explore = (
-                move < config.temp_moves or state.round_index >= config.stall_rounds
-            )
+            stalling = state.round_index >= config.stall_rounds
+            explore = move < config.temp_moves or stalling
             # Temperature 0 with a margin-head net is the decisive pick: same
             # visit counts (so `policy`, the training target, is untouched), but
             # the move played is the biggest-margin one among the equally winning
@@ -172,6 +267,7 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
                 mcts.rng,
                 eps=config.mcts.decisive_eps,
                 min_visit_frac=config.mcts.decisive_min_visit_frac,
+                stalling=stalling,
             )
         policies.append(policy)
         state.apply(action)
@@ -191,6 +287,8 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
         policies=np.asarray(policies, dtype=np.float32),
         values=values,
         margins=margin_targets(score_diff, players),
+        aux=aux_targets(state, players),
+        policy_mask=np.asarray(policy_mask, dtype=np.float32),
         outcome=outcome,
         scores=(int(state.scores[0]), int(state.scores[1])),
         moves=move,

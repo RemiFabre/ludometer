@@ -34,7 +34,17 @@ __all__ = [
     "round_robin",
 ]
 
-MAX_MOVES = 2000  # safety net; real games take well under 200 moves
+# Safety net. Measured on this project's own agents, a real game is ~54 moves and
+# five rounds, whoever is playing — run5 against run5, run5 against random, run3
+# against run3, all of them. But an Azul game in which neither side ever completes
+# a pattern line *never ends*, and a stalled evaluation game is expensive in two
+# ways: it burns 100 network calls a move for as long as it lasts, and the old
+# 2000-move ceiling then raised, which inside a `pool.imap` worker aborts the whole
+# Elo evaluation and fails the training run that asked for it. 400 is
+# `mcts.MAX_GAME_MOVES`, the same ceiling self-play has always used — seven times
+# the length of a real game, and a truncated game is *scored as a draw* here
+# exactly as it is there, so the worst case costs one drawn game instead of a run.
+MAX_MOVES = 400
 
 
 @dataclass(frozen=True)
@@ -48,6 +58,7 @@ class GameResult:
     result: float  # 1.0 = A won, 0.5 = draw, 0.0 = B won
     moves: int
     rounds: int
+    truncated: bool = False  # hit MAX_MOVES unfinished (scored as a draw)
 
     @property
     def score_diff(self) -> int:
@@ -69,6 +80,7 @@ class MatchResult:
     mean_score_b: float
     mean_moves: float
     base_seed: int
+    truncated: int = 0  # games that hit MAX_MOVES unfinished (scored as draws)
     games: list[GameResult] = field(default_factory=list, repr=False)
 
     @property
@@ -97,6 +109,7 @@ class MatchResult:
             "mean_score_b": self.mean_score_b,
             "mean_moves": self.mean_moves,
             "base_seed": self.base_seed,
+            "truncated": self.truncated,
         }
 
 
@@ -124,9 +137,7 @@ def play_game(
     state = AzulState.new_game(seed=seed)
     players = (a, b) if a_first else (b, a)
     moves = 0
-    while not state.is_terminal:
-        if moves >= MAX_MOVES:  # pragma: no cover - defensive
-            raise RuntimeError(f"game did not terminate in {MAX_MOVES} moves")
+    while not state.is_terminal and moves < MAX_MOVES:
         agent = players[state.current_player]
         action = agent.act(state)
         if not state.is_legal(action):
@@ -140,6 +151,9 @@ def play_game(
     seat_a = 0 if a_first else 1
     a_score = state.scores[seat_a]
     b_score = state.scores[1 - seat_a]
+    truncated = not state.is_terminal
+    # `outcome()` is None for an unfinished game, and 0.0 for a draw: both are a
+    # half point here, which is what makes the backstop safe to have.
     outcome = state.outcome() or 0.0  # +1 => player 0 won
     if outcome == 0.0:
         result = 0.5
@@ -154,6 +168,7 @@ def play_game(
         result=result,
         moves=moves,
         rounds=state.round_index + 1,
+        truncated=truncated,
     )
 
 
@@ -204,6 +219,7 @@ def play_match(
         mean_score_b=sum(r.b_score for r in results) / n,
         mean_moves=sum(r.moves for r in results) / n,
         base_seed=base_seed,
+        truncated=sum(1 for r in results if r.truncated),
         games=results if keep_games else [],
     )
 

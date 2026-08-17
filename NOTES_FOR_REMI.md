@@ -4,6 +4,158 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-17 — run6 is ready: **you said the tactics are good and the long game is weak, so run6 changes what the net is taught, not how big it is**
+
+Your verdict on run5 was specific, and it is not the verdict a capacity problem gives.
+"Tactically good, strategically weak" is what a net looks like when **nothing in its
+training ever asks it about the far future** — and that is literally true of run1-run5.
+Look at everything the loss has ever contained: who won, by how much, and which move the
+search liked *here*. Three labels, none of which is about the shape the game will end in.
+run5 also confirmed capacity is not the binding constraint: 3.9x the parameters, same
+plateau.
+
+So run6 spends nothing on the net (same 7.0M architecture, tensor for tensor) and
+everything on **supervision and horizon**. Three changes, and they attack the same thing
+from three sides.
+
+### 1. The net now predicts the *final walls* — 30 extra outputs, and this is the main bet
+
+From the same trunk, for **both players**: will they close wall row 1..5, column 1..5,
+colour 1..5, by the end of the game? 30 sigmoids, trained with BCE at weight 0.1 against
+the true final board.
+
+The reason to expect strategy from this, rather than just "more parameters", is the
+**time horizon of the label**. Whether your row 3 ends up closed is settled four or five
+rounds after the position being labelled. No amount of tactical reading answers it — the
+trunk has to carry something like a *plan* to predict it at all. That is exactly the
+faculty you say is missing, and it is the same trick that bought AlphaGo (territory) and
+KataGo (ownership, score) far more than their parameter count suggested.
+
+It is cheap in every dimension that matters. The targets are read off the finished board
+once per game and stored as **30 bits — 4 packed bytes — per position** (2 MB across a
+500k buffer, against 726 MB of states). The head is two Linears, 0.4M of 7.4M parameters.
+The search never evaluates it, so visit counts and therefore policy targets are untouched.
+And the weight is deliberately small: its job is to shape the trunk, not to compete with
+the policy.
+
+### 2. 1024-simulation policy targets, for *less* search than run5 spent
+
+Playout-cap randomization, from KataGo. Each self-play **move** independently draws:
+
+- with probability 0.25 — a **full** 1024-simulation search with root noise, whose visit
+  distribution is recorded as the policy target;
+- otherwise — a **cheap** 256-simulation search with no root noise. The position still
+  enters the buffer (its value, margin and final-wall labels come from the *end of the
+  game*, not from the search) but with **no policy target at all**.
+
+Expected simulations per move: `0.25 x 1024 + 0.75 x 256 = 448`, **below run5's flat 512**.
+So the policy targets get twice run5's depth and the game volume is not paid for. 512
+simulations resolve an exchange; a two-round plan needs more, and the policy target is
+precisely what the net imitates.
+
+The masking is done properly, which matters more than it sounds: a cheap position's policy
+row is zeroed *and masked*, and the policy loss is a masked mean. A zero row already
+contributes no gradient — but it would still divide the batch mean, so without the mask
+the policy loss (and the effective learning rate on that head) would silently shrink by
+whatever fraction of moves were cheap. `tests/test_pcr.py` pins this by asserting that
+adding 8 masked rows to a batch changes neither the loss nor a single gradient.
+
+### 3. Twice as many determinizations at each round boundary
+
+`chance_children` 4 -> 8. Every round boundary is a chance node re-sampled from a handful
+of guesses at the refill, so a plan that pays off two rounds later is averaged over four
+guesses at each of two refills — noise on exactly the comparisons a long-horizon plan has
+to win. Doubling the sample halves that variance.
+
+**And a finding on the way: the "mean" chance backup you might have expected to have to
+write already exists, by construction.** There is no chance-node object and no averaging
+step anywhere in the search — but the `(N, W)` counters live in the *parent*, so every
+simulation through a refill edge adds to the same pair whichever determinization it landed
+in, which makes `Q = W/N` exactly the visit-weighted mean over the sampled subtrees. So no
+code changed. `chance_backup: "mean"` is now a config key that *names* the behaviour (and
+rejects anything else), and `tests/test_train_mcts.py` demonstrates the identity
+numerically — running the simulations one at a time, recording which determinization each
+took, and checking the pieces account for every visit and all of the value — rather than
+leaving it as a claim in a docstring.
+
+### Measured, on this M3 Pro, **with run5 still training on the same machine throughout**
+
+One driver, one full 128-game wave each, run5's config and run6's back to back so both
+carry the same competing load:
+
+| | games/min, 1 driver | projected at 6 | positions/s | evals/move | policy targets | MPS/driver |
+| --- | --- | --- | --- | --- | --- | --- |
+| run5 (flat 512) | 17.3 | **104** | 4,046 | 257.1 | 100% | 136 MB |
+| run6 (aux + pcr + cc8) | 13.4 | **80** | 3,085 | 254.2 | 27.6% | 136 MB |
+
+**run6 runs at 77% of run5's throughput, and 80 games/min finishes 60k games in about
+12.5 hours.** Two things in that table are worth reading twice:
+
+- **evals/move is essentially unchanged — 254 against 257.** Playout-cap randomization
+  plus tree reuse land almost exactly where run5's flat 512 did, which is the whole point
+  of the design: the 1024-simulation policy targets are *free* in evaluation count. The
+  23% that is lost is the 5.7% bigger net (GPU share of the wall clock goes 54% -> 66%)
+  and the deeper trees costing more Python per descent — not more network calls.
+- **the policy-target rate is 27.6%**, against the 25% the config asks for. The excess is
+  forced moves (one legal action, no search, always a real target), and it is a nice
+  independent check that the schedule is doing what it says.
+
+**MPS memory is identical at 136 MB per driver**, so 6 drivers sit under a gigabyte.
+
+**What `chance_children = 8` costs, measured properly.** The full-wave run could not see
+it — at 32 concurrent games the driver spends 85% of its wall clock inside the forward
+pass, and the run-to-run spread from the competing load was ±30%, so the first attempt
+came out *faster* at 8 than at 4, which is obviously noise. Measuring the search alone
+with a stub evaluator (12 near-round-end positions, 1024 simulations, three repeats):
+
+| | ms per 1024-sim search | nodes per search |
+| --- | --- | --- |
+| `chance_children = 4` | 42.9 (42.2-43.8) | 1,025 |
+| `chance_children = 8` | 44.8 (43.9-45.7) | 1,025 |
+
+**+4.4% of the Python descent, and exactly zero extra memory.** The node count is
+identical because the tree size is bounded by the *simulation count*, not by how many
+refills each chance edge samples — 8 determinizations means the same nodes distributed
+over more subtrees, not more nodes. The descent is about a third of a batched driver's
+wall clock, so end to end that is ~1.5%.
+
+### Two bugs found and fixed while measuring, both worth knowing about
+
+**An evaluation game that never ended would have killed the run.** The arena's move
+ceiling was 2000 and it **raised** on reaching it — inside a `pool.imap` worker, which
+propagates out of the Elo evaluation and fails the whole training run. A stalled game also
+costs 100 network calls a move for 2000 moves before it gets there. The ceiling is now 400
+(`mcts.MAX_GAME_MOVES`, what self-play has always used, and seven times a real game's ~54
+moves) and a truncated game is **scored as a draw**, exactly as in self-play, with the
+count surfaced in `elo.jsonl` and the eval log line so it can never be silent. Related: the
+stall breaker now lives inside `select_play_action` instead of being each caller's job to
+remember — and it now overrides the **margin tie-break** too, which was the one
+deterministic pick randomness could not reach (`decisive_action` ignores visit counts among
+equally-winning children, so raising the temperature never touched it).
+
+To be clear about what I did *not* find: I measured real games first, and they are fine.
+run5 vs run5, run5 vs run3, run3 vs run3, and run5 vs random/greedy/heuristic at 100 sims
+are all **5 rounds and ~54 moves**, every game. The backstop is a backstop.
+
+**"A batched game is bit-identical to the sequential one" is not quite true, and never
+was.** Chasing an equivalence-test failure I could not explain, I found it reproduces
+identically on pristine `main`, at seeds the existing test does not use. The cause is not
+the search: **CPU matmul is not batch-invariant.** The same position evaluated alone and in
+a batch of 40 differs by ~4e-8 — nothing to a *value*, but PUCT is a *ranking*, so once in
+a while it flips a comparison and two trajectories part. The honest statement, now written
+into `selfplay_batched.py` and pinned by a test, is: exact at `games=1`, exact per game
+given identical evaluations (the bookkeeping itself adds nothing — that is the property
+that actually matters and it is directly tested), statistical at `games=128` on CPU as much
+as on MPS. It costs training nothing: every trajectory is a legitimate game.
+
+### To launch it
+
+`configs/run6.json` is ready except for the same one hole run5 had, marked in
+`_note_anchors`: **run5's best checkpoint has to be re-rated before it is used as an
+anchor**, because the maximum of ~80 noisy ratings overstates the truth. The exact gauntlet
+command is in the config note. Everything else — pretraining from run5's buffer with the
+aux targets masked out, margin native, anchors pinned to the same scale — is set.
+
 ## 2026-08-16 — run5 is ready to launch: **self-play now batches onto the GPU, so the net could get 4x bigger**
 
 run3 and run4 both flattened out around +2290 and stayed there for 30k+ games. The browser

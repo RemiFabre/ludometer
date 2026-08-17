@@ -592,6 +592,28 @@ class AzulState:
                 done += 1
         return done
 
+    def wall_summary(self, player: int) -> list[int]:
+        """``player``'s wall as 15 bits: 5 rows, then 5 columns, then 5 colors.
+
+        The three bonus sets Azul scores at the end of the game, one bit each
+        instead of the three counts :meth:`completed_rows` / :meth:`completed_cols`
+        / :meth:`completed_colors` return. run6's auxiliary heads predict exactly
+        this vector for the *final* wall (see :mod:`ludometer.train.net2`), which
+        is why it is spelled out per set and not summed: "which row will I close"
+        is a long-horizon plan, "how many rows" is a number.
+
+        Column ``c`` of the wall is index ``r * 5 + c``; color ``c``'s square in
+        row ``r`` is at column ``(c + r) % 5`` (:func:`wall_col`).
+        """
+        wall = self.walls[player]
+        bits = [1 if all(wall[base : base + 5]) else 0 for base in (0, 5, 10, 15, 20)]
+        bits += [1 if all(wall[col::5]) else 0 for col in range(NUM_COLORS)]
+        bits += [
+            1 if all(wall[WALL_IDX[c * 5 + r]] for r in range(NUM_ROWS)) else 0
+            for c in range(NUM_COLORS)
+        ]
+        return bits
+
     def outcome(self) -> float | None:
         """+1 if player 0 wins, -1 if player 1 wins, 0 for a draw, None if unfinished."""
         if not self.is_terminal:

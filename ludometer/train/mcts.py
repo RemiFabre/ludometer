@@ -34,6 +34,22 @@ determinizations**:
   determinizations uniformly at random, which keeps the subtree deep enough to be
   useful while the edge's ``Q`` stays an average over sampled refills.
 
+**How a chance edge's Q is formed (``chance_backup``).** There is no separate
+chance-node object and no separate averaging rule, and that is not an omission:
+the edge statistics ``(N, W)`` live in the *parent*, and every simulation that
+traverses the edge — whichever determinization it lands in — adds its result to
+the same ``W`` and the same ``N``. So
+
+    Q(chance edge) = W / N = sum over determinizations d of N_d * Q_d / sum N_d
+
+exactly: the **visit-weighted mean over the sampled determinizations' subtrees**.
+That is what ``chance_backup = "mean"`` names, and it is the only backup this
+search has ever done. It is written down as a config key so a run states its
+intent, and ``tests/test_train_mcts.py`` proves the identity numerically rather
+than leaving it as a claim in a docstring. Raising ``chance_children`` (run6: 8)
+therefore does exactly one thing — it widens the set of refills that mean is taken
+over — at the cost of splitting the same simulation budget across more subtrees.
+
 Tree reuse (opt-in: ``MCTSConfig.tree_reuse``)
 ---------------------------------------------
 With ``tree_reuse`` off (the default, and what run1/run2 did) every ``search``
@@ -217,6 +233,11 @@ class MCTSConfig:
     dirichlet_alpha_scale: float = 10.0  # alpha = scale / len(legal)
     dirichlet_eps: float = 0.25
     chance_children: int = 4
+    # How a stochastic edge's Q combines its determinizations. "mean" — the
+    # visit-weighted average over the sampled subtrees — is what the shared edge
+    # counters produce natively and is the only implemented rule; the key exists
+    # so a config says which one it means (see the module docstring).
+    chance_backup: str = "mean"
     fpu: float = 0.0  # Q assumed for an unvisited edge (parent's frame)
     tree_reuse: bool = False  # keep the chosen child's subtree between moves
     # Decisive play (margin-head nets only; see the module docstring). A child is
@@ -243,6 +264,7 @@ class MCTSConfig:
             "dirichlet_alpha_scale",
             "dirichlet_eps",
             "chance_children",
+            "chance_backup",
             "fpu",
             "tree_reuse",
             "decisive_eps",
@@ -261,6 +283,10 @@ class MCTSConfig:
             raise ValueError("sims must be >= 1")
         if cfg.chance_children < 1:
             raise ValueError("chance_children must be >= 1")
+        if cfg.chance_backup != "mean":
+            raise ValueError(
+                f"unknown chance_backup {cfg.chance_backup!r} (only 'mean' exists)"
+            )
         if cfg.search_batch < 1 or cfg.search_min_batch < 1:
             raise ValueError("search_batch and search_min_batch must be >= 1")
         if cfg.search_batch_ramp < 1:
@@ -529,12 +555,18 @@ class MCTS:
         state: AzulState,
         add_noise: bool | None = None,
         time_limit_s: float | None = None,
+        sims: int | None = None,
     ) -> SearchResult:
         """Run simulations from ``state`` (never mutated).
 
         ``time_limit_s`` (seconds, ``None`` = off) turns ``config.sims`` into an
         upper bound and keeps simulating until the budget is spent. Training
         never passes it, so training behaviour is unchanged.
+
+        ``sims`` overrides ``config.sims`` for this one call, which is what
+        playout-cap randomization needs (a cheap move and a full move differ only
+        in their budget, and it changes per move — see
+        :mod:`ludometer.train.selfplay`). ``None`` keeps the configured value.
         """
         noise = self.add_noise if add_noise is None else add_noise
         started = time.perf_counter()
@@ -567,7 +599,7 @@ class MCTS:
             self._apply_noise(root)
         # A reused root keeps its visits, so the budget is a total: the tree ends
         # up the same size as a fresh search would have made it, for fewer evals.
-        cap = max(0, self.config.sims - root.n_visits)
+        cap = max(0, self._budget(sims) - root.n_visits)
         budget = None if time_limit_s is None else float(time_limit_s)
         if budget is None or budget <= 0.0:
             for _ in range(cap):
@@ -621,12 +653,22 @@ class MCTS:
         )
 
     # ------------------------------------------------------- batched interface
-    def start_search(self, state: AzulState, add_noise: bool | None = None) -> None:
+    def _budget(self, sims: int | None) -> int:
+        """This search's simulation total: the per-call override, or the config."""
+        return self.config.sims if sims is None else max(1, int(sims))
+
+    def start_search(
+        self,
+        state: AzulState,
+        add_noise: bool | None = None,
+        sims: int | None = None,
+    ) -> None:
         """Open a search the caller will drive (see the module docstring).
 
         Does the same setup :meth:`search` does — reuse the kept subtree or clone
         a fresh root, work out the simulation budget — but stops before the first
-        evaluation instead of calling the evaluator itself.
+        evaluation instead of calling the evaluator itself. ``sims`` overrides the
+        budget for this search only, exactly as in :meth:`search`.
         """
         if self._search is not None:  # pragma: no cover - defensive
             raise RuntimeError("a batched search is already in progress")
@@ -640,7 +682,7 @@ class MCTS:
                 raise ValueError("cannot search a terminal state")
         self._root = root
         self._search = _BatchSearch(
-            root, noise, max(0, self.config.sims - root.n_visits), started
+            root, noise, max(0, self._budget(sims) - root.n_visits), started
         )
         if not self._search.need_root:
             self._open_root()
@@ -1017,6 +1059,7 @@ def select_play_action(
     rng: random.Random | np.random.Generator | None = None,
     eps: float = 0.03,
     min_visit_frac: float = 0.1,
+    stalling: bool = False,
 ) -> int:
     """The move to actually play: sampled when exploring, decisive when not.
 
@@ -1025,7 +1068,22 @@ def select_play_action(
     search uses :func:`decisive_action`; anything else is the historical
     ``argmax`` over visits, which is what makes run1/run2/run3 checkpoints play
     bit-identically to before this head existed.
+
+    ``stalling`` is the **stall breaker**, and it lives here rather than in each
+    caller for a reason. A game in which neither side ever completes a pattern
+    line never terminates (see :data:`STALL_ROUNDS`), and *every* deterministic
+    pick can sustain that loop — the historical ``argmax`` and the lexicographic
+    margin tie-break alike. Two margin-head agents are in fact the more dangerous
+    pair, because :func:`decisive_action` ignores the visit counts among
+    equally-winning children, so the randomness a caller injects by raising the
+    temperature would never reach the decision at all. When ``stalling`` is set
+    the pick is therefore *always* the sampled one, at a temperature of at least
+    1.0, whatever heads the net has. Callers pass
+    ``state.round_index >= stall_rounds``; passing it is the only thing they have
+    to remember.
     """
+    if stalling:
+        return select_action(result.policy, max(temperature, 1.0), rng)
     if temperature > 0.0 or not result.has_margin:
         return select_action(result.policy, temperature, rng)
     return decisive_action(result, eps=eps, min_visit_frac=min_visit_frac)

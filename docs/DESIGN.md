@@ -120,9 +120,47 @@ must then be 0 — the blend it used to do is exactly what the new head does pro
   `margin` only when the checkpoint has the head; `policy` and `value` keep their names and
   positions, so the deployed page is unaffected either way.
 
+**Auxiliary strategic heads** (`"aux_heads": true`, run6) answer "the tactics are good, the
+long-term play is weak". `net2.py` grows a fourth head off the same body: 30 sigmoids
+predicting, for **both** players, which wall rows (5), columns (5) and colours (5) their
+*final* wall will hold — the game's whole end-of-game bonus structure, per set rather than
+summed, in the player-to-move frame (`engine.wall_summary`).
+
+- **Why**: outcome and margin are both one number about the end of the game; neither says
+  what shape it will end in. Whether row 3 closes is decided several rounds after the
+  position that carries the label, so fitting it is impossible without representing a plan.
+  Same argument as AlphaGo's territory head and KataGo's ownership/score heads.
+- **Training**: BCE with weight `aux_weight` (0.1), masked per position exactly like the
+  margin. Replay buffers carry `aux` (the 30 bits, **packed** — 4 bytes a position) and
+  `aux_mask`; a pre-run6 `replay.npz` has neither, so pretraining run6 on run5's buffer
+  trains policy/value/margin and leaves the new head at its initialisation.
+- **Search is unchanged**: the aux head is never evaluated during a search (it has no meaning
+  for a leaf's value), so visit counts and therefore policy targets are untouched.
+- **Checkpoints stay compatible both ways**: `version` 3 = four heads. `forward()` still
+  returns two tensors and `forward_heads()` three; the aux logits come from `forward_aux()`,
+  which only training and the exporter call. The ONNX export appends a fourth named output
+  `wall` (probabilities, sigmoid applied in the graph) only when the checkpoint has the head.
+
+**Playout-cap randomization** (`"pcr": {...}`, run6) buys deep policy targets without paying
+for them in games. Each self-play move independently draws a full search (`full_sims`, root
+Dirichlet noise, visit distribution recorded as the policy target) with probability
+`full_prob`, or a cheap one (`cheap_sims`, no root noise) otherwise. A cheap move's position
+still enters the buffer — its value, margin and aux labels come from the end of the game —
+but with a zeroed policy and `policy_mask = 0`, and the policy loss is a masked mean so those
+rows contribute no gradient and do not shrink the term. run6: 1024/256 at 0.25, i.e. 448
+expected simulations a move against run5's flat 512. `sims` must equal `full_sims`.
+
 **Tree reuse** (`"tree_reuse": true`) keeps the chosen child's subtree as the next self-play
 search root and tops it up to `sims` total visits; it is dropped across refill (chance)
 boundaries and re-mixes Dirichlet noise at the new root. Self-play only — see `mcts.py`.
+It composes with playout-cap randomization for free: a cheap search that follows a full one
+inherits a root already past the cheap budget and runs no new simulations at all.
+
+**Chance backup** (`"chance_backup": "mean"`, `"chance_children"`): a stochastic edge's `Q` is
+the visit-weighted mean over the determinizations sampled below it. That is not a rule the
+code applies, it is what the shared parent-side edge counters produce — `tests/
+test_train_mcts.py` demonstrates the identity on a real search. `chance_children` (run6: 8,
+before: 4) is how many distinct refills that mean is taken over.
 
 **Pretraining** (`--pretrain <replay.npz>`, `pretrain_epochs`) fits a fresh net to an earlier
 run's replay buffer (policy CE on the stored visit distributions + value MSE) before any
@@ -152,8 +190,9 @@ Everything observable lives in `runs/<run_name>/`. Exact schemas (one JSON objec
 Conventions: all timestamps are UTC ISO-8601 with explicit offset (e.g. `2026-08-14T15:04:05Z`).
 Where fields are duplicated, `status.json` is authoritative over `config.json` and over the last
 `train.jsonl` line. Draws count as half-wins in every win rate. `loss` = `loss_p + loss_v +
-loss_m` (any regularization lives in the optimizer, not the reported loss; `loss_m` is 0 for a
-net without a margin head, and absent altogether from run1-run3 logs).
+loss_m + loss_a` (any regularization lives in the optimizer, not the reported loss; `loss_m`
+is 0 for a net without a margin head and absent from run1-run3 logs, `loss_a` likewise for
+the auxiliary heads and absent before run6).
 
 - `config.json` — run hyperparameters, free-form dict, plus `"run"`, `"started"` (ISO time).
 - `status.json` — heartbeat, rewritten atomically by the trainer:
@@ -162,11 +201,13 @@ net without a margin head, and absent altogether from run1-run3 logs).
 - `train.jsonl` — appended every logging interval:
   `{"t": <sec since run start>, "games": <total self-play games>, "steps": <optimizer steps>,
     "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "loss_m": <margin, run4+>,
-    "buffer": <replay size>, "lr": <lr>}`
+    "loss_a": <final-wall BCE, run6+>, "buffer": <replay size>, "lr": <lr>}`
 - `elo.jsonl` — appended after each checkpoint evaluation:
   `{"t": <sec>, "games": <self-play games at ckpt>, "ckpt": "<name>", "elo": <float>,
     "elo_err": <float>, "vs": {"<opponent>": <winrate 0..1>, ...}, "n_games": <eval games>,
     "pool": [<anchor/opponent names with their fixed Elos where anchored>]}`
+  plus `"truncated": <n>` on the rare line where an evaluation game hit the arena's
+  400-move backstop and was scored as a draw (`eval/arena.py`); absent when it is 0.
   Frozen checkpoints joining the pool DO appear in `vs` (the dashboard caps drawn lines at 8
   and folds the rest into a table).
 - `checkpoints/<name>.pt` — model weights (gitignored).

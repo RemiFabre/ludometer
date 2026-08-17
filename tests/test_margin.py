@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -324,6 +325,86 @@ def test_decisive_play_picks_the_bigger_score_gap() -> None:
     assert differed, "the tie-break never fired; the test proves nothing"
 
 
+def test_the_stall_breaker_overrides_the_lexicographic_pick() -> None:
+    """A game that will not end must not be kept alive by the tie-break.
+
+    An Azul game in which neither side ever completes a pattern line never
+    terminates, and *every* deterministic pick can sustain that loop. The margin
+    tie-break is the worst offender, because :func:`decisive_action` ignores the
+    visit counts among equally-winning children — so an agent that "adds
+    randomness" by raising the temperature would find that randomness never
+    reaches the decision at all. ``select_play_action(..., stalling=True)``
+    therefore takes the sampled path whatever heads the net has.
+    """
+    result = SearchResult(
+        policy=_policy({0: 0.5, 1: 0.3, 2: 0.2}),
+        value=0.9,
+        visits={0: 50, 1: 30, 2: 20},
+        sims=100,
+        has_margin=True,
+        # every move is equally winning, so the tie-break decides — and it likes
+        # the least-visited one, which is exactly how a loop gets sustained
+        q={0: 0.90, 1: 0.90, 2: 0.90},
+        margins={0: 0.10, 1: 0.20, 2: 0.90},
+    )
+    assert select_play_action(result, 0.0) == 2  # the lexicographic pick
+    picks = {
+        select_play_action(result, 0.0, random.Random(s), stalling=True)
+        for s in range(60)
+    }
+    assert len(picks) > 1, "the stall breaker did not randomise anything"
+    assert picks <= {0, 1, 2}
+    # ... and it samples the VISIT distribution, so the well-searched move is
+    # still the likeliest one; this is a loop breaker, not a coin toss.
+    counts = [
+        select_play_action(result, 0.0, random.Random(s), stalling=True)
+        for s in range(400)
+    ]
+    assert counts.count(0) > counts.count(2)
+
+
+def test_the_stall_breaker_also_covers_a_net_without_the_head() -> None:
+    result = SearchResult(
+        policy=_policy({0: 0.9, 1: 0.1}), value=0.0, visits={0: 90, 1: 10}, sims=100
+    )
+    assert select_play_action(result, 0.0) == 0  # plain argmax, unchanged
+    picks = {
+        select_play_action(result, 0.0, random.Random(s), stalling=True)
+        for s in range(60)
+    }
+    assert picks == {0, 1}
+
+
+def _policy(weights: dict[int, float]) -> np.ndarray:
+    out = np.zeros(ACTION_SPACE, dtype=np.float32)
+    for action, p in weights.items():
+        out[action] = p
+    return out
+
+
+def test_the_agent_hands_the_stall_flag_to_the_picker(monkeypatch) -> None:
+    """The rule lives in one place; the agent's job is only to report the round."""
+    from ludometer.train import mcts_agent as agent_module
+
+    torch.manual_seed(8)
+    net = StructuredNet(WITH_MARGIN).eval()
+    agent = MCTSAgent(net, sims=8, seed=1, stall_rounds=3)
+    seen: list[bool] = []
+    real = agent_module.select_play_action
+
+    def spy(result, temperature=0.0, rng=None, **kwargs):
+        seen.append(bool(kwargs.get("stalling")))
+        return real(result, temperature, rng, **kwargs)
+
+    monkeypatch.setattr(agent_module, "select_play_action", spy)
+    state = a_mid_game_state(seed=21, moves=20)
+    state.round_index = 0
+    agent.act(state)
+    state.round_index = 9  # past stall_rounds
+    agent.act(state)
+    assert seen == [False, True]
+
+
 def test_a_terminal_node_backs_up_its_real_final_margin() -> None:
     """Search that reaches the end of the game uses facts, not an estimate."""
     state = AzulState.new_game(seed=4)
@@ -426,7 +507,7 @@ def test_an_old_buffer_loads_with_the_margin_masked_out(tmp_path) -> None:
     n = buf.load(path)
     assert n == 320
     assert buf.stats()["margin_targets"] == 0
-    _s, _p, _v, margins, mask = buf.sample(64)
+    _s, _p, _v, margins, mask = buf.sample(64)[:5]
     assert not mask.any()
     assert not margins.any()
 
@@ -511,7 +592,7 @@ def test_pretraining_on_an_old_buffer_masks_the_margin_loss(tmp_path) -> None:
     # the weights themselves would fail for an unrelated reason — Adam's weight
     # decay moves every parameter, gradient or no gradient.)
     batch = trainer.buffer.sample(64)
-    _loss_p, _loss_v, loss_m = trainer._losses(*batch)
+    loss_m = trainer._losses(*batch)[2]
     assert float(loss_m.detach()) == 0.0
     trainer.net.zero_grad(set_to_none=True)
     loss_m.backward()
@@ -534,7 +615,7 @@ def test_pretraining_on_an_unblended_old_buffer_trains_the_margin(tmp_path) -> N
     assert trainer.pretrain(path) > 0
     assert trainer.buffer.stats()["margin_targets"] == 320
     batch = trainer.buffer.sample(64)
-    _loss_p, _loss_v, loss_m = trainer._losses(*batch)
+    loss_m = trainer._losses(*batch)[2]
     assert float(loss_m.detach()) > 0.0
     trainer.net.zero_grad(set_to_none=True)
     loss_m.backward()

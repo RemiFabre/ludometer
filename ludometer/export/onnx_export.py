@@ -22,6 +22,15 @@ keep their names *and* their positions, a run3 export is byte-for-byte what it
 always was, and the deployed page (which reads outputs by name) keeps working
 whichever kind of checkpoint is published.
 
+A run6 checkpoint appends a **fourth**, ``wall`` ``[batch, 30]``: the probability
+that each of the two players ends the game holding each wall row, column and
+colour (see :func:`ludometer.train.net2.aux_slices` for the layout). Same rules —
+appended last, present only when the checkpoint has the heads — and the graph
+emits **probabilities**, not logits, because a browser reading "row 3: 0.82" needs
+no knowledge of the training loss. The player does not have to consume it; it is
+exported because it is the most explainable thing the net knows ("it is playing
+for the blue colour bonus") and it costs 8 KB of graph.
+
 Parity is checked before the file is accepted: ~100 observations taken from real
 random games are run through both torch and onnxruntime and the maximum absolute
 difference must stay under ``--tol`` (1e-4 by default). onnxruntime is optional
@@ -55,6 +64,7 @@ from ludometer.azul.engine import ACTION_SPACE, ENCODED_SIZE, AzulState
 from ludometer.train.net import PolicyValueNet, load_net
 
 __all__ = [
+    "AUX_OUTPUT",
     "DEFAULT_OUT_DIR",
     "MARGIN_OUTPUT",
     "OUTPUT_NAMES",
@@ -81,6 +91,7 @@ OPSET = 17  # widely supported by onnxruntime-web 1.x; the net only needs matmul
 
 OUTPUT_NAMES = ("policy", "value")
 MARGIN_OUTPUT = "margin"
+AUX_OUTPUT = "wall"
 
 
 class ExportWrapper(nn.Module):
@@ -88,27 +99,37 @@ class ExportWrapper(nn.Module):
 
     :meth:`PolicyValueNet.forward` squeezes the value to ``[B]``; keeping it at
     ``[B, 1]`` means the JS side reads ``value.data[0]`` whatever the batch is.
-    The margin, when the net has one, is shaped and appended the same way.
+    The margin, when the net has one, is shaped and appended the same way, and the
+    aux heads follow it as ``[B, 30]`` **probabilities** (the sigmoid the training
+    loss keeps inside itself is applied here, once, in the graph).
     """
 
     def __init__(self, net: PolicyValueNet) -> None:
         super().__init__()
         self.net = net
         self.has_margin = bool(getattr(net, "has_margin", False))
+        self.has_aux = bool(getattr(net, "has_aux", False))
 
     def forward(self, obs: Tensor) -> tuple[Tensor, ...]:
-        if not self.has_margin:
+        if not self.has_margin and not self.has_aux:
             logits, value = self.net(obs)
             return logits, value.reshape(-1, 1)
-        logits, value, margin = self.net.forward_heads(obs)
-        return logits, value.reshape(-1, 1), margin.reshape(-1, 1)
+        logits, value, margin, aux = self.net.forward_aux(obs)
+        out: tuple[Tensor, ...] = (logits, value.reshape(-1, 1))
+        if margin is not None:
+            out = (*out, margin.reshape(-1, 1))
+        if aux is not None:
+            out = (*out, torch.sigmoid(aux))
+        return out
 
 
 def output_names(net: Any) -> list[str]:
-    """Graph outputs for ``net``, in order (the margin is always last)."""
+    """Graph outputs for ``net``, in order (new heads are always appended)."""
     names = list(OUTPUT_NAMES)
     if getattr(net, "has_margin", False):
         names.append(MARGIN_OUTPUT)
+    if getattr(net, "has_aux", False):
+        names.append(AUX_OUTPUT)
     return names
 
 
@@ -162,26 +183,33 @@ def verify_parity(
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     net.eval()
     with torch.inference_mode():
-        t_logits, t_value, t_margin = net.forward_heads(torch.from_numpy(samples))
+        t_logits, t_value, t_margin, t_aux = net.forward_aux(torch.from_numpy(samples))
     ref_logits = t_logits.numpy()
     ref_value = t_value.reshape(-1, 1).numpy()
     ref_margin = None if t_margin is None else t_margin.reshape(-1, 1).numpy()
+    ref_aux = None if t_aux is None else torch.sigmoid(t_aux).numpy()
 
     p_diff = 0.0
     v_diff = 0.0
     m_diff = 0.0
+    a_diff = 0.0
     # one row at a time: batch 1 is what the browser runs, so that is what we check
     for i in range(samples.shape[0]):
         out = session.run(None, {"obs": samples[i : i + 1]})
         p_diff = max(p_diff, float(np.abs(out[0] - ref_logits[i : i + 1]).max()))
         v_diff = max(v_diff, float(np.abs(out[1] - ref_value[i : i + 1]).max()))
+        at = 2
         if ref_margin is not None:
-            m_diff = max(m_diff, float(np.abs(out[2] - ref_margin[i : i + 1]).max()))
-    worst = max(p_diff, v_diff, m_diff)
+            m_diff = max(m_diff, float(np.abs(out[at] - ref_margin[i : i + 1]).max()))
+            at += 1
+        if ref_aux is not None:
+            a_diff = max(a_diff, float(np.abs(out[at] - ref_aux[i : i + 1]).max()))
+    worst = max(p_diff, v_diff, m_diff, a_diff)
     if worst > tol:
         raise AssertionError(
             f"ONNX/torch parity failed: max |diff| = {worst:.3e} > {tol:.1e} "
-            f"(policy {p_diff:.3e}, value {v_diff:.3e}, margin {m_diff:.3e})"
+            f"(policy {p_diff:.3e}, value {v_diff:.3e}, margin {m_diff:.3e}, "
+            f"wall {a_diff:.3e})"
         )
     report = {
         "checked": True,
@@ -192,6 +220,8 @@ def verify_parity(
     }
     if ref_margin is not None:
         report["margin_max_abs_diff"] = m_diff
+    if ref_aux is not None:
+        report["wall_max_abs_diff"] = a_diff
     return report
 
 
@@ -208,7 +238,7 @@ def write_torch_reference(
     """
     net.eval()
     with torch.inference_mode():
-        logits, value, margin = net.forward_heads(torch.from_numpy(samples))
+        logits, value, margin, aux = net.forward_aux(torch.from_numpy(samples))
     payload = {
         "checkpoint": meta.get("checkpoint"),
         "onnx_sha256": meta.get("onnx_sha256"),
@@ -219,6 +249,8 @@ def write_torch_reference(
     }
     if margin is not None:
         payload["margin"] = margin.reshape(-1).numpy().astype(np.float32).tolist()
+    if aux is not None:
+        payload["wall"] = torch.sigmoid(aux).numpy().astype(np.float32).tolist()
     path.parent.mkdir(parents=True, exist_ok=True)
     import gzip
 
@@ -315,6 +347,7 @@ def export_checkpoint(
         "num_params": int(net.num_params),
         "outputs": names,
         "has_margin": bool(getattr(net, "has_margin", False)),
+        "has_aux": bool(getattr(net, "has_aux", False)),
         "opset": OPSET,
         "onnx_bytes": target.stat().st_size,
         "onnx_sha256": digest,

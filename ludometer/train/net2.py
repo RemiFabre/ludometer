@@ -71,7 +71,43 @@ both directions. ``margin_head`` defaults to ``False``, so a run3 checkpoint (wh
 ``net_config`` has no such key, and whose ``state_dict`` has no ``margin_*``
 tensors) rebuilds exactly the net it always did, and everything downstream —
 ``load_net``, the GUI, the arena, the ONNX exporter — is unchanged for it.
-``version`` records which shape a checkpoint is: 1 = two heads, 2 = three.
+``version`` records which shape a checkpoint is: 1 = two heads, 2 = three,
+3 = plus the auxiliary wall heads below.
+
+Auxiliary strategic heads (run6, ``aux_heads: true``)
+-----------------------------------------------------
+Remi's report on run5: the tactics are good, the *long-term* play is weak. The
+supervision explains it — outcome and margin are both one number about the end of
+the game, and neither says anything about the *shape* the game will end in. So
+run6 adds 30 sigmoid outputs off the same body predicting, **for both players**,
+which sets their wall will hold when the game is over:
+
+    [ 0:  5)  the player to move closes wall row r
+    [ 5: 10)  ... column c
+    [10: 15)  ... colour c   (all five squares of that colour)
+    [15: 30)  the same fifteen questions for the opponent
+
+That is the game's whole end-of-game bonus structure, written out per set instead
+of summed, and it is a *long-horizon* label: whether row 3 is finished is decided
+five rounds after the position being labelled. Predicting it forces the trunk to
+carry plans, not just the value of the next exchange — the same reason AlphaGo's
+territory head and KataGo's ownership/score heads help far more than their
+parameter count suggests.
+
+The loss is BCE (``aux_weight``, default 0.1) against the true final walls, taken
+from :meth:`~ludometer.azul.engine.AzulState.wall_summary` at game end and stored
+as 30 bits per position in the replay buffer. Positions inherited from an older
+buffer have no such label, so their aux loss is masked exactly like run4's margin
+was — a run6 net pretrains happily on run5's data.
+
+Outputs are **logits**, not probabilities: the head is ``Linear -> ReLU ->
+Linear`` and the sigmoid lives in the loss (``binary_cross_entropy_with_logits``),
+with :meth:`StructuredNet.forward_aux` handing back the raw 30 and the exporter
+applying the sigmoid so the browser sees probabilities.
+
+Like the margin head this is additive and opt-in, so nothing without it moves:
+``forward`` still returns two tensors, ``forward_heads`` still returns three, and
+a run5 checkpoint (no ``aux_*`` tensors) still loads with ``strict=True``.
 
 Budget
 ------
@@ -126,19 +162,40 @@ from ludometer.azul.engine import (
 from ludometer.train.net import BaseNet
 
 __all__ = [
+    "AUX_OUTPUTS",
+    "AUX_VERSION",
     "DEST_TOKENS",
     "MARGIN_VERSION",
     "NUM_TOKENS",
     "StructuredConfig",
     "StructuredNet",
+    "aux_slices",
     "token_slices",
 ]
 
 ARCH = "structured"
 
-# net_config["version"]: 1 = policy + value (run3), 2 = + margin head (run4).
+# net_config["version"]: 1 = policy + value (run3), 2 = + margin head (run4),
+# 3 = + the auxiliary final-wall heads (run6).
 BASE_VERSION = 1
 MARGIN_VERSION = 2
+AUX_VERSION = 3
+
+# 2 players x (5 rows + 5 columns + 5 colours) — see the module docstring.
+AUX_PER_PLAYER = 15
+AUX_OUTPUTS = 2 * AUX_PER_PLAYER
+
+
+def aux_slices() -> dict[str, slice]:
+    """``{name: slice}`` into the 30 aux outputs (docs / tests / the exporter)."""
+    out: dict[str, slice] = {}
+    for p, who in enumerate(("me", "them")):
+        base = p * AUX_PER_PLAYER
+        for i, what in enumerate(("rows", "cols", "colors")):
+            start = base + i * NUM_ROWS
+            out[f"{who}_{what}"] = slice(start, start + NUM_ROWS)
+    return out
+
 
 NUM_SOURCES = NUM_FACTORIES + 1  # 5 factories + centre
 NUM_DESTS = NUM_ROWS + 1  # 5 pattern lines + floor
@@ -263,9 +320,10 @@ class StructuredConfig:
     policy_rank: int = 32  # k in <A[s, c], B[d]>
     policy_global: bool = True  # add a 180-wide correction from the body
     margin_head: bool = False  # run4's third head (see the module docstring)
-    # Shape version, not a format version: 1 = policy + value, 2 = + margin. A
-    # run3 checkpoint has no such key, hence the default; asking for the margin
-    # head bumps it in __post_init__ so a checkpoint always says what it holds.
+    aux_heads: bool = False  # run6's 30 final-wall sigmoids (module docstring)
+    # Shape version, not a format version: 1 = policy + value, 2 = + margin,
+    # 3 = + aux. A run3 checkpoint has no such key, hence the default; asking for
+    # a head bumps it in __post_init__ so a checkpoint always says what it holds.
     version: int = BASE_VERSION
 
     _INT_FIELDS = (
@@ -281,15 +339,21 @@ class StructuredConfig:
         "policy_rank",
         "version",
     )
-    _BOOL_FIELDS = ("policy_global", "margin_head")
+    _BOOL_FIELDS = ("policy_global", "margin_head", "aux_heads")
 
     def __post_init__(self) -> None:
-        # version and margin_head are two views of one fact; keep them in step so
-        # neither a config file nor a checkpoint can describe a net that is not
-        # the one `StructuredNet` would build.
+        # version and the head flags are two views of one fact; keep them in step
+        # so neither a config file nor a checkpoint can describe a net that is not
+        # the one `StructuredNet` would build. The version is the *highest* head
+        # present, and the flags are recovered from it for a checkpoint old enough
+        # to have recorded only the number.
+        if self.aux_heads and self.version < AUX_VERSION:
+            object.__setattr__(self, "version", AUX_VERSION)
+        elif self.version >= AUX_VERSION and not self.aux_heads:
+            object.__setattr__(self, "aux_heads", True)
         if self.margin_head and self.version < MARGIN_VERSION:
             object.__setattr__(self, "version", MARGIN_VERSION)
-        elif self.version >= MARGIN_VERSION and not self.margin_head:
+        elif MARGIN_VERSION <= self.version < AUX_VERSION and not self.margin_head:
             object.__setattr__(self, "margin_head", True)
 
     @classmethod
@@ -433,6 +497,14 @@ class StructuredNet(BaseNet):
             nn.Linear(cfg.body, cfg.value_hidden) if cfg.margin_head else None
         )
         self.margin_out = nn.Linear(cfg.value_hidden, 1) if cfg.margin_head else None
+        # Fourth head, opt-in: 30 logits about the *final* walls. Same story as
+        # the margin head — absent from the state dict when it is off, so a run5
+        # checkpoint still loads with `strict=True`.
+        self.has_aux = bool(cfg.aux_heads)
+        self.aux_fc = nn.Linear(cfg.body, cfg.value_hidden) if cfg.aux_heads else None
+        self.aux_out = (
+            nn.Linear(cfg.value_hidden, AUX_OUTPUTS) if cfg.aux_heads else None
+        )
         self._init_weights()
         self.float()
 
@@ -449,6 +521,8 @@ class StructuredNet(BaseNet):
         heads = [self.src_proj, self.dst_proj, self.value_head]
         if self.margin_out is not None:
             heads.append(self.margin_out)  # start at "the game is level"
+        if self.aux_out is not None:
+            heads.append(self.aux_out)  # ... and at "every set is a coin flip"
         for module in heads:
             nn.init.normal_(module.weight, std=0.01)
             nn.init.zeros_(module.bias)
@@ -475,16 +549,29 @@ class StructuredNet(BaseNet):
         ONNX wrapper call, and a run4 net must answer them exactly like a run3
         one. The margin comes from :meth:`forward_heads`.
         """
-        logits, value, _margin = self._heads(x, margin=False)
+        logits, value, _margin, _aux = self._heads(x, margin=False)
         return logits, value
 
     def forward_heads(self, x: Tensor) -> tuple[Tensor, Tensor, Tensor | None]:
-        """``(logits, value, margin)``; ``margin`` is ``None`` without the head."""
-        return self._heads(x, margin=self.has_margin)
+        """``(logits, value, margin)``; ``margin`` is ``None`` without the head.
+
+        Still exactly three outputs, because self-play, the arena and the ONNX
+        wrapper all call it and a run6 net must answer them like a run5 one. The
+        aux logits come from :meth:`forward_aux`, which only training and the
+        exporter ask for.
+        """
+        logits, value, margin, _aux = self._heads(x, margin=self.has_margin)
+        return logits, value, margin
+
+    def forward_aux(
+        self, x: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        """``(logits, value, margin, aux logits [B, 30])`` — ``None`` without it."""
+        return self._heads(x, margin=self.has_margin, aux=self.has_aux)
 
     def _heads(
-        self, x: Tensor, margin: bool = False
-    ) -> tuple[Tensor, Tensor, Tensor | None]:
+        self, x: Tensor, margin: bool = False, aux: bool = False
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
         b = x.shape[0]
         h = self.tokens(x)
         for block in self.trunk:
@@ -515,7 +602,10 @@ class StructuredNet(BaseNet):
             logits = logits + self.policy_global(g)
 
         value = torch.tanh(self.value_head(torch.relu(self.value_fc(g)))).squeeze(-1)
-        if not margin or self.margin_fc is None or self.margin_out is None:
-            return logits, value, None
-        m = torch.tanh(self.margin_out(torch.relu(self.margin_fc(g)))).squeeze(-1)
-        return logits, value, m
+        m = None
+        if margin and self.margin_fc is not None and self.margin_out is not None:
+            m = torch.tanh(self.margin_out(torch.relu(self.margin_fc(g)))).squeeze(-1)
+        a = None
+        if aux and self.aux_fc is not None and self.aux_out is not None:
+            a = self.aux_out(torch.relu(self.aux_fc(g)))  # logits; sigmoid in the loss
+        return logits, value, m, a

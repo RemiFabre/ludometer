@@ -128,6 +128,47 @@ def test_empty_match_is_harmless():
         play_match("greedy", "random", n_games=-1)
 
 
+# -------------------------------------------------------------- the backstop
+class NeverFinishes(Agent):
+    """Dumps every tile on the floor, so no wall tile is ever placed.
+
+    An Azul game ends when someone completes a wall row. Two agents that never
+    complete a *pattern line* therefore play forever — the tiles just cycle bag ->
+    board -> floor -> lid -> bag. This is the shape of the pathology the arena
+    backstop exists for; it is unreachable for trained agents, and cheap to build
+    on purpose.
+    """
+
+    name = "never"
+
+    def act(self, state: AzulState) -> int:
+        floor = [a for a in state.legal_actions() if a % 6 == 5]
+        return floor[0] if floor else min(state.legal_actions())
+
+
+def test_a_game_that_never_ends_is_truncated_not_raised():
+    """The old code raised here, inside an eval worker, failing the whole run."""
+    from ludometer.eval.arena import MAX_MOVES
+
+    result = play_game(NeverFinishes(), NeverFinishes(), seed=3)
+    assert result.truncated
+    assert result.moves == MAX_MOVES
+    assert result.result == 0.5, "an unfinished game is a draw, like self-play"
+    assert MAX_MOVES == 400, "the same ceiling self-play has always used"
+
+
+def test_a_normal_game_is_not_truncated_and_the_match_counts_them():
+    result = play_game("greedy", "random", seed=5)
+    assert not result.truncated
+    assert result.moves < 200
+
+    match = play_match(NeverFinishes(), NeverFinishes(), n_games=2, base_seed=1)
+    assert match.truncated == 2
+    assert match.draws == 2
+    assert match.as_dict()["truncated"] == 2
+    assert play_match("greedy", "random", n_games=2, base_seed=1).truncated == 0
+
+
 def test_game_result_is_picklable():
     import pickle
 

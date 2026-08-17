@@ -44,7 +44,7 @@ from ludometer.train.net import (
     net_config_from_dict,
     save_checkpoint,
 )
-from ludometer.train.replay import ReplayBuffer
+from ludometer.train.replay import ReplayBuffer, unpack_aux
 from ludometer.train.selfplay import SelfPlayConfig, make_selfplay
 
 __all__ = ["TrainConfig", "Trainer", "log_line", "resolve_device", "utc_now"]
@@ -133,6 +133,9 @@ class TrainConfig:
     # then goes back to pure win/draw/loss, which is why `margin_head` and a
     # non-zero `value_score_weight` are mutually exclusive (see validate()).
     margin_head: bool = False
+    # run6: 30 sigmoids predicting both players' FINAL wall sets (see net2.py).
+    # Long-horizon supervision — the label is decided rounds after the position.
+    aux_heads: bool = False
 
     # self-play search
     sims: int = 160
@@ -140,7 +143,11 @@ class TrainConfig:
     dirichlet_alpha_scale: float = 10.0
     dirichlet_eps: float = 0.25
     chance_children: int = 4
+    chance_backup: str = "mean"  # how a stochastic edge combines its draws
     tree_reuse: bool = False
+    # Playout-cap randomization: {"full_sims": .., "cheap_sims": .., "full_prob": ..}
+    # Empty (the default, and every pre-run6 config) runs `sims` on every move.
+    pcr: dict[str, float] = field(default_factory=dict)
     temp_moves: int = 12
     temperature: float = 1.0
     stall_rounds: int = STALL_ROUNDS
@@ -167,6 +174,7 @@ class TrainConfig:
     weight_decay: float = 1e-4
     value_weight: float = 1.0
     margin_weight: float = 0.25  # weight of the margin MSE (margin_head only)
+    aux_weight: float = 0.1  # weight of the final-wall BCE (aux_heads only)
     grad_clip: float = 1.0
 
     # replay
@@ -238,7 +246,33 @@ class TrainConfig:
                     "with margin_head the value target is the pure outcome: "
                     "set value_score_weight to 0 (the margin has its own head)"
                 )
+        if self.aux_heads and self.arch != "structured":
+            raise ValueError("aux_heads needs arch='structured' (net2.py)")
+        self._validate_pcr()
         self.net_config()  # architecture keys are validated by the net configs
+
+    def _validate_pcr(self) -> None:
+        """Playout-cap randomization is all-or-nothing and must be a real split."""
+        if not self.pcr:
+            return
+        unknown = sorted(set(self.pcr) - {"full_sims", "cheap_sims", "full_prob"})
+        if unknown:
+            raise ValueError(f"unknown pcr keys: {unknown}")
+        full = int(self.pcr.get("full_sims", 0))
+        cheap = int(self.pcr.get("cheap_sims", 0))
+        prob = float(self.pcr.get("full_prob", 0.0))
+        if full < 1 or cheap < 1:
+            raise ValueError("pcr needs full_sims >= 1 and cheap_sims >= 1")
+        if cheap > full:
+            raise ValueError("pcr cheap_sims must not exceed full_sims")
+        if not 0.0 < prob <= 1.0:
+            raise ValueError("pcr full_prob must be in (0, 1]")
+        if self.sims != full:
+            raise ValueError(
+                f"pcr full_sims ({full}) must equal sims ({self.sims}): the full "
+                "search IS the configured search, and anything that reads `sims` "
+                "(the log line, the tree-reuse budget) has to agree with it"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -256,6 +290,7 @@ class TrainConfig:
                 dirichlet_alpha_scale=self.dirichlet_alpha_scale,
                 dirichlet_eps=self.dirichlet_eps,
                 chance_children=self.chance_children,
+                chance_backup=self.chance_backup,
                 tree_reuse=self.tree_reuse,
                 decisive_eps=self.decisive_eps,
                 decisive_min_visit_frac=self.decisive_min_visit_frac,
@@ -269,6 +304,9 @@ class TrainConfig:
             stall_rounds=self.stall_rounds,
             max_moves=self.max_game_moves,
             value_score_weight=self.value_score_weight,
+            pcr_full_sims=int(self.pcr.get("full_sims", 0)),
+            pcr_cheap_sims=int(self.pcr.get("cheap_sims", 0)),
+            pcr_full_prob=float(self.pcr.get("full_prob", 0.0)),
         )
 
 
@@ -513,16 +551,17 @@ class Trainer:
 
         # ---------------------------------------------------- 2. optimize
         steps = self._steps_for(added)
-        loss_p = loss_v = loss_m = 0.0
+        loss_p = loss_v = loss_m = loss_a = 0.0
         done_steps = 0
         t_train = time.monotonic()
         if len(self.buffer) >= max(cfg.min_buffer, cfg.batch_size) and steps > 0:
-            loss_p, loss_v, loss_m, done_steps = self._train(steps, prefix)
+            loss_p, loss_v, loss_m, loss_a, done_steps = self._train(steps, prefix)
         train_time = time.monotonic() - t_train
 
         moves = sum(r.moves for r in records)
         truncated = sum(1 for r in records if r.truncated)
         games_per_min = 60.0 * len(records) / play_time if play_time > 0 else 0.0
+        total_loss = loss_p + loss_v + loss_m + loss_a
         if done_steps:
             append_jsonl(
                 self.run_dir / "train.jsonl",
@@ -530,10 +569,11 @@ class Trainer:
                     "t": round(self.t, 1),
                     "games": self.games,
                     "steps": self.steps,
-                    "loss": round(loss_p + loss_v + loss_m, 4),
+                    "loss": round(total_loss, 4),
                     "loss_p": round(loss_p, 4),
                     "loss_v": round(loss_v, 4),
                     "loss_m": round(loss_m, 4),
+                    "loss_a": round(loss_a, 4),
                     "buffer": len(self.buffer),
                     "lr": self._lr_at(self.steps),
                 },
@@ -543,9 +583,10 @@ class Trainer:
             f"{moves} moves"
             + (f", {truncated} truncated" if truncated else "")
             + f") | {done_steps} steps in {train_time:.1f}s | "
-            f"loss {loss_p + loss_v + loss_m:.4f} "
+            f"loss {total_loss:.4f} "
             f"(p {loss_p:.4f} v {loss_v:.4f}"
             + (f" m {loss_m:.4f}" if self.net.has_margin else "")
+            + (f" a {loss_a:.4f}" if self.net.has_aux else "")
             + f") | buffer {len(self.buffer)} | games {self.games}"
         )
 
@@ -593,10 +634,15 @@ class Trainer:
             raise FileNotFoundError(f"pretrain buffer not found: {target}")
         self._write_status(note=f"pretrain: loading {target}", force=True)
         n = self.buffer.load(target, unblend=cfg.pretrain_unblend)
-        covered = self.buffer.stats()["margin_targets"]
+        stats = self.buffer.stats()
+        covered = []
+        if self.net.has_margin:
+            covered.append(f"{stats['margin_targets']:,} with a margin target")
+        if self.net.has_aux:
+            covered.append(f"{stats['aux_targets']:,} with final-wall targets")
         self._log(
             f"pretrain: loaded {n:,} positions from {target}"
-            + (f" ({covered:,} with a margin target)" if self.net.has_margin else "")
+            + (f" ({'; '.join(covered)})" if covered else "")
         )
         if n < cfg.batch_size:
             raise ValueError(f"pretrain buffer has only {n} positions")
@@ -609,17 +655,20 @@ class Trainer:
         for epoch in range(1, epochs + 1):
             net.train()
             order = rng.permutation(n)
-            sum_p = sum_v = sum_m = 0.0
+            sum_p = sum_v = sum_m = sum_a = 0.0
             for i in range(steps_per_epoch):
                 idx = np.sort(order[i * cfg.batch_size : (i + 1) * cfg.batch_size])
-                loss_p, loss_v, loss_m = self._losses(
+                loss_p, loss_v, loss_m, loss_a = self._losses(
                     self.buffer.states[idx],
                     self.buffer.policies[idx],
                     self.buffer.values[idx],
                     self.buffer.margins[idx],
                     self.buffer.margin_mask[idx],
+                    unpack_aux(self.buffer.aux[idx]),
+                    self.buffer.aux_mask[idx],
+                    self.buffer.policy_mask[idx],
                 )
-                loss = loss_p + cfg.value_weight * loss_v + cfg.margin_weight * loss_m
+                loss = self._total_loss(loss_p, loss_v, loss_m, loss_a)
                 for group in self.optimizer.param_groups:
                     group["lr"] = lr
                 self.optimizer.zero_grad(set_to_none=True)
@@ -630,6 +679,7 @@ class Trainer:
                 sum_p += float(loss_p.detach())
                 sum_v += float(loss_v.detach())
                 sum_m += float(loss_m.detach())
+                sum_a += float(loss_a.detach())
                 self.pretrain_steps += 1
                 if (i + 1) % max(1, cfg.chunk_steps) == 0:
                     self.heartbeat(
@@ -649,19 +699,21 @@ class Trainer:
                     "steps": self.steps,
                     "epoch": epoch,
                     "pretrain_steps": self.pretrain_steps,
-                    "loss": round((sum_p + sum_v + sum_m) / done, 4),
+                    "loss": round((sum_p + sum_v + sum_m + sum_a) / done, 4),
                     "loss_p": round(sum_p / done, 4),
                     "loss_v": round(sum_v / done, 4),
                     "loss_m": round(sum_m / done, 4),
+                    "loss_a": round(sum_a / done, 4),
                     "buffer": len(self.buffer),
                     "lr": lr,
                 },
             )
             self._log(
                 f"pretrain epoch {epoch}/{epochs}: "
-                f"loss {(sum_p + sum_v + sum_m) / done:.4f} "
+                f"loss {(sum_p + sum_v + sum_m + sum_a) / done:.4f} "
                 f"(p {sum_p / done:.4f} v {sum_v / done:.4f}"
                 + (f" m {sum_m / done:.4f}" if net.has_margin else "")
+                + (f" a {sum_a / done:.4f}" if net.has_aux else "")
                 + f") in {time.monotonic() - t_start:.0f}s"
             )
             if self._stop:
@@ -712,47 +764,95 @@ class Trainer:
         values: np.ndarray,
         margins: np.ndarray,
         mask: np.ndarray,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """``(policy CE, value MSE, margin MSE)`` for one minibatch.
+        aux: np.ndarray | None = None,
+        aux_mask: np.ndarray | None = None,
+        policy_mask: np.ndarray | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """``(policy CE, value MSE, margin MSE, aux BCE)`` for one minibatch.
 
-        The margin term is a **masked** mean: positions inherited from a pre-run4
-        replay buffer have no margin target, so they contribute nothing to it
-        instead of pulling the head towards a fabricated zero. With no margin
-        head, or no masked-in position in the batch, it is exactly 0 and carries
-        no gradient.
+        Three of the four are **masked** means, and they are masked for the same
+        reason: a position may legitimately not carry that target.
+
+        * the margin, since run4: positions inherited from a pre-run4 replay
+          buffer have none, so they contribute nothing instead of pulling the head
+          towards a fabricated zero;
+        * the aux heads, since run6: same story for a pre-run6 buffer, which is
+          exactly what pretraining run6 on run5's data is;
+        * the **policy**, since run6: a position searched cheaply under
+          playout-cap randomization has a zeroed policy row. A zero row already
+          contributes no gradient (the CE is a dot product with it), but it would
+          still divide the batch mean, so the loss — and with it the effective
+          learning rate on the policy head — would shrink with the cheap fraction.
+          Dividing by the number of *real* targets keeps the policy gradient the
+          same size it would be in a run without cheap searches.
+
+        With no head, or no masked-in position in the batch, a term is exactly 0
+        and carries no gradient.
         """
         device = self.device
         x = torch.from_numpy(states).to(device, non_blocking=True)
         target_p = torch.from_numpy(policies).to(device, non_blocking=True)
         target_v = torch.from_numpy(values).to(device, non_blocking=True)
-        logits, value, margin = self.net.forward_heads(x)
+        logits, value, margin, aux_logits = self.net.forward_aux(x)
         logp = torch.log_softmax(logits, dim=-1)
-        loss_p = -(target_p * logp).sum(dim=1).mean()
+        per_row_p = -(target_p * logp).sum(dim=1)
+        if policy_mask is None:
+            loss_p = per_row_p.mean()
+        else:
+            p_w = torch.from_numpy(policy_mask).to(device, non_blocking=True)
+            loss_p = (per_row_p * p_w).sum() / p_w.sum().clamp(min=1.0)
         loss_v = torch.nn.functional.mse_loss(value, target_v)
-        if margin is None:
-            return loss_p, loss_v, torch.zeros((), device=device)
-        target_m = torch.from_numpy(margins).to(device, non_blocking=True)
-        weights = torch.from_numpy(mask).to(device, non_blocking=True)
-        total = weights.sum()
-        loss_m = ((margin - target_m).square() * weights).sum() / total.clamp(min=1.0)
-        return loss_p, loss_v, loss_m
+        zero = torch.zeros((), device=device)
+        loss_m = zero
+        if margin is not None:
+            target_m = torch.from_numpy(margins).to(device, non_blocking=True)
+            weights = torch.from_numpy(mask).to(device, non_blocking=True)
+            loss_m = (
+                (margin - target_m).square() * weights
+            ).sum() / weights.sum().clamp(min=1.0)
+        loss_a = zero
+        if aux_logits is not None and aux is not None:
+            target_a = torch.from_numpy(aux).to(device, non_blocking=True)
+            a_w = torch.from_numpy(
+                np.ones(len(aux), dtype=np.float32) if aux_mask is None else aux_mask
+            ).to(device, non_blocking=True)
+            # BCE per output, averaged over the 30 questions, masked over rows.
+            per_row_a = torch.nn.functional.binary_cross_entropy_with_logits(
+                aux_logits, target_a, reduction="none"
+            ).mean(dim=1)
+            loss_a = (per_row_a * a_w).sum() / a_w.sum().clamp(min=1.0)
+        return loss_p, loss_v, loss_m, loss_a
 
-    def _train(self, steps: int, prefix: str) -> tuple[float, float, float, int]:
+    def _total_loss(
+        self,
+        loss_p: torch.Tensor,
+        loss_v: torch.Tensor,
+        loss_m: torch.Tensor,
+        loss_a: torch.Tensor,
+    ) -> torch.Tensor:
+        """The one weighted sum both the self-play loop and pretraining minimise."""
+        cfg = self.config
+        return (
+            loss_p
+            + cfg.value_weight * loss_v
+            + cfg.margin_weight * loss_m
+            + cfg.aux_weight * loss_a
+        )
+
+    def _train(self, steps: int, prefix: str) -> tuple[float, float, float, float, int]:
         cfg = self.config
         device = self.device
         net = self.net
         net.train()
-        sum_p = torch.zeros((), device=device)
-        sum_v = torch.zeros((), device=device)
-        sum_m = torch.zeros((), device=device)
+        sums = [torch.zeros((), device=device) for _ in range(4)]
         done = 0
         chunk = max(1, cfg.chunk_steps)
         while done < steps:
             todo = min(chunk, steps - done)
             for _ in range(todo):
                 batch = self.buffer.sample(cfg.batch_size)
-                loss_p, loss_v, loss_m = self._losses(*batch)
-                loss = loss_p + cfg.value_weight * loss_v + cfg.margin_weight * loss_m
+                losses = self._losses(*batch)
+                loss = self._total_loss(*losses)
                 lr = self._lr_at(self.steps)
                 for group in self.optimizer.param_groups:
                     group["lr"] = lr
@@ -761,9 +861,8 @@ class Trainer:
                 if cfg.grad_clip > 0:
                     torch.nn.utils.clip_grad_norm_(net.parameters(), cfg.grad_clip)
                 self.optimizer.step()
-                sum_p += loss_p.detach()
-                sum_v += loss_v.detach()
-                sum_m += loss_m.detach()
+                for i, term in enumerate(losses):
+                    sums[i] += term.detach()
                 self.steps += 1
             done += todo
             self.heartbeat(f"{prefix}: training {done}/{steps} steps")
@@ -771,8 +870,8 @@ class Trainer:
                 break
         net.eval()
         if done == 0:  # pragma: no cover - defensive
-            return 0.0, 0.0, 0.0, 0
-        return float(sum_p) / done, float(sum_v) / done, float(sum_m) / done, done
+            return 0.0, 0.0, 0.0, 0.0, 0
+        return (*(float(total) / done for total in sums), done)
 
     # ------------------------------------------------------------- checkpoints
     def _save_state(self, final: bool = False) -> Path:
@@ -851,6 +950,7 @@ class Trainer:
         results: list[PairResult] = []
         versus: dict[str, float] = {}
         total_games = 0
+        stalled = 0  # eval games that hit the arena backstop (see eval/arena.py)
         base_seed = cfg.seed * 7_919 + self.games
         for i, (opp_name, spec) in enumerate(opponents):
             self.heartbeat(f"eval {name}: vs {opp_name} ({i + 1}/{len(opponents)})")
@@ -866,6 +966,7 @@ class Trainer:
             )
             versus[opp_name] = round(match.win_rate, 3)
             total_games += match.n_games
+            stalled += match.truncated
 
         # Random stays pinned at 0 and previously published checkpoints keep their
         # rating, so every point of the curve lives on the same scale.
@@ -888,6 +989,10 @@ class Trainer:
             "n_games": total_games,
             "pool": pool,
         }
+        if stalled:
+            # Never expected (a real game is ~54 moves): worth seeing in the log
+            # rather than quietly absorbed into the draw column.
+            record["truncated"] = stalled
         append_jsonl(self.run_dir / "elo.jsonl", record)
         self.rated.append(
             {
@@ -902,6 +1007,7 @@ class Trainer:
         self._log(
             f"eval {name}: elo {elo:+.1f} +/- {elo_err:.1f} over {total_games} games "
             f"in {time.monotonic() - t_start:.0f}s | "
+            + (f"{stalled} TRUNCATED | " if stalled else "")
             + " ".join(f"{k} {v:.2f}" for k, v in versus.items())
         )
         self._write_status(note=f"rated {name}: {elo:+.0f} Elo", force=True)

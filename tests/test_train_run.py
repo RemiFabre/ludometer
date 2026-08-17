@@ -41,6 +41,7 @@ TRAIN_KEYS = {
     "loss_p",
     "loss_v",
     "loss_m",  # run4's margin head; 0.0 for a net without one
+    "loss_a",  # run6's final-wall heads; 0.0 for a net without them
     "buffer",
     "lr",
 }
@@ -101,9 +102,10 @@ def check_train_lines(lines: list[dict]) -> None:
     for row in lines:
         assert set(row) == TRAIN_KEYS
         assert row["loss"] == pytest.approx(
-            row["loss_p"] + row["loss_v"] + row["loss_m"], abs=1e-3
+            row["loss_p"] + row["loss_v"] + row["loss_m"] + row["loss_a"], abs=1e-3
         )
         assert row["loss_m"] == 0.0, "no margin head in this config"
+        assert row["loss_a"] == 0.0, "no aux heads in this config"
         assert row["buffer"] > 0
         assert 0.0 < row["lr"] <= 1.0
         assert row["t"] >= 0.0

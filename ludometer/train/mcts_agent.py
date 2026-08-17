@@ -146,18 +146,18 @@ class MCTSAgent(Agent):
         if result.has_margin:
             # what the GUI's table talk can say about how big the win looks
             self.last_search["margin"] = float(result.margin)
-        temperature = self.temperature
-        if state.round_index >= self.stall_rounds:
-            # Two arg-max players can loop forever (see mcts.STALL_ROUNDS):
-            # a pathologically long game gets randomised so that it terminates.
-            temperature = max(temperature, 1.0)
         cfg = self.mcts.config
         return select_play_action(
             result,
-            temperature,
+            self.temperature,
             self.mcts.rng,
             eps=cfg.decisive_eps,
             min_visit_frac=cfg.decisive_min_visit_frac,
+            # Two deterministic players can loop forever (see mcts.STALL_ROUNDS):
+            # past `stall_rounds` the pick is randomised so the game terminates.
+            # `select_play_action` owns what that means, including for a
+            # margin-head net whose tie-break would otherwise ignore it.
+            stalling=state.round_index >= self.stall_rounds,
         )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

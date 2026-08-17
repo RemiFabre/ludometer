@@ -104,6 +104,8 @@ class BaseNet(nn.Module):
 
     #: does this net have the run4 margin head? (see net2.StructuredNet)
     has_margin: bool = False
+    #: does this net have run6's auxiliary final-wall heads? (same module)
+    has_aux: bool = False
 
     @property
     def num_params(self) -> int:
@@ -119,6 +121,18 @@ class BaseNet(nn.Module):
         """
         logits, value = self(x)
         return logits, value, None
+
+    def forward_aux(
+        self, x: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        """``(logits, value, margin, aux)`` — the last two are ``None`` here.
+
+        run6's auxiliary heads (:class:`~ludometer.train.net2.StructuredNet`)
+        predict the final walls; every other architecture answers ``None`` so the
+        trainer can call one method whatever it is training.
+        """
+        logits, value, margin = self.forward_heads(x)
+        return logits, value, margin, None
 
     @torch.inference_mode()
     def evaluate_batch(self, states: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

@@ -39,7 +39,7 @@ def test_add_and_sample() -> None:
     buf.add(*make_block(30))
     assert len(buf) == 30
     assert buf.total_added == 30
-    states, policies, values, margins, mask = buf.sample(16)
+    states, policies, values, margins, mask = buf.sample(16)[:5]
     assert states.shape == (16, ENCODED_SIZE)
     assert policies.shape == (16, ACTION_SPACE)
     assert values.shape == (16,)

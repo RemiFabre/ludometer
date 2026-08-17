@@ -142,6 +142,101 @@ def test_round_boundary_edges_are_resampled_and_capped() -> None:
     assert len({mcts._chance_key(child.state) for child in children}) > 1
 
 
+def test_a_chance_edge_q_is_the_visit_weighted_mean_of_its_determinizations() -> None:
+    """``chance_backup = "mean"`` is a *description of existing behaviour*.
+
+    There is no chance-node object and no averaging step anywhere in the search:
+    the edge counters ``(N, W)`` live in the parent, and every simulation through
+    a stochastic edge — whichever determinization it happens to land in — adds to
+    that same pair. The claim run6 writes into its config is that this makes
+
+        Q(edge) = sum_d N_d * Q_d / sum_d N_d
+
+    over the sampled determinizations ``d``. So rather than change any code, watch
+    the partition happen: run the simulations one at a time, record which
+    determinization each one went through and how much it moved the edge, and
+    check that the per-determinization pieces (a) account for *every* visit and
+    *all* of the value the edge holds, and (b) recombine into the edge's Q as
+    that weighted mean.
+    """
+    from collections import defaultdict
+
+    state = near_round_end_state()
+    mcts = MCTS(
+        RolloutEvaluator(seed=5), MCTSConfig(sims=200, chance_children=4), seed=7
+    )
+    root = mcts._new_node(state.clone())
+    mcts._expand(root)
+    index = root.legal.index(encode_action(0, 0, 0))
+    assert mcts._is_stochastic(root.state, root.legal[index])
+
+    took: list = []
+    plain_child = mcts._child
+
+    def spy(node, i):  # which determinization did this simulation take?
+        child = plain_child(node, i)
+        if node is root and i == index:
+            took.append(child)
+        return child
+
+    mcts._child = spy  # type: ignore[method-assign]
+    per: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0])  # [visits, value]
+    for _ in range(200):
+        before_n, before_w = root.visits[index], root.wins[index]
+        took.clear()
+        mcts._simulate(root)
+        if root.visits[index] == before_n:
+            continue  # this simulation went down a different root edge
+        entry = per[id(took[0])]
+        entry[0] += 1
+        entry[1] += root.wins[index] - before_w
+
+    assert len(per) > 1, "the edge only ever sampled one refill"
+    # (a) the pieces account for the whole edge — this is the real assertion,
+    # because it is what "the edge is the sum of its determinizations" means.
+    assert sum(n for n, _ in per.values()) == root.visits[index]
+    assert sum(w for _, w in per.values()) == pytest.approx(root.wins[index], abs=1e-9)
+    # (b) ... and therefore Q is their visit-weighted mean, spelled out.
+    q_per_determinization = {d: w / n for d, (n, w) in per.items()}
+    total_n = sum(n for n, _ in per.values())
+    weighted_mean = (
+        sum(per[d][0] * q for d, q in q_per_determinization.items()) / total_n
+    )
+    assert root.wins[index] / root.visits[index] == pytest.approx(
+        weighted_mean, abs=1e-9
+    )
+
+
+def test_chance_backup_only_understands_the_mean() -> None:
+    """A config asking for a rule that does not exist must say so, not be ignored."""
+    assert MCTSConfig.from_dict({"chance_backup": "mean"}).chance_backup == "mean"
+    with pytest.raises(ValueError, match="unknown chance_backup"):
+        MCTSConfig.from_dict({"chance_backup": "max"})
+
+
+@pytest.mark.parametrize("children", [4, 8])
+def test_more_determinizations_widen_the_sample_without_changing_the_rule(
+    children: int,
+) -> None:
+    """run6 raises ``chance_children`` to 8; nothing else about the edge moves."""
+    state = near_round_end_state()
+    mcts = MCTS(
+        UniformEvaluator(), MCTSConfig(sims=4, chance_children=children), seed=1
+    )
+    root = mcts._new_node(state.clone())
+    mcts._expand(root)
+    index = root.legal.index(encode_action(0, 0, 0))
+    for _ in range(60):
+        mcts._child(root, index)
+    table = root.children[index]
+    assert isinstance(table, dict)
+    assert 1 < len(table) <= children
+    # 8 really does sample more refills than 4 (the deal has far more outcomes)
+    if children == 8:
+        assert len(table) > 4
+    assert {child.state.tiles_left for child in table.values()} == {20}
+
+
 def test_within_round_edges_are_deterministic_and_shared() -> None:
     state = AzulState.new_game(seed=2)
     mcts = MCTS(UniformEvaluator(), MCTSConfig(sims=4), seed=1)

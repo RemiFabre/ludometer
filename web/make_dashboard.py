@@ -718,19 +718,20 @@ def elo_chart(run: Run, wide=True) -> str:
 
 def loss_chart(run: Run) -> str:
     title = "Training loss"
-    subtitle = "Total, policy, value (and margin) loss over self-play games."
+    subtitle = "Total, policy, value (and margin, final-wall) loss over self-play games."
     records = [r for r in run.train if num(r, "games") is not None]
     if len(records) < 2:
         return empty_figure(title, subtitle, "Waiting for train.jsonl to fill up.")
 
     records = thin(records)
-    # "margin" only exists from run4 on; a run without it simply has no such
-    # points and the series drops out below.
+    # "margin" only exists from run4 on and "final walls" from run6 on; a run
+    # without one simply has no such points and the series drops out below.
     defs = [
         ("total", "loss", SERIES[2]),
         ("policy", "loss_p", SERIES[0]),
         ("value", "loss_v", SERIES[1]),
         ("margin", "loss_m", SERIES[3]),
+        ("final walls", "loss_a", SERIES[4]),
     ]
     present = []
     for label, key, color in defs:

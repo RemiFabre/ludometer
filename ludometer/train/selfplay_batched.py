@@ -35,19 +35,36 @@ margin head (leaf evaluations return three values, the search backs the margin u
 and :func:`~ludometer.train.mcts.select_play_action` breaks ties on it), tree
 reuse (a per-tree property; it composes with cross-game batching without either
 side knowing about the other), the temperature schedule, the stall breaker, the
-``max_moves`` backstop and chance-node determinization. A game's RNG streams are
+``max_moves`` backstop, chance-node determinization, and run6's playout-cap
+randomization (the full/cheap draw comes from a per-game RNG seeded off the game
+seed and is taken at the same point in the move loop as the sequential path, so
+the two engines schedule an identical game). A game's RNG streams are
 its own (``AzulState.new_game(seed)`` and one :class:`~ludometer.train.mcts.MCTS`
 seeded from the same number), so a game's trajectory does not depend on which
 other games happened to share its batches — only on the evaluations it gets back.
 
-The one compromise worth stating plainly: **on a GPU, "the evaluations it gets
-back" are not bit-stable across batch shapes.** Metal picks different kernels for
-different tensor sizes, so the same position evaluated in a batch of 7 and in a
-batch of 128 can differ in the last float32 digit, and two runs that schedule
-games differently can therefore diverge. Determinism is exact on CPU and exact
-per game given identical evaluations; it is *statistical* on MPS. That is the same
-trade the trainer already makes (its own optimizer steps run on MPS), and it is
-why the equivalence tests pin the evaluator to CPU.
+The one compromise worth stating plainly: **"the evaluations it gets back" are not
+bit-stable across batch shapes, and that is true on the CPU too.** A backend picks
+different kernels and different blocking for different tensor sizes, so the same
+position evaluated alone and in a batch of 128 can differ in the last float32
+digits. Measured on this Mac's CPU with a small net (``tests/
+test_selfplay_batched.py`` pins it): exactly 0 at batch 1, ~1e-8 by batch 8, ~4e-8
+by batch 40. Nothing about a *value* cares about 1e-8 — but PUCT is a *ranking*,
+so once in a long while such a difference flips which child a descent picks and
+two trajectories part company from there.
+
+So the honest statement of the guarantee, which is what the tests assert:
+
+* **exact** at ``games = 1``, where every forward pass carries one position and
+  the arithmetic is the single-position path's, bit for bit;
+* **exact per game given identical evaluations** — the search bookkeeping itself
+  introduces nothing, which is the property that actually matters and the one
+  ``test_pumped_search_is_identical_to_the_blocking_one`` pins directly;
+* **statistical** for a real ``games = 128`` run, on CPU and on MPS alike: a
+  game's trajectory can depend on how many other games happened to share its
+  batches. That is the same trade the trainer already makes (its own optimizer
+  steps run on MPS), and it costs nothing in training — every trajectory is a
+  legitimate game of the same distribution.
 
 Scaling past one process
 ------------------------
@@ -79,7 +96,10 @@ from ludometer.train.selfplay import (
     GameRecord,
     SelfPlayConfig,
     SelfPlayPool,
+    aux_targets,
     margin_targets,
+    pcr_rng,
+    pcr_sims,
     value_target,
 )
 
@@ -237,9 +257,12 @@ class _Slot:
     states: list[np.ndarray] = field(default_factory=list)
     policies: list[np.ndarray] = field(default_factory=list)
     players: list[int] = field(default_factory=list)
+    policy_mask: list[float] = field(default_factory=list)
     move: int = 0
     searching: bool = False
     pending: int = 0  # leaves handed to the current forward pass
+    full: bool = True  # is the search in flight the deep one? (see `pcr`)
+    schedule: Any = None  # per-game RNG for the playout-cap draw
 
 
 class BatchedSelfPlay:
@@ -407,6 +430,7 @@ class BatchedSelfPlay:
                 add_noise=True,
             ),
             started=time.perf_counter(),
+            schedule=pcr_rng(seed),
         )
 
     def _pump(self, slot: _Slot) -> GameRecord | None:
@@ -433,11 +457,15 @@ class BatchedSelfPlay:
                 policy = np.zeros(ACTION_SPACE, dtype=np.float32)
                 policy[legal[0]] = 1.0
                 slot.policies.append(policy)
+                slot.policy_mask.append(1.0)
                 state.apply(legal[0])
                 slot.mcts.advance(legal[0])
                 slot.move += 1
                 continue
-            slot.mcts.start_search(state)
+            # Same draw, same stream, same point in the move loop as the
+            # sequential path (ludometer.train.selfplay.play_selfplay_game).
+            sims, slot.full = pcr_sims(config, slot.schedule)
+            slot.mcts.start_search(state, add_noise=slot.full, sims=sims)
             slot.searching = True
             if slot.mcts.search_done():  # a reused root already at the budget
                 continue
@@ -447,19 +475,21 @@ class BatchedSelfPlay:
         """Close the search, record the target, play the move."""
         config = self.config
         result = slot.mcts.finish_search()
-        slot.policies.append(result.policy)
+        slot.policies.append(
+            result.policy if slot.full else np.zeros(ACTION_SPACE, dtype=np.float32)
+        )
+        slot.policy_mask.append(1.0 if slot.full else 0.0)
         # Two deterministic policies can keep a game going forever (nobody ever
         # completes a pattern line): past `stall_rounds` we sample again.
-        explore = (
-            slot.move < config.temp_moves
-            or slot.state.round_index >= config.stall_rounds
-        )
+        stalling = slot.state.round_index >= config.stall_rounds
+        explore = slot.move < config.temp_moves or stalling
         action = select_play_action(
             result,
             config.temperature if explore else 0.0,
             slot.mcts.rng,
             eps=config.mcts.decisive_eps,
             min_visit_frac=config.mcts.decisive_min_visit_frac,
+            stalling=stalling,
         )
         slot.state.apply(action)
         slot.mcts.advance(action)
@@ -479,6 +509,8 @@ class BatchedSelfPlay:
             policies=np.asarray(slot.policies, dtype=np.float32),
             values=values,
             margins=margin_targets(score_diff, slot.players),
+            aux=aux_targets(state, slot.players),
+            policy_mask=np.asarray(slot.policy_mask, dtype=np.float32),
             outcome=outcome,
             scores=(int(state.scores[0]), int(state.scores[1])),
             moves=slot.move,

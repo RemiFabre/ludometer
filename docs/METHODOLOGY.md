@@ -189,11 +189,24 @@ boundary, when the factories are refilled from the bag. MCTS handles this by
 **determinization**: an edge whose move empties the board is a *chance node*. Rather
 than one child, it holds a small table of sampled outcomes — the clone's bag is
 reshuffled with a fresh seed before the move is applied, and up to
-`chance_children = 4` distinct refills are kept and thereafter reused uniformly at
+`chance_children` distinct refills are kept and thereafter reused uniformly at
 random. This is what stops the search from cheating: without the reshuffle, a cloned
 state would contain the *exact* upcoming deal and the search would plan against
 cards it cannot see. (Bag and lid *counts* are public information and are in the
 network's input; the order is not.)
+
+The edge's value is the **visit-weighted mean over the determinizations sampled
+below it**, which is worth being precise about because it is not a rule anyone
+wrote: the `(N, W)` counters live in the parent, so every simulation through the
+edge adds to the same pair whichever refill it landed in, and `W/N` is that mean by
+construction. `chance_backup: "mean"` in a config names the behaviour; the identity
+is demonstrated numerically in `tests/test_train_mcts.py`.
+
+How wide the sample is matters for *cross-round* planning specifically. run1-run5
+used `chance_children = 4`: a plan that pays off two rounds later is averaged over
+four guesses at each of two refills, which is a lot of noise on exactly the
+comparisons a long-horizon plan needs to win. run6 doubles it to 8, at a measured
+cost of a few percent of self-play throughput and no meaningful memory.
 
 ### 4.5 Tree reuse
 
@@ -326,10 +339,11 @@ buffer decorrelates the batch and lets each position be reused a few times.
 Two terms, added:
 
 ```
-loss_p = -sum(target_policy * log_softmax(logits))   # cross-entropy on the visit distribution
+loss_p = masked_ce(logits, target_policy)            # cross-entropy on the visit distribution
 loss_v = mse(value, target_value)
-loss_m = masked_mse(margin, target_margin)           # run4 only, see below
-loss   = loss_p + value_weight * loss_v + margin_weight * loss_m
+loss_m = masked_mse(margin, target_margin)           # run4 onwards, see below
+loss_a = masked_bce(wall_logits, final_wall_bits)    # run6 onwards, see below
+loss   = loss_p + value_weight * loss_v + margin_weight * loss_m + aux_weight * loss_a
 ```
 
 The policy target is the MCTS visit distribution stored during self-play. The value
@@ -358,6 +372,39 @@ temperature 0 is chosen lexicographically: of the root children within
 `decisive_eps = 0.03` of the best win-Q (and with at least a tenth of the top
 child's visits), play the one with the largest margin-Q. Winning stays first; the
 margin only ever breaks a tie. That is the direct answer to the lazy endgame.
+
+**run6 adds a term about the far future** (`"aux_heads": true`). Look at the three
+losses above and notice what is missing: `outcome` and `margin` are both a single
+number about the *end* of the game, and the policy target is about *this* move.
+Nothing in the loss ever asks the network what shape the game will end in — which is
+exactly the complaint a strong human made about run5 ("the tactics are good, the
+long-term play is weak"). So a fourth head predicts, for both players, which wall
+rows, columns and colours their **final** wall will hold: 30 sigmoids, binary
+cross-entropy, weight `aux_weight = 0.1`.
+
+The reason to expect this to buy strategy rather than just parameters is the *time
+horizon of the label*. Whether row 3 ends up closed is settled four or five rounds
+after the position being labelled, and no amount of local tactical reading answers
+it — the trunk has to carry something like a plan to predict it at all. Auxiliary
+targets that share a trunk are a well-travelled trick for precisely this reason
+(AlphaGo's territory head, KataGo's ownership and score heads); the extra head is
+2 Linears and 0.4M of 7.4M parameters, and the weight is deliberately small because
+its job is to shape the trunk, not to compete with the policy.
+
+The targets cost nothing to produce: they are read off the finished board
+(`AzulState.wall_summary`) once per game and stored as 30 **bits** per position, 4
+bytes packed. Positions from an older buffer have no such label, so they load with
+`aux_mask = 0` and the term skips them entirely — which is what makes it possible to
+warm-start run6 from run5's 500k positions without inventing a single label.
+
+The policy term is masked too, from run6 on, for a different reason: under
+playout-cap randomization only about a quarter of self-play moves get a deep search,
+and only those record a visit distribution. The other positions are still trained on
+for value, margin and final walls — those labels come from the end of the game, not
+from the search — but their policy row is zeroed and masked out. Masking rather than
+zeroing matters: a zero row already contributes no gradient, but it would still
+divide the batch mean, so the policy loss (and the effective learning rate on that
+head) would silently shrink with the cheap fraction.
 
 Gradients are clipped to norm 1.0. Adam, weight decay 1e-4.
 
@@ -624,7 +671,8 @@ Quoted from `docs/DESIGN.md`, which is the contract:
    "error": <str|null>, "games", "steps", "note"}
 - train.jsonl — appended every logging interval:
   {"t": <sec since run start>, "games": <total self-play games>, "steps": <optimizer steps>,
-   "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "buffer": <replay size>, "lr": <lr>}
+   "loss": <total>, "loss_p": <policy>, "loss_v": <value>, "loss_m": <margin, run4+>,
+   "loss_a": <final walls, run6+>, "buffer": <replay size>, "lr": <lr>}
 - elo.jsonl — appended after each checkpoint evaluation:
   {"t": <sec>, "games": <self-play games at ckpt>, "ckpt": "<name>", "elo": <float>,
    "elo_err": <float>, "vs": {"<opponent>": <winrate 0..1>, ...}, "n_games": <eval games>,
@@ -656,15 +704,27 @@ share, over how many games, and which of them were pinned and where.
 
 ### 9.2 The replay buffer file
 
-`checkpoints/replay.npz` is an uncompressed numpy archive with four arrays, written
-oldest-position-first so the file is a chronological record:
+`checkpoints/replay.npz` is an uncompressed numpy archive, written
+oldest-position-first so the file is a chronological record. Arrays have only ever
+been **added**, never removed or reordered, so a reader that knows the first three
+keys can read any file this project has ever written:
 
-| array | shape | dtype |
-| --- | --- | --- |
-| `states` | (N, 182) | float32 |
-| `policies` | (N, 180) | float32 |
-| `values` | (N,) | float32 |
-| `meta` | (5,) | int64: capacity, size, total_added, games_added, seed |
+| array | shape | dtype | since |
+| --- | --- | --- | --- |
+| `states` | (N, 182) | float32 | run1 |
+| `policies` | (N, 180) | float32 | run1 |
+| `values` | (N,) | float32 | run1 |
+| `meta` | (5,) | int64: capacity, size, total_added, games_added, seed | run1 |
+| `margins` | (N,) | float32 — `tanh(final score diff / 20)` | run4 |
+| `margin_mask` | (N,) | float32 — 1 where `margins` is real | run4 |
+| `aux` | (N, 4) | uint8 — 30 final-wall bits, `np.packbits` | run6 |
+| `aux_mask` | (N,) | float32 — 1 where `aux` is real | run6 |
+| `policy_mask` | (N,) | float32 — 1 where `policies` is real | run6 |
+
+A missing mask means "the data is not there" for `margins` and `aux`, and "the data
+*is* there" for `policy_mask` — every position written before run6 came from a full
+search. Packing the aux bits is what keeps the addition invisible: 4 bytes a
+position instead of 120, i.e. 2 MB rather than 60 MB across a full buffer.
 
 At the full 500,000 positions that is 726 MB. It is rewritten on every checkpoint
 (atomically, via a `.tmp` and a rename), which is what makes both resuming a run and
