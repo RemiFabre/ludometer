@@ -8,3 +8,4 @@ runs/*/checkpoints/
 runs/*/*.pt
 *.pt
 .DS_Store
+media/
