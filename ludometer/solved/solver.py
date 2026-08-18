@@ -54,7 +54,7 @@ CENTER_ORDER = (3, 2, 4, 1, 5, 0, 6)
 
 # entries are packed as (flag + 1) * 4 + (value + 1): two small ints, no tuple
 _TT: dict[int, int] = {}
-_TT_LIMIT = 3_000_000
+_TT_LIMIT = 8_000_000  # packed ints: ~50 bytes/entry, ~400 MB at the cap
 _nodes = 0
 
 

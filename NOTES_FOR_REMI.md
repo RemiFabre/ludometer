@@ -4,6 +4,73 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — Uno verified, Uno+ built, the calibrated pair built, and the comparison page exists
+
+Everything below happened while `runs/uno1` trained (it was untouched; engine edits only
+reach spawned eval workers, and every change on those paths is behaviour-identical or
+never-hit for the live run).
+
+**Uno verification (the double-check you asked for).** Three layers:
+
+1. All 22 uno tests pass, 446 tests total across the repo.
+2. The §1 value-boundary diagnostic on the live checkpoint (52k games): value one card
+   from going out **+0.979** (p10 +0.959), fresh hand **+0.094**, mid-hand +0.086. The
+   value function is healthy — compare the buggy attempts' +0.75.
+3. A high-effort multi-agent code review of `ludometer/uno`. Three findings confirmed by
+   execution and fixed: `apply()` accepted illegal actions where AzulState raises (a
+   mismatched colored card silently rewrote `current_color`); a match truncated at the
+   MAX_HANDS backstop went to the winner of the *last hand* instead of the score leader
+   (fixed with an explicit `_horizon` flag so search horizons keep being decided by the
+   current hand — the §1 trap is now pinned by a test); and `hand_index` counted hands
+   differently on the two terminal paths. Guards added: `tree_reuse` and `margin_head`
+   are rejected for Uno configs with an explanation (silent no-op / saturated scale).
+   `configs/uno_smoke.json` shipped a stale key and could not load — every config in
+   `configs/` is now load-tested. Backlog (real but deferred): the discard list is
+   redundant state copied on every clone; `_has_playable` duplicates the playability
+   predicate.
+
+**Elo records now carry the cross-game x-axis.** Both self-play engines count
+*decisions* (moves with >1 legal action) per game; the trainer accumulates and writes
+`positions` and `decisions` into every elo.jsonl record. Measured constants for the runs
+that predate the field: Azul 52.98 decisions/game, uno1 43.9 moves/hand x 0.428 searched
+(with the trained net) = 18.8 decisions/hand.
+
+**Uno+ is implemented** (`ludometer/uno/plus.py`, `configs/unoplus1.json`): draw always
+legal and atomic (cap 15), +2/+4 like-on-like stacking with the victim choosing, the
+7-swap with per-observer `known[]` counts that `search_root` deals to the opponent before
+determinizing the rest (the §2 trap), 9-card deal. Acceptance, measured over 300 random
+games as §2 asks: **forced turns 63.9% → 18.6%** (27.1% under greedy) — the target was
+<35%; mean legal actions per decision turn 3.2 → 3.8 (4.3 under greedy) — **the >5.0
+target is missed** and recorded as such (you said "significantly different is enough";
+the forced-turn collapse is the effect that matters). One surprise worth knowing:
+*random* players bank cards under draw-always-legal — a random Uno+ hand averages
+~1,700 moves (p90 4,400) where greedy plays out in 41. Truncation backstops are sized
+for the early near-random net (max_game_moves 2500); an MCTS player at uniform priors
+already ends hands in ~84 moves with zero truncations. Budget: 50,000 hands ≈ uno1's
+~2.0M decisions.
+
+**Tic-tac-toe + Connect Four are implemented** with the solver harness of §3: bitboard
+engines, shared two-ply greedy/heuristic baselines, a memoised TTT solver, a WDL
+alpha-beta C4 solver (shared TT, mirror normalisation, forced-block/double-threat
+prunings), stratified solved suites in `data/solved/`, and `ludometer.eval.optimal`
+which walks a run's checkpoints into `optimal.jsonl`. One deviation: **the C4 suite
+samples from ply ≥ 12, not §3's ply ≥ 8** — the pure-Python solver is the constraint
+(ply 8 was hours; deepest-first solving with a warm TT makes ply 12 minutes). Baseline
+sanity on the TTT suite: random 60.6% optimal, greedy 90.5%, heuristic 96.0% — the
+ladder orders correctly. Configs: `ttt1.json` (4,096 games, expect a flatline at ~100%),
+`c4_1.json` (30,000 games ≈ 0.9M decisions, expect it short of 100%).
+
+**The comparison page exists**: `web/make_compare.py` → `web/compare.html`, built to
+§4's rules (normalised shape headline with slope-half markers, Elo as one-scale-per-game
+small multiples, decisions on the x axis with games in every hover, the truncation-R²
+table). New runs appear automatically; the %-optimal panel appears once a solved run has
+an `optimal.jsonl`.
+
+Queue from here: uno1 finishes → journal + final charts → ttt1 (minutes) → unoplus1
+(~3 h) → c4_1 (overnight), each added to the page as it lands.
+
+---
+
 ## 2026-08-18 — Faïence lives on Hugging Face now, and every shared game becomes data
 
 The docs/HUGGINGFACE.md plan is implemented and live (§8 there has the full report).

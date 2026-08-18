@@ -119,6 +119,9 @@ def build_suite(
         for ply in sorted(buckets):
             if buckets[ply] and len(picked) < n_positions:
                 picked.append(buckets[ply].pop(0))
+    # Solve deepest-first: deep positions are cheap and their sub-results fill
+    # the shared transposition table before the expensive shallow solves need it.
+    picked.sort(key=lambda s: -s.ply)
     entries = []
     for i, state in enumerate(picked):
         values = {str(a): _mover_value_after(state, a) for a in state.legal_actions()}
@@ -132,7 +135,7 @@ def build_suite(
                 "optimal": sorted(int(a) for a, v in values.items() if v == best),
             }
         )
-        if log and (i + 1) % 100 == 0:
+        if log and (i + 1) % 25 == 0:
             log(f"solved {i + 1}/{len(picked)} ({time.monotonic() - t0:.0f}s)")
     return {
         "game": game,
