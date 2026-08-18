@@ -230,10 +230,68 @@ are worth resolving first rather than discovering later.
    serving `.wasm` with the right MIME type? The player runs its search in a
    worker and is fussy about both.
 
-## 8. Where things are
+## 8. What was actually built (2026-08-18, the implementing agent)
+
+Shipped, live, and tested end to end. The decisions, where they differ from or
+settle the sections above:
+
+- **The layout.** Three repos on the Hub, exactly the shape §3 proposed:
+  - the game: [Space RemiFabre/faience](https://huggingface.co/spaces/RemiFabre/faience),
+    static SDK, canonical play URL **https://remifabre-faience.static.hf.space/**;
+  - the ingest: [Space RemiFabre/faience-ingest](https://huggingface.co/spaces/RemiFabre/faience-ingest)
+    (https://remifabre-faience-ingest.hf.space), Docker, Node, no dependencies,
+    source in `web/ingest/`, deployed by `scripts/deploy_ingest.sh`;
+  - the data: [dataset RemiFabre/faience-games](https://huggingface.co/datasets/RemiFabre/faience-games),
+    public (D3), CC0, JSONL shards under `games/YYYY-MM-DD/`, one file per
+    ingest batch, nothing ever rewritten. Card source: `web/ingest/DATASET.md`.
+- **D1 went static, without the threads.** Rémi wants the page to stay a plain
+  static site people could even download and run, so no Docker, no COOP/COEP
+  experiment, `numThreads` stays 1. The prize §D1 described is still on the
+  table for later; nothing shipped forecloses it.
+- **D2: a visible moved-notice, not an instant redirect** (Rémi's call), from
+  `web/pages/index.html`: same Open Graph tags as ever (the circulating cards
+  keep unfurling), one button to the new address, a line pointing at
+  **classic/**, where the previous build keeps playing as a fallback, and one
+  `/moved` tally event so the old link's remaining traffic is readable on the
+  GoatCounter dashboard.
+- **D4: the switch is in Settings** ("Share played games", On by default),
+  honoured by `web/player/js/upload.js` on every path a record can leave the
+  page. D5: abandoned games go too, flagged `finished: false`, sent by
+  `sendBeacon` on `pagehide` and when a live game is dealt over; failed sends
+  wait in localStorage and retry on the next visit (at most 8 queued). A page
+  load pings the collector's `/health`, so a sleeping Space is warm long
+  before the first game could finish.
+- **D6 as recommended:** the collector never reads, logs or stores IPs or user
+  agents; `GET /stats` says so and shows the live counters.
+- **D7: the format stays `faience-game/1`, unflattened.** The harvest and
+  training side is being built against it by another agent right now, it is
+  ~400 bytes gzipped, and changing the wire format mid-flight was the one
+  collision Rémi warned about. Flatten later, in a `/2`, if it ever matters.
+- **The §5 replay defence is the whole gate:** `web/ingest/verify.js` replays
+  every submission in a byte-for-byte copy of the page's engine (the deploy
+  script stamps `web/player/js/engine.js` into the Space), demands the
+  recorded deals, scores and round count reproduce exactly, then stores a
+  canonical rebuild (bounded strings, known fields only), deduplicated by
+  content. Tested by `web/ingest/test/ingest.test.mjs` (28 checks) and live:
+  a real game was accepted and committed, a tampered score bounced.
+- **The tests:** `gui.test.mjs --only player` passes with the new copy and
+  switch; `browser.test.mjs --live` now targets the Space and switches
+  sharing OFF before loading, so harness games can never enter the dataset
+  (the localhost guard covers every local run, same as the tally).
+
+Ops notes: the ingest Space carries Rémi's `HF_TOKEN` as a secret for the
+dataset commits; batches flush at 25 games, every 5 minutes, on SIGTERM, and
+on `POST /flush` (Bearer HF_TOKEN). Free CPU Spaces sleep after ~48 h idle;
+the health-ping plus the retry queue turn that from lost data into delayed
+data, so nothing is pinned.
+
+## 9. Where things are
 
 - The game: `web/player/`, deployed by `scripts/deploy_player.sh` (reads the
-  working tree, pushes `gh-pages`, waits for the live URL).
+  working tree, pushes the Space and `gh-pages`, waits for both live URLs).
+- The collector: `web/ingest/`, deployed by `scripts/deploy_ingest.sh`; the
+  moved-notice stub: `web/pages/index.html`; the sharing client:
+  `web/player/js/upload.js`.
 - The record: `web/player/js/record.js`, plus deal capture in
   `web/player/js/game.js` and the row in `index.html` / `css/style.css`.
 - The tally: `web/player/js/analytics.js`, GoatCounter, dashboard public.

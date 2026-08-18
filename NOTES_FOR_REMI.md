@@ -4,6 +4,33 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-18 — Faïence lives on Hugging Face now, and every shared game becomes data
+
+The docs/HUGGINGFACE.md plan is implemented and live (§8 there has the full report).
+What you need for editing your posts:
+
+- **The play link is https://remifabre-faience.static.hf.space/** — that is the one to
+  put everywhere. The old remifabre.github.io/ludometer/ address now shows a small
+  "the game has moved" page with a button (same social card as before, so old links
+  still unfurl), and keeps the previous build playable at `classic/` as a fallback.
+- **Every finished or abandoned game is shared by default**, with a visible
+  "Share played games" switch in the game's Settings and honest text in the About
+  panel. Records go to the ingest Space (https://remifabre-faience-ingest.hf.space,
+  a separate Space, not openwarlock-signal: no cost to keep them apart, and a
+  redeploy of one can never take down the other), which **replays each game in the
+  real engine** and rejects anything that does not reproduce its own deals and score.
+  Verified games land in the public dataset
+  https://huggingface.co/datasets/RemiFabre/faience-games (CC0, JSONL, format
+  unchanged: `faience-game/1`).
+- The ingest carries your HF_TOKEN as a Space secret. `GET /stats` on it shows live
+  counters; no IPs or user agents are ever logged.
+- Deploys: `scripts/deploy_player.sh` now pushes the Space and the gh-pages stub in
+  one go; `scripts/deploy_ingest.sh` does the collector. The live browser test
+  (`browser.test.mjs --live`) targets the Space and switches sharing off so test
+  games never pollute the dataset.
+
+---
+
 ## 2026-08-18 — What we build next is written down: `docs/NEXT_GAMES.md`
 
 Agreed after the Uno run got going. The brief is written for an implementer with no

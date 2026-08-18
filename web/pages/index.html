@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faïence has moved</title>
+<!-- This stub is what the old GitHub Pages URL serves now that the game lives
+     on Hugging Face. It stays a real page rather than an instant redirect for
+     two reasons: link unfurlers and crawlers do not reliably follow JavaScript
+     redirects and the social cards already circulating are generated from this
+     HTML, and an instant redirect on a shared link can read as a hijack to a
+     suspicious visitor. So: the same card tags as always, one sentence, one
+     button. The previous build keeps playing at classic/ as a fallback. -->
+<meta name="description" content="Faïence is a free, open-source implementation of the rules of Azul (Michael Kiesling). Play against a neural net trained by self-play. It runs entirely in your browser, no server, no install.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Faïence: a tile game against a neural net">
+<meta property="og:description" content="A free, open-source implementation of the rules of Azul. The net and its tree search run entirely in your browser: no server, no install, no account.">
+<meta property="og:url" content="https://remifabre.github.io/ludometer/">
+<meta property="og:image" content="https://remifabre.github.io/ludometer/social.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%2317509e'/%3E%3Crect x='6' y='6' width='9' height='9' rx='1.5' fill='%2331b8d1'/%3E%3Crect x='17' y='6' width='9' height='9' rx='1.5' fill='%23d99a12'/%3E%3Crect x='6' y='17' width='9' height='9' rx='1.5' fill='%23b23a26'/%3E%3Crect x='17' y='17' width='9' height='9' rx='1.5' fill='%23faf6ec'/%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    color: #2c2722;
+    font: 16px/1.55 "Avenir Next", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    background-color: #e6dbc6;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
+      radial-gradient(120% 90% at 50% 0%, #efe6d3 0%, #e6dbc6 55%, #d8c9ae 100%);
+    background-size: 7px 7px, 7px 7px, 100% 100%;
+  }
+  .card {
+    max-width: 34em; margin: 24px; padding: 28px 32px;
+    background: linear-gradient(#fdfbf5, #faf6ec);
+    border: 1px solid #e2d7bd; border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(60, 45, 20, .12);
+    text-align: center;
+  }
+  h1 {
+    margin: 0 0 4px; font-weight: 400; font-size: 30px;
+    font-family: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  }
+  p { margin: 10px 0; }
+  .quiet { color: #6a5d4e; font-size: 14px; }
+  .go {
+    display: inline-block; margin: 14px 0 4px; padding: 12px 26px;
+    background: #17509e; color: #fdfbf5; text-decoration: none;
+    font-size: 18px; border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(23, 80, 158, .35);
+  }
+  .go:hover { background: #1a5cb5; }
+  a { color: #17509e; }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Faïence</h1>
+  <p>The game has moved to Hugging Face. Same game, same rules, still free,
+  still entirely in your browser.</p>
+  <p><a class="go" href="https://remifabre-faience.static.hf.space/">Play at the new address</a></p>
+  <p class="quiet">Bookmark it to come straight here next time:<br>
+  <a href="https://remifabre-faience.static.hf.space/">remifabre-faience.static.hf.space</a></p>
+  <p class="quiet">If the new address is ever unreachable, the previous build
+  <a href="classic/">still plays here</a>.</p>
+</main>
+<script>
+  // one anonymous, cookie-free hit on the public tally, so the share of
+  // players still arriving through the old link can be read off the dashboard
+  try {
+    var h = location.hostname;
+    if (h && h !== "localhost" && h !== "127.0.0.1") {
+      new Image().src = "https://faience.goatcounter.com/count?p=" +
+        encodeURIComponent("/moved") + "&e=true&rnd=" + Date.now().toString(36);
+    }
+  } catch (err) {}
+</script>
+</body>
+</html>

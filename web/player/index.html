@@ -9,8 +9,8 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Faïence: a tile game against a neural net">
 <meta property="og:description" content="A free, open-source implementation of the rules of Azul. The net and its tree search run entirely in your browser: no server, no install, no account.">
-<meta property="og:url" content="https://remifabre.github.io/ludometer/">
-<meta property="og:image" content="https://remifabre.github.io/ludometer/social.png">
+<meta property="og:url" content="https://remifabre-faience.static.hf.space/">
+<meta property="og:image" content="https://remifabre-faience.static.hf.space/social.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
@@ -94,20 +94,22 @@
 
   <section id="scoring" hidden aria-live="polite"></section>
 
-  <!-- Appears when a game ends: the finished game as a small file the player
-       can keep or send. Nothing is uploaded from here, by design (see
-       js/record.js) - the page still sends nothing but the anonymous tally. -->
+  <!-- Appears when a game ends. With sharing on (the default, and the switch
+       is in Settings) the game was just sent to the training pile by
+       js/upload.js; app.js writes the note accordingly. The buttons offer the
+       same record as a file, for the curious and for players who share
+       nothing. -->
   <section class="panel record-bar" id="record" hidden>
-    <p class="record-note" id="record-note">Finished. If you would like to help
-    train the net, you can save this game and send it to me. It is a small text
-    file: the moves, the tiles that were dealt, and which net you played.
-    Nothing is uploaded from this page.</p>
+    <p class="record-note" id="record-note">Finished, and shared: the moves,
+    the tiles that were dealt, and which net you played are on their way to
+    the public training pile. Thank you. You can keep a copy too, or turn
+    sharing off in Settings.</p>
     <div class="record-actions">
       <button type="button" class="btn" id="record-save">Save this game</button>
       <button type="button" class="btn" id="record-copy">Copy as text</button>
-      <a class="record-link" id="record-issue"
-         href="https://github.com/RemiFabre/ludometer/issues/new?title=Game%20record&amp;body=Paste%20the%20copied%20game%20here%2C%20and%20your%20BoardGameArena%20rating%20if%20you%20have%20one."
-         target="_blank" rel="noopener">Send it as a GitHub issue</a>
+      <a class="record-link" id="record-dataset"
+         href="https://huggingface.co/datasets/RemiFabre/faience-games"
+         target="_blank" rel="noopener">See the public pile</a>
     </div>
   </section>
 
@@ -143,11 +145,20 @@
         <p>The opponent is a neural network that learned the game from scratch
         by playing against itself. Your browser downloads it once and runs it
         locally.</p>
-        <p id="tally-note">The only thing that ever leaves your browser is an
-        anonymous, cookie-free tally of visits, games dealt, and how finished
-        games went. <a href="https://faience.goatcounter.com" target="_blank"
-        rel="noopener">It is public</a>, so you can read everything it
-        records.</p>
+        <p id="share-note">This is a research project, and the games are the
+        research material: when you play, you help the net train. So when a
+        game ends (or is abandoned), the page sends an anonymous record of it
+        to be used as training data: the moves, the tiles that were dealt,
+        which net you played, and the score. No name, no account, no
+        location. This is experimental, and there is a switch in Settings if
+        you would rather not.
+        <a href="https://huggingface.co/datasets/RemiFabre/faience-games"
+        target="_blank" rel="noopener">Every record is public</a>, so you can
+        read everything we collect.</p>
+        <p id="tally-note">Beyond that, the only thing that leaves your
+        browser is an anonymous, cookie-free tally of visits, games dealt,
+        and how finished games went. <a href="https://faience.goatcounter.com"
+        target="_blank" rel="noopener">It is public too</a>.</p>
         <p class="about-meta" id="about-meta"></p>
       </section>
     </div>

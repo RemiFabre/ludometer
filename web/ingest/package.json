@@ -1,0 +1,10 @@
+{
+  "name": "faience-ingest",
+  "private": true,
+  "type": "module",
+  "description": "Receives finished Faience games, replays each one in the real engine, and commits the survivors to the public dataset RemiFabre/faience-games.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/ingest.test.mjs"
+  }
+}

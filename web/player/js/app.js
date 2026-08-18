@@ -63,6 +63,7 @@ import { renderLog } from "../ui/log.js";
 import { popScore } from "../ui/popups.js";
 import { clearScoring, renderFinalPanel, renderRoundPanel } from "../ui/scoring.js";
 import { buildRecord, copyRecord, downloadRecord } from "./record.js";
+import { setSharing, shareOnLeave, shareRecord, sharingOn, warmCollector } from "./upload.js";
 import { createSettings } from "../ui/settings.js";
 import { createStatus } from "../ui/status.js";
 import { analyticsOn, statsUrl, track } from "./analytics.js";
@@ -108,6 +109,40 @@ const status = createStatus(el("status"));
 const settings = createSettings(ui.settings, { popups: true, confirm: true, boards: true });
 // the AI's clock is a setting like any other, so it sits with the other knobs
 settings.panel.append(node("i", "settings-gap"), el("think-field"));
+
+/* Sharing games sits with the other knobs too. On by default, and the About
+ * panel says so: this is a research project, and finished (or abandoned)
+ * games are the research material. The switch is honoured by js/upload.js
+ * everywhere a record could leave the page. */
+settings.panel.append(
+  node("i", "settings-gap"),
+  node("span", "settings-label", "Share played games")
+);
+const shareGroup = node("div", "speeds");
+shareGroup.setAttribute("role", "group");
+shareGroup.setAttribute("aria-label", "Share played games");
+const shareButtons = [true, false].map((value) => {
+  const b = node("button", "flag", value ? "On" : "Off");
+  b.type = "button";
+  b.title = value
+    ? "When a game ends it is sent, anonymously, to the public training pile: " +
+      "the moves, the tiles that were dealt, which net played, and the score. Nothing else."
+    : "Nothing is sent. Games stay in this tab unless you save them yourself.";
+  b.addEventListener("click", () => {
+    setSharing(value);
+    syncShare();
+    say(value ? "sharing on: played games become training data" : "sharing off: nothing is sent");
+  });
+  shareGroup.appendChild(b);
+  return b;
+});
+settings.panel.append(shareGroup);
+function syncShare() {
+  shareButtons.forEach((b, i) => {
+    b.setAttribute("aria-pressed", String((i === 0) === sharingOn()));
+  });
+}
+syncShare();
 const middle = createMiddle(ui.middle, { onPick: pick });
 const boards = {
   human: createBoard(el("board-human"), { seat: 0, interactive: true, onPlay: route }),
@@ -513,6 +548,9 @@ function newGame(event) {
   }
   clearScoring(ui.scoring);
   hideRecord();
+  // dealing over a live game abandons it; an abandoned game is position data
+  // worth keeping too, flagged unfinished (docs/HUGGINGFACE.md D5)
+  if (session && !session.state.isTerminal) shareRecord(currentRecord());
   session = new GameSession({
     seed,
     humanPlaysFirst: ui.first.checked,
@@ -933,6 +971,9 @@ async function settle(moves, board, reports, mover, takeoff) {
   if (S.state.is_terminal && S.final) {
     renderFinalPanel(ui.scoring, S.final, sides());
     showRecord();
+    // the research bargain, honoured at the moment it matters: the finished
+    // game goes to the training pile (unless Settings says no), fire and forget
+    shareRecord(currentRecord());
     // one coarse path per net and outcome (so the dashboard can show win
     // rates per model), with the score line as the hit's detail
     const model = meta ? meta.run + "-" + meta.checkpoint : "unknown";
@@ -1335,13 +1376,19 @@ function currentRecord() {
   return buildRecord(session, { net: meta || {}, backend: backend ? backend.name : null });
 }
 
-const RECORD_INVITE =
-  "Finished. If you would like to help train the net, you can save this game " +
-  "and send it to me. It is a small text file: the moves, the tiles that were " +
-  "dealt, and which net you played. Nothing is uploaded from this page.";
+/** What the row under a finished game says depends on the sharing switch. */
+function recordInvite() {
+  return sharingOn()
+    ? "Finished, and shared: the moves, the tiles that were dealt, and which " +
+        "net you played are on their way to the public training pile. Thank " +
+        "you. You can keep a copy too, or turn sharing off in Settings."
+    : "Finished. Sharing is off, so nothing was sent. If you would like this " +
+        "game to help train the net, you can save it and send it to me, or " +
+        "turn sharing on in Settings.";
+}
 
 function showRecord() {
-  ui.recordNote.textContent = RECORD_INVITE;
+  ui.recordNote.textContent = recordInvite();
   ui.record.classList.remove("done");
   ui.record.hidden = false;
 }
@@ -1367,7 +1414,7 @@ ui.recordSave.addEventListener("click", () => {
   if (!record) return;
   recordSaid(
     downloadRecord(record)
-      ? "Saved. Thank you: send it to me and it becomes training data."
+      ? "Saved. A copy of the game is yours to keep, or to send to me if sharing is off."
       : "This browser would not save the file. Try Copy as text instead."
   );
 });
@@ -1377,10 +1424,22 @@ ui.recordCopy.addEventListener("click", async () => {
   const ok = await copyRecord(record);
   recordSaid(
     ok
-      ? "Copied. Paste it in a GitHub issue, with your BoardGameArena rating if you have one."
+      ? "Copied. Paste it anywhere; a GitHub issue on the repo still reaches me."
       : "This browser would not let the page copy. Use Save this game instead."
   );
 });
+
+/* The way out: a tab closed or navigated away mid-game still counts. The game
+ * has no outcome, so it goes flagged unfinished, by beacon (built for exactly
+ * this moment), and never blocks the navigation. A finished game was already
+ * shared when it ended, so terminal positions send nothing here. */
+window.addEventListener("pagehide", () => {
+  if (session && !session.state.isTerminal) shareOnLeave(currentRecord());
+});
+
+// wake the collector while the first game is still being dealt, and deliver
+// any game a previous visit could not (the Space may have been asleep)
+warmCollector();
 
 ui.setup.addEventListener("submit", newGame);
 ui.think.addEventListener("change", () => {

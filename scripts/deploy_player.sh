@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# Re-export the best net, re-check the player, and publish it to GitHub Pages.
+# Re-export the best net, re-check the player, and publish it everywhere it
+# lives: the Hugging Face Space (the canonical site) and GitHub Pages (a
+# "we moved" stub for every link already in the wild, plus a still-playable
+# copy at classic/ as a fallback). See docs/HUGGINGFACE.md.
 #
-#   ./scripts/deploy_player.sh              # export + test + push gh-pages
+#   ./scripts/deploy_player.sh              # export + test + push HF + gh-pages
 #   ./scripts/deploy_player.sh --no-export  # publish web/player/ as it stands
 #   ./scripts/deploy_player.sh --dry-run    # build and test, push nothing
 #
-# The site is web/player/ minus its test directory. It is published to the
-# `gh-pages` branch **through a temporary git index**, never by checking that
-# branch out: a training run is usually writing into runs/ while this runs, and
-# nothing here may disturb the main working tree.
+# The site is web/player/ minus its test and space directories. Pages is
+# published to the `gh-pages` branch **through a temporary git index**, never
+# by checking that branch out: a training run is usually writing into runs/
+# while this runs, and nothing here may disturb the main working tree. The HF
+# push needs HF_TOKEN in the environment and git-lfs installed (the model and
+# the wasm runtimes ride LFS there).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SITE_SRC="$REPO_ROOT/web/player"
 BRANCH="gh-pages"
 REMOTE="origin"
+SPACE="RemiFabre/faience"
+PLAY_URL="https://remifabre-faience.static.hf.space/"
 PAGES_URL="https://remifabre.github.io/ludometer/"
 
 DO_EXPORT=1
@@ -62,12 +69,14 @@ nice -n 15 node web/player/test/margin.test.mjs
 say "Staging the site"
 STAGE="$(mktemp -d)"
 INDEX="$STAGE.index"  # must not exist yet: git refuses to read an empty index file
-trap 'rm -rf "$STAGE" "$INDEX"' EXIT
+HF_CLONE="$STAGE.hf"
+PAGES="$STAGE.pages"
+trap 'rm -rf "$STAGE" "$INDEX" "$HF_CLONE" "$PAGES"' EXIT
 
-# everything a visitor needs, and nothing else: the fixtures and node tests are
-# development apparatus and would triple the download for no one's benefit.
-rsync -a --exclude 'test/' --exclude '.DS_Store' "$SITE_SRC/" "$STAGE/"
-touch "$STAGE/.nojekyll"  # keep Jekyll's hands off vendor/ and _-prefixed names
+# everything a visitor needs, and nothing else: the fixtures, the node tests
+# and the Space card are development apparatus and would triple the download
+# for no one's benefit.
+rsync -a --exclude 'test/' --exclude 'space/' --exclude '.DS_Store' "$SITE_SRC/" "$STAGE/"
 
 if [ ! -f "$STAGE/model/model.onnx" ]; then
   echo "no model at $STAGE/model/model.onnx — run without --no-export" >&2
@@ -91,14 +100,40 @@ if [ -f "$V/ort-wasm-simd-threaded.wasm" ]; then
   printf '\n'
 fi
 
-# 4. commit it onto gh-pages ----------------------------------------------------
-say "Building the $BRANCH commit"
+# 4. the canonical site: the Hugging Face Space ---------------------------------
+say "Building the $SPACE commit"
+: "${HF_TOKEN:?HF_TOKEN must be set (the Space push needs it)}"
 CKPT=$(python3 -c "import json,sys; m=json.load(open('$STAGE/model/model_meta.json')); print(f\"{m['run']}/{m['checkpoint']} elo {m['elo']}\")")
+MESSAGE="Deploy browser player — $CKPT"
+git clone --quiet --depth 1 "https://RemiFabre:$HF_TOKEN@huggingface.co/spaces/$SPACE" "$HF_CLONE"
+# the Space's own files (.gitattributes routes the model and wasm through LFS,
+# README.md is the card) survive the sync; everything else mirrors the stage
+rsync -a --delete --exclude '.git' --exclude '.gitattributes' --exclude 'README.md' \
+  "$STAGE/" "$HF_CLONE/"
+cp "$SITE_SRC/space/README.md" "$HF_CLONE/README.md"
+# the Hub refuses binary files outside LFS; the default .gitattributes already
+# routes *.onnx and *.wasm, but the social card is a png
+grep -q '^\*\.png ' "$HF_CLONE/.gitattributes" \
+  || echo '*.png filter=lfs diff=lfs merge=lfs -text' >> "$HF_CLONE/.gitattributes"
+git -C "$HF_CLONE" add -A
+if git -C "$HF_CLONE" diff --cached --quiet; then
+  echo "the Space is already current"
+else
+  git -C "$HF_CLONE" -c user.name="deploy_player.sh" -c user.email="remi.fabre@pollen-robotics.com" \
+    commit --quiet -m "$MESSAGE"
+fi
+
+# 5. the old address: a moved-notice stub, and the same site at classic/ ---------
+say "Building the $BRANCH commit (stub + classic/)"
+mkdir -p "$PAGES/classic"
+cp "$REPO_ROOT/web/pages/index.html" "$PAGES/index.html"
+cp "$STAGE/social.png" "$PAGES/social.png"  # the circulating cards point here
+rsync -a "$STAGE/" "$PAGES/classic/"
+touch "$PAGES/.nojekyll"  # keep Jekyll's hands off vendor/ and _-prefixed names
 export GIT_INDEX_FILE="$INDEX"
-git --git-dir="$REPO_ROOT/.git" --work-tree="$STAGE" add -A .
+git --git-dir="$REPO_ROOT/.git" --work-tree="$PAGES" add -A .
 TREE=$(git --git-dir="$REPO_ROOT/.git" write-tree)
 PARENT=$(git --git-dir="$REPO_ROOT/.git" rev-parse --verify --quiet "refs/heads/$BRANCH" || true)
-MESSAGE="Deploy browser player — $CKPT"
 if [ -n "$PARENT" ]; then
   COMMIT=$(git --git-dir="$REPO_ROOT/.git" commit-tree "$TREE" -p "$PARENT" -m "$MESSAGE")
 else
@@ -109,11 +144,17 @@ git update-ref "refs/heads/$BRANCH" "$COMMIT"
 echo "$BRANCH -> $COMMIT ($MESSAGE)"
 
 if [ "$DO_PUSH" = 0 ]; then
-  say "Dry run — not pushing. Inspect with: git show --stat $COMMIT"
+  say "Dry run — not pushing. Inspect with: git show --stat $COMMIT ; ls $HF_CLONE"
+  trap - EXIT
+  echo "stages kept for inspection: $HF_CLONE and $PAGES (rm them yourself)"
+  rm -rf "$STAGE" "$INDEX"
   exit 0
 fi
 
-# 5. push and make sure Pages is on ---------------------------------------------
+# 6. push both, and wait until they answer ---------------------------------------
+say "Pushing $SPACE"
+git -C "$HF_CLONE" push --quiet origin main
+
 say "Pushing $BRANCH"
 git push "$REMOTE" "$BRANCH"
 
@@ -130,16 +171,30 @@ else
     && echo "Pages enabled on $BRANCH /"
 fi
 
-say "Waiting for $PAGES_URL to answer"
+say "Waiting for $PLAY_URL to answer"
 for _ in $(seq 1 40); do
-  CODE=$(curl -s -o /dev/null -w '%{http_code}' "$PAGES_URL" || true)
+  # the Space 302s / to /index.html, so ask for the page itself
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' "${PLAY_URL}index.html" || true)
   if [ "$CODE" = "200" ]; then
-    echo "live: $PAGES_URL"
-    curl -s -o /dev/null -w 'model/model_meta.json -> %{http_code}\n' "${PAGES_URL}model/model_meta.json"
-    exit 0
+    echo "live: $PLAY_URL"
+    curl -s -o /dev/null -w 'model/model_meta.json -> %{http_code}\n' "${PLAY_URL}model/model_meta.json"
+    break
   fi
   printf '  %s ... waiting 15s\n' "$CODE"
   sleep 15
 done
-echo "still not 200 after ~10 minutes — check https://github.com/RemiFabre/ludometer/deployments" >&2
+[ "${CODE:-}" = "200" ] || { echo "the Space is still not 200 — check https://huggingface.co/spaces/$SPACE" >&2; exit 1; }
+
+say "Waiting for $PAGES_URL to answer with the stub"
+for _ in $(seq 1 40); do
+  BODY=$(curl -s "$PAGES_URL" || true)
+  if printf '%s' "$BODY" | grep -q "has moved"; then
+    echo "live: $PAGES_URL (stub)"
+    curl -s -o /dev/null -w 'classic/model/model_meta.json -> %{http_code}\n' "${PAGES_URL}classic/model/model_meta.json"
+    exit 0
+  fi
+  printf '  stub not up yet ... waiting 15s\n'
+  sleep 15
+done
+echo "the stub is still not live after ~10 minutes — check https://github.com/RemiFabre/ludometer/deployments" >&2
 exit 1

@@ -22,11 +22,11 @@
  *      visited per move (that last one depends on the visitor's machine, so it
  *      is not recoverable either).
  *
- * Nothing here sends anything anywhere. It builds a value, turns it into a file
- * or a line of text, and hands it to the player, who decides what to do with
- * it. That is deliberate: the About panel promises visitors that nothing but
- * the anonymous tally ever leaves their browser, and this file keeps that
- * promise true.
+ * Nothing here sends anything anywhere: this module only builds the value.
+ * Sending is js/upload.js's job, governed by the sharing switch in Settings
+ * (on by default) and described honestly in the About panel; the Save and
+ * Copy buttons hand the very same record to the player, so what is shared
+ * and what a player can read are one and the same thing.
  */
 
 export const FORMAT = "faience-game/1";

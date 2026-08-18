@@ -22,7 +22,7 @@
  * No puppeteer: CDP is a WebSocket and node has one built in.
  *
  *   node web/player/test/browser.test.mjs [--budget 5]
- *   node web/player/test/browser.test.mjs --live      # the deployed GitHub Pages site
+ *   node web/player/test/browser.test.mjs --live      # the deployed Space (canonical)
  */
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
@@ -54,7 +54,7 @@ function arg(name, fallback) {
 }
 
 const BUDGET = arg("budget", 5);
-const LIVE = process.argv.includes("--live") ? "https://remifabre.github.io/ludometer/index.html" : null;
+const LIVE = process.argv.includes("--live") ? "https://remifabre-faience.static.hf.space/index.html" : null;
 
 /* ------------------------------------------------------------- tiny http server */
 function serve(root) {
@@ -209,6 +209,12 @@ async function main() {
     await page.send("Runtime.enable");
     await page.send("Log.enable");
     await page.send("Page.enable");
+    // this harness is not a player: its games must never reach the training
+    // pile, so sharing is switched off before the page's own scripts run
+    // (js/upload.js honours the same switch the Settings panel writes)
+    await page.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: 'try { localStorage.setItem("faience.share", "off"); } catch (e) {}',
+    });
     await page.send("Page.navigate", { url });
 
     console.log(LIVE ? `testing the live site ${url}` : `serving ${ROOT} on ${url}`);

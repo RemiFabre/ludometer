@@ -22,7 +22,8 @@ games is the *shape* of the curve.
 ## ▶ Play it — and read how it works
 
 - **Play against the AI in your browser, no install:**
-  **[remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/)** (details below)
+  **[remifabre-faience.static.hf.space](https://remifabre-faience.static.hf.space/)** (details below;
+  the old GitHub Pages address now points here)
 - **How it all works**, explained for any engineer, every term defined:
   **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**
 
@@ -41,19 +42,36 @@ games is the *shape* of the curve.
 - `ludometer/eval/` — arena + Elo rating of checkpoints against a fixed anchor pool
 - `ludometer/export/` — checkpoint → ONNX, for the browser player
 - `web/` — training dashboard, a local GUI to play against the AI, and `web/player/`:
-  the whole thing (rules, search, net) reimplemented in JavaScript and published to
-  GitHub Pages
+  the whole thing (rules, search, net) reimplemented in JavaScript and published to a
+  [Hugging Face Space](https://huggingface.co/spaces/RemiFabre/faience); `web/ingest/`
+  is the small companion Space that collects shared games into the public dataset
+  [faience-games](https://huggingface.co/datasets/RemiFabre/faience-games), and the old
+  GitHub Pages address serves a moved notice plus a playable fallback at `classic/`
 
 ## Play in your browser (no install)
 
-### **→ [remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/) ←**
+### **→ [remifabre-faience.static.hf.space](https://remifabre-faience.static.hf.space/) ←**
 
 The public game is called **Faïence** — a free, open-source implementation of the rules
-of Azul, with its own code and artwork. How many people play it, and how the games go,
+of Azul, with its own code and artwork. It lives on
+[Hugging Face](https://huggingface.co/spaces/RemiFabre/faience); the original address,
+[remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/), shows a moved
+notice with a button (and keeps the previous build playable at `classic/`), so every
+link already shared keeps working. How many people play it, and how the games go,
 is counted by an anonymous, cookie-free tally that is
 **[public for anyone to read](https://faience.goatcounter.com)** — that link is also in
 the game itself, so players can see exactly what is recorded (visits, games dealt, and
 final results per net; nothing about anyone).
+
+Faïence is a research project, and the games are the research material: when a game ends
+(or is abandoned), the page sends an anonymous record — the moves, the tiles dealt, which
+net played, and the score — to a tiny collector Space (`web/ingest/`) that **replays every
+submission in the real engine** and keeps only games that reproduce their own deals and
+final score. Verified games land in the public dataset
+**[faience-games](https://huggingface.co/datasets/RemiFabre/faience-games)**, where they
+become training data. Sharing is on by default and the switch is in the game's Settings;
+the page says all of this in its About panel, in the same words. No IPs or user agents
+are logged or stored by the collector, and everything it keeps is public.
 
 The strongest trained net, playable by anyone, with **nothing running on a server**.
 Open the page and the tab downloads the exported net once (~16 MB over the wire, cached
