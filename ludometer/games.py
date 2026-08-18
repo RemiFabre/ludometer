@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ludometer.azul import engine as _azul
+from ludometer.c4 import engine as _c4
+from ludometer.ttt import engine as _ttt
 from ludometer.uno import engine as _uno
 from ludometer.uno import plus as _unoplus
 
@@ -89,6 +91,24 @@ GAMES: dict[str, GameSpec] = {
         max_moves=2500,  # early near-random nets bank cards; measured p50 ~1,059
         state_cls=_unoplus.UnoPlusState,
         options=(("hand_limit", 1),),
+    ),
+    # The calibrated pair (NEXT_GAMES.md §3): solved, perfect-information,
+    # deterministic. Headline metric is % optimal (ludometer/solved), not Elo.
+    "tictactoe": GameSpec(
+        name="tictactoe",
+        encoded_size=_ttt.ENCODED_SIZE,
+        action_space=_ttt.ACTION_SPACE,
+        baselines=("ttt:random", "ttt:greedy", "ttt:heuristic"),
+        max_moves=20,
+        state_cls=_ttt.TicTacToeState,
+    ),
+    "connect4": GameSpec(
+        name="connect4",
+        encoded_size=_c4.ENCODED_SIZE,
+        action_space=_c4.ACTION_SPACE,
+        baselines=("c4:random", "c4:greedy", "c4:heuristic"),
+        max_moves=60,
+        state_cls=_c4.Connect4State,
     ),
 }
 

@@ -66,6 +66,12 @@ def test_registry_covers_the_baselines():
         "unoplus:random",
         "unoplus:greedy",
         "unoplus:heuristic",
+        "ttt:random",
+        "ttt:greedy",
+        "ttt:heuristic",
+        "c4:random",
+        "c4:greedy",
+        "c4:heuristic",
     }
     for name, factory in AGENT_REGISTRY.items():
         agent = factory()
