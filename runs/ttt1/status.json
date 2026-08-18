@@ -1,0 +1,11 @@
+{
+  "run": "ttt1",
+  "state": "done",
+  "started": "2026-08-18T22:14:06Z",
+  "updated": "2026-08-18T22:16:10Z",
+  "ended": "2026-08-18T22:16:10Z",
+  "error": null,
+  "games": 4096,
+  "steps": 283,
+  "note": "stopped (target reached)"
+}

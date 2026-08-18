@@ -1,0 +1,17 @@
+{"ckpt": "ckpt-000000", "games": 0, "pct_optimal": 0.9395, "blunder_rate": 0.0533, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-000256", "games": 256, "pct_optimal": 0.959, "blunder_rate": 0.0543, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-000512", "games": 512, "pct_optimal": 0.9655, "blunder_rate": 0.0465, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-000768", "games": 768, "pct_optimal": 0.9745, "blunder_rate": 0.0291, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-001024", "games": 1024, "pct_optimal": 0.976, "blunder_rate": 0.0281, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-001280", "games": 1280, "pct_optimal": 0.977, "blunder_rate": 0.0242, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-001536", "games": 1536, "pct_optimal": 0.9755, "blunder_rate": 0.0291, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-001792", "games": 1792, "pct_optimal": 0.978, "blunder_rate": 0.0252, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-002048", "games": 2048, "pct_optimal": 0.98, "blunder_rate": 0.0223, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-002304", "games": 2304, "pct_optimal": 0.9745, "blunder_rate": 0.0291, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-002560", "games": 2560, "pct_optimal": 0.9785, "blunder_rate": 0.0252, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-002816", "games": 2816, "pct_optimal": 0.976, "blunder_rate": 0.0271, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-003072", "games": 3072, "pct_optimal": 0.977, "blunder_rate": 0.0262, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-003328", "games": 3328, "pct_optimal": 0.977, "blunder_rate": 0.0252, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-003584", "games": 3584, "pct_optimal": 0.9785, "blunder_rate": 0.0262, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-003840", "games": 3840, "pct_optimal": 0.9775, "blunder_rate": 0.0262, "n": 2000, "won_positions": 1032, "sims": 64}
+{"ckpt": "ckpt-004096", "games": 4096, "pct_optimal": 0.9775, "blunder_rate": 0.0242, "n": 2000, "won_positions": 1032, "sims": 64}

@@ -227,8 +227,11 @@ def combined_panel(curves: list[Curve]) -> str:
         )
         if not curve.ref.context:
             x_last, y_last = pts[-1]
+            # a run that ends in the left sliver of the axis labels rightward
+            left = (x_last - plot.xlo) < 0.2 * (plot.xhi - plot.xlo)
             plot.label(x_last, y_last, f"{curve.ref.game} {y_last:+.0f}",
-                       anchor="end", dy=-10)
+                       anchor="start" if left else "end",
+                       dx=6 if left else 0, dy=-10)
         entries.append((curve.ref.label, curve.color,
                         "dash" if curve.ref.context else "line"))
     svg = plot.svg("All games, absolute Elo, one axis")
