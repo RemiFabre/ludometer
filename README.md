@@ -9,7 +9,9 @@ game through the shape of an AI agent's learning curve.
 
 - If an agent learns **too slowly at the start**, the rules are probably hard to grasp.
 - If it learns **too fast / plateaus sharply**, the game probably lacks depth.
-- A *good* game should produce a roughly **linear Elo progression** in a learning agent.
+- A *good* game should produce a **nice Elo progression** in a learning agent.
+
+What does nice mean in this context? A line? A log?
 
 We calibrate the method on **Azul** (Michael Kiesling, Spiel des Jahres 2018) — a game
 widely considered excellent — then reuse the framework to evaluate new board game designs.
