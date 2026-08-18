@@ -62,6 +62,7 @@ import { bindHistoryKeys, createHistory } from "../ui/history.js";
 import { renderLog } from "../ui/log.js";
 import { popScore } from "../ui/popups.js";
 import { clearScoring, renderFinalPanel, renderRoundPanel } from "../ui/scoring.js";
+import { buildRecord, copyRecord, downloadRecord } from "./record.js";
 import { createSettings } from "../ui/settings.js";
 import { createStatus } from "../ui/status.js";
 import { analyticsOn, statsUrl, track } from "./analytics.js";
@@ -77,6 +78,8 @@ const ui = {
   prompt: el("prompt"), hint: el("hint"), cancel: el("cancel"), fly: el("fly"),
   scoring: el("scoring"), log: el("log"), coach: el("coach"),
   coachField: el("coach-field"), coachLegend: el("coach-legend"), counts: el("counts"),
+  record: el("record"), recordNote: el("record-note"),
+  recordSave: el("record-save"), recordCopy: el("record-copy"),
   settings: el("settings"), nav: el("nav"),
   hand: el("hand"), handTiles: el("hand-tiles"), pops: el("pops"),
   confirm: el("confirm"), confirmBar: el("confirm-bar"),
@@ -509,6 +512,7 @@ function newGame(event) {
     seed = Number(typed) >>> 0;
   }
   clearScoring(ui.scoring);
+  hideRecord();
   session = new GameSession({
     seed,
     humanPlaysFirst: ui.first.checked,
@@ -928,6 +932,7 @@ async function settle(moves, board, reports, mover, takeoff) {
   }
   if (S.state.is_terminal && S.final) {
     renderFinalPanel(ui.scoring, S.final, sides());
+    showRecord();
     // one coarse path per net and outcome (so the dashboard can show win
     // rates per model), with the score line as the hit's detail
     const model = meta ? meta.run + "-" + meta.checkpoint : "unknown";
@@ -1317,7 +1322,66 @@ function flashWall(report) {
   });
 }
 
+/* ------------------------------------------------------------- game records */
+/* A finished game is data worth keeping, so the page offers it as a file. It is
+ * offered, never sent: see js/record.js for why that distinction is load-bearing.
+ * The record is built on demand, so it always describes the position as it
+ * stands, and browsing the history does not change it (the navigator replays,
+ * it never mutates the session). */
+
+/** The current game as a record, or null before the first deal. */
+function currentRecord() {
+  if (!session) return null;
+  return buildRecord(session, { net: meta || {}, backend: backend ? backend.name : null });
+}
+
+const RECORD_INVITE =
+  "Finished. If you would like to help train the net, you can save this game " +
+  "and send it to me. It is a small text file: the moves, the tiles that were " +
+  "dealt, and which net you played. Nothing is uploaded from this page.";
+
+function showRecord() {
+  ui.recordNote.textContent = RECORD_INVITE;
+  ui.record.classList.remove("done");
+  ui.record.hidden = false;
+}
+
+function hideRecord() {
+  ui.record.hidden = true;
+  ui.record.classList.remove("done");
+}
+
+/** Say what happened, in the row itself — this page has no toasts. */
+function recordSaid(message) {
+  ui.recordNote.textContent = message;
+  ui.record.classList.add("done");
+}
+
+/* A tiny public handle. It exists so the browser tests can pull the record out
+ * of a real game and replay it, and it costs a curious player nothing to find. */
+window.faience = { record: currentRecord, log: () => (session ? session.log : []) };
+
 /* -------------------------------------------------------------------- wiring */
+ui.recordSave.addEventListener("click", () => {
+  const record = currentRecord();
+  if (!record) return;
+  recordSaid(
+    downloadRecord(record)
+      ? "Saved. Thank you: send it to me and it becomes training data."
+      : "This browser would not save the file. Try Copy as text instead."
+  );
+});
+ui.recordCopy.addEventListener("click", async () => {
+  const record = currentRecord();
+  if (!record) return;
+  const ok = await copyRecord(record);
+  recordSaid(
+    ok
+      ? "Copied. Paste it in a GitHub issue, with your BoardGameArena rating if you have one."
+      : "This browser would not let the page copy. Use Save this game instead."
+  );
+});
+
 ui.setup.addEventListener("submit", newGame);
 ui.think.addEventListener("change", () => {
   if (session) session.thinkTimeS = currentThinkTime();
