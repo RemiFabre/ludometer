@@ -211,10 +211,20 @@ async function main() {
     await page.send("Page.enable");
     // this harness is not a player: its games must never reach the training
     // pile, so sharing is switched off before the page's own scripts run
-    // (js/upload.js honours the same switch the Settings panel writes)
-    await page.send("Page.addScriptToEvaluateOnNewDocument", {
-      source: 'try { localStorage.setItem("faience.share", "off"); } catch (e) {}',
-    });
+    // (js/upload.js honours the same switch the Settings panel writes).
+    // --share-check inverts that ON PURPOSE, to prove the live pipeline end
+    // to end: the game it plays WILL land in the public dataset, so check
+    // the collector's /stats before and after, and delete the shard it
+    // produced (the operator's job, not this file's).
+    if (!process.argv.includes("--share-check")) {
+      await page.send("Page.addScriptToEvaluateOnNewDocument", {
+        source: 'try { localStorage.setItem("faience.share", "off"); } catch (e) {}',
+      });
+    } else {
+      await page.send("Page.addScriptToEvaluateOnNewDocument", {
+        source: 'try { localStorage.setItem("faience.share", "on"); } catch (e) {}',
+      });
+    }
     await page.send("Page.navigate", { url });
 
     console.log(LIVE ? `testing the live site ${url}` : `serving ${ROOT} on ${url}`);
