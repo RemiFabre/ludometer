@@ -240,6 +240,11 @@ class TrainConfig:
             raise ValueError("replay_capacity must be >= batch_size")
         if self.pretrain and self.pretrain_epochs < 1:
             raise ValueError("pretrain needs pretrain_epochs >= 1")
+        # Both game names must resolve NOW: a typo in eval_game would otherwise
+        # only surface inside an eval worker process, hours into the run.
+        get_game(self.game)
+        if self.eval_game:
+            get_game(self.eval_game)
         if self.selfplay not in ("workers", "batched"):
             raise ValueError(
                 f"unknown selfplay engine {self.selfplay!r} (workers | batched)"
@@ -348,6 +353,7 @@ class Trainer:
         self.rated: list[dict[str, Any]] = []
         self.last_eval_games = -1
         self.positions = 0
+        self.decisions = 0  # cumulative searched moves (docs/NEXT_GAMES.md §4)
         self.started = utc_now()
         self._t0 = time.monotonic()
         self._last_status = 0.0
@@ -425,6 +431,7 @@ class Trainer:
         self.iteration = int(payload.get("iteration", 0))
         self.elapsed = float(payload.get("elapsed", 0.0))
         self.positions = int(payload.get("positions", 0))
+        self.decisions = int(payload.get("decisions", 0))
         self.rated = list(payload.get("rated", []))
         self.last_eval_games = int(payload.get("last_eval_games", -1))
         self.started = str(payload.get("started", self.started))
@@ -564,6 +571,7 @@ class Trainer:
             added += self.buffer.add_game(record)
         self.games += len(records)
         self.positions += added
+        self.decisions += sum(r.decisions for r in records)
         self.heartbeat(f"{prefix}: {len(records)} games played")
 
         # ---------------------------------------------------- 2. optimize
@@ -903,6 +911,7 @@ class Trainer:
             "iteration": self.iteration,
             "elapsed": self.t,
             "positions": self.positions,
+            "decisions": self.decisions,
             "started": self.started,
             "rated": self.rated,
             "last_eval_games": self.last_eval_games,
@@ -1004,6 +1013,10 @@ class Trainer:
         record = {
             "t": round(self.t, 1),
             "games": self.games,
+            # cumulative practice in the two cross-game units (NEXT_GAMES.md §4):
+            # every position generated, and only the searched (non-forced) moves.
+            "positions": self.positions,
+            "decisions": self.decisions,
             "ckpt": name,
             "elo": round(elo, 1),
             "elo_err": round(elo_err, 1),

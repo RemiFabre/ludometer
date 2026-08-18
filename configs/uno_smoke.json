@@ -16,7 +16,6 @@
   "stall_rounds": 100,
   "max_game_moves": 2500,
   "value_score_weight": 0.0,
-  "segment_value_weight": 0.75,
   "games_per_iter": 4,
   "total_games": 8,
   "min_buffer": 64,

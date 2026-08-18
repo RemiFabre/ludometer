@@ -129,6 +129,9 @@ class GameRecord:
     moves: int
     rounds: int
     seed: int
+    #: moves with more than one legal action — the cross-game unit of practice
+    #: (docs/NEXT_GAMES.md §4). ~60% of Uno turns are forced; Azul has ~none.
+    decisions: int = 0
     evals: int = 0
     duration: float = 0.0
     truncated: bool = False  # hit max_moves without finishing (scored as a draw)
@@ -239,6 +242,7 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
     policy_mask: list[float] = []
     schedule = pcr_rng(seed)
     move = 0
+    decisions = 0
     while not state.is_terminal and move < config.max_moves:
         legal = state.legal_actions()
         states.append(state.encode())
@@ -249,6 +253,7 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
             policy_mask.append(1.0)
             action = legal[0]
         else:
+            decisions += 1
             # Playout-cap randomization: budget and root noise are drawn per move
             # and a cheap move's visit distribution is not a training target.
             sims, full = pcr_sims(config, schedule)
@@ -297,6 +302,7 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
         moves=move,
         rounds=state.round_index + 1,
         seed=int(seed),
+        decisions=decisions,
         evals=mcts.evals,
         duration=time.perf_counter() - started,
         truncated=truncated,

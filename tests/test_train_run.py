@@ -45,17 +45,30 @@ TRAIN_KEYS = {
     "buffer",
     "lr",
 }
-ELO_KEYS = {"t", "games", "ckpt", "elo", "elo_err", "vs", "n_games", "pool"}
+ELO_KEYS = {
+    "t",
+    "games",
+    "positions",  # cumulative practice, both units (docs/NEXT_GAMES.md §4)
+    "decisions",
+    "ckpt",
+    "elo",
+    "elo_err",
+    "vs",
+    "n_games",
+    "pool",
+}
 
 
 # ------------------------------------------------------------------- configs
 def test_shipped_configs_parse() -> None:
-    for name in ("smoke.json", "run1.json"):
-        cfg = TrainConfig.load(REPO / "configs" / name)
+    # Every config in the repo must load: a stale key (configs/uno_smoke.json
+    # once shipped a leftover "segment_value_weight") fails at launch time.
+    for path in sorted((REPO / "configs").glob("*.json")):
+        cfg = TrainConfig.load(path)
         cfg.validate()
         assert cfg.run
         assert cfg.sims >= 1
-        assert cfg.net_config().hidden >= 1
+        assert cfg.net_config() is not None  # arch keys validated by the net config
         assert cfg.selfplay_config().mcts.sims == cfg.sims
 
 

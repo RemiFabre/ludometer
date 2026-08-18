@@ -260,6 +260,7 @@ class _Slot:
     players: list[int] = field(default_factory=list)
     policy_mask: list[float] = field(default_factory=list)
     move: int = 0
+    decisions: int = 0  # moves with more than one legal action (searched moves)
     searching: bool = False
     pending: int = 0  # leaves handed to the current forward pass
     full: bool = True  # is the search in flight the deep one? (see `pcr`)
@@ -465,6 +466,7 @@ class BatchedSelfPlay:
                 continue
             # Same draw, same stream, same point in the move loop as the
             # sequential path (ludometer.train.selfplay.play_selfplay_game).
+            slot.decisions += 1
             sims, slot.full = pcr_sims(config, slot.schedule)
             slot.mcts.start_search(state, add_noise=slot.full, sims=sims)
             slot.searching = True
@@ -519,6 +521,7 @@ class BatchedSelfPlay:
             moves=slot.move,
             rounds=state.round_index + 1,
             seed=slot.seed,
+            decisions=slot.decisions,
             evals=slot.mcts.evals,
             duration=time.perf_counter() - slot.started,
             truncated=truncated,
