@@ -94,6 +94,23 @@
 
   <section id="scoring" hidden aria-live="polite"></section>
 
+  <!-- Appears when a game ends: the finished game as a small file the player
+       can keep or send. Nothing is uploaded from here, by design (see
+       js/record.js) - the page still sends nothing but the anonymous tally. -->
+  <section class="panel record-bar" id="record" hidden>
+    <p class="record-note" id="record-note">Finished. If you would like to help
+    train the net, you can save this game and send it to me. It is a small text
+    file: the moves, the tiles that were dealt, and which net you played.
+    Nothing is uploaded from this page.</p>
+    <div class="record-actions">
+      <button type="button" class="btn" id="record-save">Save this game</button>
+      <button type="button" class="btn" id="record-copy">Copy as text</button>
+      <a class="record-link" id="record-issue"
+         href="https://github.com/RemiFabre/ludometer/issues/new?title=Game%20record&amp;body=Paste%20the%20copied%20game%20here%2C%20and%20your%20BoardGameArena%20rating%20if%20you%20have%20one."
+         target="_blank" rel="noopener">Send it as a GitHub issue</a>
+    </div>
+  </section>
+
   <div class="below">
     <section class="panel">
       <div class="board-head">

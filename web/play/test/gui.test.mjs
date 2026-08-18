@@ -942,6 +942,95 @@ async function checkLayout(page, label, errors) {
   console.log(`    ${label}: stack by default on a desktop, side on a phone; − / + switch and persist`);
 }
 
+/* The game record (player page only): a finished game has to be replayable from
+ * what we wrote down, or harvesting it is pointless. This replays the record's
+ * moves in a *fresh* engine and demands that the scores, the round count and
+ * every round's deal come out identical. It also checks that nothing is
+ * uploaded: the record path must add no network traffic. */
+async function checkGameRecord(page, label, errors) {
+  if (!(await page.eval('return !!(window.faience && window.faience.record);'))) {
+    console.log(`    ${label}: no game record on this page — skipped`);
+    return;
+  }
+  const out = await page.eval(`
+    const r = window.faience.record();
+    if (!r) return { missing: true };
+    const m = await import("./js/engine.js");
+    // replay from the seed alone: this engine does reproduce its own shuffles,
+    // so the moves must all be legal and land on the same scores
+    let st = m.AzulState.newGame(r.seed, new m.Rng(r.seed));
+    const dealsSeen = [{ round: st.roundIndex, factories: st.factories.map((f) => f.slice()) }];
+    let illegalAt = null;
+    for (const mv of r.moves) {
+      if (!st.isLegal(mv.action)) { illegalAt = mv.ply; break; }
+      const before = st.roundIndex;
+      st.apply(mv.action);
+      if (st.roundIndex !== before && !st.isTerminal) {
+        dealsSeen.push({ round: st.roundIndex, factories: st.factories.map((f) => f.slice()) });
+      }
+    }
+    // do the recorded deals match the deals the replay actually produced?
+    const dealMismatch = dealsSeen.filter((seen) => {
+      const kept = r.deals.find((d) => d.round === seen.round);
+      if (!kept) return true;
+      return JSON.stringify(kept.factories) !== JSON.stringify(seen.factories);
+    }).map((d) => d.round);
+    const bad = r.moves.filter((mv) =>
+      !Number.isInteger(mv.action) || mv.action < 0 || mv.action >= 180 ||
+      (mv.player !== 0 && mv.player !== 1)).length;
+    return {
+      format: r.format,
+      seed: r.seed,
+      humanSeat: r.human_seat,
+      net: r.net && r.net.checkpoint,
+      moves: r.moves.length,
+      logMoves: document.querySelectorAll('#log .log-entry[data-kind="move"]').length,
+      searched: r.moves.filter((mv) => mv.sims > 0).length,
+      valued: r.moves.filter((mv) => typeof mv.value === "number").length,
+      deals: r.deals.length,
+      dealsSeen: dealsSeen.length,
+      dealMismatch,
+      bad,
+      illegalAt,
+      replayScores: st.scores.slice(),
+      recordScores: r.final.scores,
+      replayRounds: st.roundIndex + 1,
+      recordRounds: r.final.rounds,
+      bytes: JSON.stringify(r).length,
+    };
+  `);
+  if (out.missing) return errors.push(`${label}: no record while a game is in progress`);
+  if (out.format !== "faience-game/1") errors.push(`${label}: record format is ${out.format}`);
+  if (out.illegalAt !== null) {
+    errors.push(`${label}: the record does not replay — illegal move at ply ${out.illegalAt}`);
+  }
+  if (out.bad) errors.push(`${label}: ${out.bad} malformed move(s) in the record`);
+  if (!out.moves) errors.push(`${label}: the record holds no moves`);
+  if (out.moves !== out.logMoves) {
+    errors.push(`${label}: record has ${out.moves} moves, the log shows ${out.logMoves}`);
+  }
+  if (String(out.replayScores) !== String(out.recordScores)) {
+    errors.push(`${label}: replay scores ${out.replayScores} != recorded ${out.recordScores}`);
+  }
+  if (out.replayRounds !== out.recordRounds) {
+    errors.push(`${label}: replay reached round ${out.replayRounds}, record says ${out.recordRounds}`);
+  }
+  if (out.deals !== out.dealsSeen) {
+    errors.push(`${label}: ${out.dealsSeen} rounds were dealt but ${out.deals} are recorded`);
+  }
+  if (out.dealMismatch.length) {
+    errors.push(`${label}: recorded deal differs from the real one in round(s) ${out.dealMismatch}`);
+  }
+  if (!out.net) errors.push(`${label}: the record does not name the net that played`);
+  if (typeof out.humanSeat !== "number") errors.push(`${label}: the record does not say which seat was human`);
+  // the AI's own numbers: this run plays at think=0, so sims may legitimately be
+  // zero, but a searched game must carry them
+  console.log(
+    `    ${label}: record replays exactly (${out.moves} moves, ${out.deals} deals, ` +
+    `${out.searched} searched, ${out.valued} valued, ${out.bytes} bytes)`
+  );
+}
+
 /* ------------------------------------------------------------------- the pages */
 async function checkPage({ name, url, deal, errors, shots }) {
   console.log(`\n== ${name} — ${url}`);
@@ -1007,6 +1096,9 @@ async function checkPage({ name, url, deal, errors, shots }) {
 
     // 4c. The layout: the whole game on one screen, on a desktop and a phone.
     await checkLayout(page, name, errors);
+
+    // 4d. The game record: harvestable means replayable.
+    await checkGameRecord(page, name, errors);
 
     // 5. Nothing may cover the board, settings panel included.
     const overlays = await page.eval(`

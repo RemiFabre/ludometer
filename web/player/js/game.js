@@ -43,6 +43,11 @@ export class GameSession {
     this.log = [];
     this.roundReports = [];
     this.lastAiMoves = [];
+    /* Every round's deal, written down as it happens. This page shuffles with
+     * mulberry32 and Python shuffles with the Mersenne Twister, so a seed alone
+     * does not carry a game across; the deals do. See js/record.js. */
+    this.deals = [];
+    this._recordDeal();
     this._logEntry(
       "start",
       `New game: you are player ${this.humanSeat + 1}, the AI (${this.agentName}) is player ${this.aiSeat + 1}. ` +
@@ -65,6 +70,20 @@ export class GameSession {
     const elo = typeof info.elo === "number" ? `, rated ${info.elo >= 0 ? "+" : ""}${Math.round(info.elo)} on our internal ladder` : "";
     const thinking = this.thinkTimeS ? ` It thinks for ${this.thinkTimeS}s per move, in this tab.` : " It replies from the policy head, with no search.";
     return `You're facing ${info.checkpoint}${elo}.${thinking}`;
+  }
+
+  /** Snapshot the tiles this round was dealt, with the bag and lid behind it. */
+  _recordDeal() {
+    const state = this.state;
+    if (state.isTerminal) return;
+    if (this.deals.some((d) => d.round === state.roundIndex)) return;
+    this.deals.push({
+      round: state.roundIndex,
+      factories: state.factories.map((f) => f.slice()),
+      // per colour, not the shuffled tile list: a converter checks conservation
+      bag: state.bagCounts(),
+      lid: state.lid.slice(),
+    });
   }
 
   sideOf(player) {
@@ -140,6 +159,8 @@ export class GameSession {
         // it stood at any point in the game
         { round: report.round, report_n: this.roundReports.length - 1, ply: this.ply }
       );
+      // a fresh round was dealt inside `apply`; write it down before it is played
+      this._recordDeal();
       if (state.isTerminal) {
         const final = finalReport(state, this.humanSeat) || {};
         this._logEntry(
@@ -159,7 +180,14 @@ export class GameSession {
     if (search && search.sims) {
       move.search = search;
       move.search_text = `searched ${search.sims.toLocaleString()} positions in ${(search.elapsedS || 0).toFixed(1)}s`;
-      this._logEntry("think", `AI ${move.search_text}.`, { ply: move.ply });
+      // sims and the root value ride on the log entry, not just on `move`:
+      // `lastAiMoves` only holds the current batch, and the game record needs
+      // every move's numbers at the end of the game (see js/record.js)
+      this._logEntry("think", `AI ${move.search_text}.`, {
+        ply: move.ply,
+        sims: search.sims,
+        ...(Number.isFinite(search.value) ? { value: search.value } : {}),
+      });
     }
     return move;
   }

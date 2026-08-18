@@ -378,6 +378,30 @@ async function main() {
     };`);
     console.log("after the exchange:", JSON.stringify(after));
     if (after.log < 3) errors.push("the move log did not fill in");
+
+    // While the AI is still the searching one: the record has to carry what only
+    // this machine knew, the positions visited and the net's own read of them.
+    // (The full game below is replayed at think=0 for speed, so it cannot show
+    // this — hence the check belongs here.)
+    const searchedRecord = await page.eval(`
+      const r = window.faience && window.faience.record ? window.faience.record() : null;
+      if (!r) return { missing: true };
+      return {
+        searched: r.moves.filter((mv) => mv.sims > 0).length,
+        valued: r.moves.filter((mv) => typeof mv.value === "number").length,
+        thinkTime: r.think_time_s,
+      };
+    `);
+    if (searchedRecord.missing) {
+      errors.push("no record while a searched game is in progress");
+    } else {
+      if (!searchedRecord.searched) errors.push("the searched game's record carries no sims");
+      if (!searchedRecord.valued) errors.push("the searched game's record carries no value estimate");
+      if (searchedRecord.thinkTime !== BUDGET) {
+        errors.push(`the record says think_time_s=${searchedRecord.thinkTime}, expected ${BUDGET}`);
+      }
+      console.log("searched record:", JSON.stringify(searchedRecord));
+    }
     if (!after.flights) {
       errors.push("no tiles flew under prefers-reduced-motion: the flight layer stayed empty");
     }
@@ -454,6 +478,56 @@ async function main() {
     }
     if (!ending.boardStillDrawn) errors.push("the board vanished at the end of the game");
     if (ending.overlays) errors.push("an overlay appeared at the end of the game");
+
+    // The harvest: a finished game must be offered as a record, and that record
+    // must replay to the same final score in a fresh engine. This is the real
+    // acceptance test for collecting games, and unlike the local suite it runs
+    // with the AI actually searching, so it also proves the per-move search
+    // numbers survive into the record.
+    const rec = await page.eval(`
+      const row = document.getElementById("record");
+      const r = window.faience && window.faience.record ? window.faience.record() : null;
+      if (!r) return { missing: true, offered: !!(row && !row.hidden) };
+      const m = await import("./js/engine.js");
+      let st = m.AzulState.newGame(r.seed, new m.Rng(r.seed));
+      let illegalAt = null;
+      for (const mv of r.moves) {
+        if (!st.isLegal(mv.action)) { illegalAt = mv.ply; break; }
+        st.apply(mv.action);
+      }
+      return {
+        offered: !!(row && !row.hidden),
+        saveButton: !!document.getElementById("record-save"),
+        finished: r.final.finished,
+        outcome: r.final.outcome,
+        moves: r.moves.length,
+        deals: r.deals.length,
+        searched: r.moves.filter((mv) => mv.sims > 0).length,
+        valued: r.moves.filter((mv) => typeof mv.value === "number").length,
+        illegalAt,
+        replayScores: st.scores.slice(),
+        recordScores: r.final.scores,
+        replayTerminal: st.isTerminal,
+        bytes: JSON.stringify(r).length,
+        net: r.net.run + "/" + r.net.checkpoint,
+      };
+    `);
+    console.log("game record:", JSON.stringify(rec));
+    if (rec.missing) {
+      errors.push("a finished game produced no record");
+    } else {
+      if (!rec.offered) errors.push("the record row never appeared after the game ended");
+      if (!rec.saveButton) errors.push("the record row has no save button");
+      if (!rec.finished || !rec.replayTerminal) errors.push("the record does not describe a finished game");
+      if (rec.illegalAt !== null) {
+        errors.push(`the record does not replay — illegal move at ply ${rec.illegalAt}`);
+      }
+      if (String(rec.replayScores) !== String(rec.recordScores)) {
+        errors.push(`record replay scores ${rec.replayScores} != recorded ${rec.recordScores}`);
+      }
+      if (!rec.deals) errors.push("the record carries no round deals, so Python cannot replay it");
+      if (!rec.outcome) errors.push("the record does not say who won");
+    }
 
     await cleanup();
 
