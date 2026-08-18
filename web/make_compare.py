@@ -176,10 +176,75 @@ def truncation_r2(curve: Curve) -> dict[str, float | None]:
         cut = max(3, int(len(xs) * frac))
         fit = dash.linfit(xs[:cut], ys[:cut])
         out[key] = fit[2] if fit else None
+    # Elo against log(decisions): the "you learn fast early, slowly later"
+    # hypothesis, as a number beside the straight-line fit.
+    logs = [(math.log(x), y) for x, y in zip(xs, ys) if x > 0]
+    fit = dash.linfit([x for x, _ in logs], [y for _, y in logs])
+    out["r2_log"] = fit[2] if fit else None
     return out
 
 
 # ------------------------------------------------------------------- panels
+def combined_panel(curves: list[Curve]) -> str:
+    """THE chart (Rémi's call): every run's absolute Elo on one shared axis.
+
+    Each game is still anchored to its own ladder (random = 0), so the height
+    of a curve reads as *how much distinguishable skill above random the game
+    offers* — one curve sitting far below another is the reality of the depth
+    of the game, not a scoring artifact. The remaining caveat stays in the
+    subtitle: match-based rating stretches a per-hand edge, so cross-game
+    heights are indicative, not exchangeable.
+    """
+    plot = dash.Plot(width=1080, height=420)
+    xs = [p[1] for c in curves for p in c.points]
+    ys = [p[2] for c in curves for p in c.points]
+    xt, yt = plot.scale(xs, ys, x_count=8)
+    plot.frame(
+        xt,
+        yt,
+        dash.fmt_compact,
+        lambda v: f"{v:+.0f}",
+        x_title="cumulative decisions",
+        y_title="Elo above its own random baseline",
+    )
+    entries = []
+    for curve in curves:
+        pts = [(p[1], p[2]) for p in curve.points]
+        plot.line(pts, curve.color,
+                  width=2.2 if not curve.ref.context else 1.5,
+                  opacity=1.0 if not curve.ref.context else 0.7,
+                  dash="4 4" if curve.ref.context else None)
+        plot.errbars([(p[1], p[2], p[3]) for p in curve.points], curve.color)
+        plot.register(
+            curve.ref.label,
+            curve.color,
+            [
+                (p[1], p[2],
+                 f"{dash.fmt_compact(p[1])} decisions ({dash.fmt_compact(p[0])} games)",
+                 f"{p[2]:+.0f} Elo")
+                for p in curve.points
+            ],
+        )
+        if not curve.ref.context:
+            x_last, y_last = pts[-1]
+            plot.label(x_last, y_last, f"{curve.ref.game} {y_last:+.0f}",
+                       anchor="end", dy=-10)
+        entries.append((curve.ref.label, curve.color,
+                        "dash" if curve.ref.context else "line"))
+    svg = plot.svg("All games, absolute Elo, one axis")
+    return dash.figure(
+        "How much skill does each game hold?",
+        "Every run on one axis, each anchored to its own ladder (random = 0). "
+        "A curve that tops out lower offers less distinguishable skill above "
+        "random - the depth of the game, in one picture. Caveat: rating units "
+        "differ per game (Uno is rated over matches, which stretch a per-hand "
+        "edge), so read heights as indicative, shapes as exact.",
+        svg,
+        legend_html=dash.legend(entries),
+        wide=True,
+    )
+
+
 def shape_panel(curves: list[Curve]) -> str:
     plot = dash.Plot(width=1080, height=360)
     xt, yt = plot.scale([0.0, 1.0], [0.0, 1.05], x_count=10)
@@ -316,7 +381,7 @@ def optimal_panel(curves: list[Curve]) -> str:
 def stats_table(curves: list[Curve]) -> str:
     headers = [
         "run", "game", "Elo start → best", "games", "decisions",
-        "slope ½ at", "R² 25% / 50% / full",
+        "slope ½ at", "R² 25% / 50% / full", "R² log fit",
     ]
     rows = []
     for curve in curves:
@@ -335,12 +400,15 @@ def stats_table(curves: list[Curve]) -> str:
             dash.fmt_compact(curve.points[-1][1]),
             f"{half * 100:.0f}% of budget" if half is not None else "not reached",
             f"{r2f(r2['r2_25'])} / {r2f(r2['r2_50'])} / {r2f(r2['r2_full'])}",
+            r2f(r2["r2_log"]),
         ])
     note = (
         "R² of a straight-line fit over the first 25%, 50% and 100% of each run "
         "— shown three ways because a high value mostly measures truncation, "
-        "not design (every curve is straight at the start). The informative column "
-        "is where the slope dies."
+        "not design (every curve is straight at the start). The log column fits "
+        "Elo against log(decisions) - fast early, slow late; where it beats the "
+        "straight line, the curve is closer to a log than a line. The informative "
+        "column is still where the slope dies."
     )
     return (
         '<section class="panel"><h2>The numbers behind the shapes</h2>'
@@ -367,6 +435,7 @@ def build_page(now: float) -> str:
     if not curves:
         body.append('<p class="empty">No comparable runs found under runs/.</p>')
     else:
+        body.append(f'<section class="panel"><div class="grid">{combined_panel(curves)}</div></section>')
         body.append(f'<section class="panel"><div class="grid">{shape_panel(curves)}</div></section>')
         panels = [elo_panel(g, curves) for g in ("azul", "uno", "unoplus", "tictactoe", "connect4")]
         panels = [p for p in panels if p]
