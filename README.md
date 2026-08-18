@@ -15,6 +15,9 @@ What does nice mean in this context? A line? A log?
 
 We calibrate the method on **Azul** (Michael Kiesling, Spiel des Jahres 2018) — a game
 widely considered excellent — then reuse the framework to evaluate new board game designs.
+**Uno** is the first contrast case (`configs/uno1.json`). Elo is only defined against a
+game's own anchor pool, so the two are never compared as numbers: what carries across
+games is the *shape* of the curve.
 
 ## ▶ Play it — and read how it works
 
@@ -30,6 +33,9 @@ widely considered excellent — then reuse the framework to evaluate new board g
 ## Components
 
 - `ludometer/azul/` — full 2-player Azul rules engine (fast, deterministic, fully tested)
+- `ludometer/uno/` — 2-player Uno (match to 500), the second game on the same rig; hidden
+  hands are handled by determinizing at the search root. `ludometer/games.py` is the
+  registry a config picks from with `"game": "azul" | "uno"`
 - `ludometer/agents/` — baseline agents (random, greedy, heuristic) and the neural agent
 - `ludometer/train/` — AlphaZero-style self-play training (PyTorch, Apple MPS)
 - `ludometer/eval/` — arena + Elo rating of checkpoints against a fixed anchor pool

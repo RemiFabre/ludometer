@@ -655,6 +655,53 @@ class AzulState:
                         counts[(col - r) % NUM_COLORS] += 1
         return counts
 
+    # ---------------------------------------------------- search integration
+    # Moved here verbatim from ludometer.train.mcts so a second game can define
+    # its own chance handling; the search calls these through the state.
+    def is_stochastic(self, action_id: int) -> bool:
+        """True iff ``action_id`` empties the board and therefore triggers a refill."""
+        source, rest = divmod(action_id, 30)
+        color = rest // 6
+        pool = self.center if source == CENTER else self.factories[source]
+        return pool[color] == self.tiles_left
+
+    def determinize(self, action_id: int, seed: int) -> AzulState:
+        """Clone with a fresh bag order, then apply ``action_id`` (one refill draw)."""
+        child = self.clone()
+        child.rng.seed(seed)
+        child.rng.shuffle(child.bag)
+        child.apply(action_id)
+        return child
+
+    def chance_key(self) -> bytes:
+        """Identity of a post-refill position: factory + center contents."""
+        parts: list[int] = []
+        for factory in self.factories:
+            parts.extend(factory)
+        parts.extend(self.center)
+        return bytes(parts)
+
+    def fingerprint(self) -> tuple[Any, ...]:
+        """Cheap near-unique identity of a position (guards a stale tree reuse)."""
+        return (
+            self.current_player,
+            self.round_index,
+            self.tiles_left,
+            self.marker_in_center,
+            tuple(self.scores),
+            tuple(self.pl_count[0]),
+            tuple(self.pl_count[1]),
+            tuple(self.pl_color[0]),
+            tuple(self.pl_color[1]),
+            sum(self.walls[0]),
+            sum(self.walls[1]),
+            self.chance_key(),
+        )
+
+    def search_root(self, rng: random.Random) -> AzulState:
+        """Azul is perfect information: the search starts from the position itself."""
+        return self.clone()
+
     # --------------------------------------------------------------- encoding
     def encode(self) -> np.ndarray:
         """Fixed-size float32 observation from the current player's perspective.

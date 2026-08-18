@@ -56,7 +56,14 @@ def play_out(agent: Agent, seed: int, opponent: Agent | None = None) -> AzulStat
 
 # ------------------------------------------------------------------- interface
 def test_registry_covers_the_baselines():
-    assert set(AGENT_REGISTRY) == {"random", "greedy", "heuristic"}
+    assert set(AGENT_REGISTRY) == {
+        "random",
+        "greedy",
+        "heuristic",
+        "uno:random",
+        "uno:greedy",
+        "uno:heuristic",
+    }
     for name, factory in AGENT_REGISTRY.items():
         agent = factory()
         assert isinstance(agent, Agent)

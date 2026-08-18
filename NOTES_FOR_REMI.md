@@ -4,6 +4,107 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-18 — What we build next is written down: `docs/NEXT_GAMES.md`
+
+Agreed after the Uno run got going. The brief is written for an implementer with no
+context — decisions, traps, acceptance criteria — so you can hand it to another agent.
+
+- **Uno+ first** — same engine, one rule knob, two curves. Draw always legal, +2/+4
+  stacking, the 7-swap, and a 9-card opening hand. This is the only experiment in the plan
+  that varies exactly one thing, and it is the question the ludometer is ultimately for.
+  Acceptance is measured *before* training: plain Uno gives 3.2 legal moves per turn and
+  60% forced turns; Uno+ has to clear 5.0 and drop under 35% or the rules did not work and
+  there is nothing worth training.
+- **Then tic-tac-toe and Connect Four, together.** Same genre, zero luck, zero hidden
+  information, one obviously shallow and one not. If the ludometer cannot separate those
+  two, nothing else it reports is trustworthy.
+- **Solved games are headlined by % optimal play, not Elo.** You were right that a perfect
+  player in the anchor pool changes what Elo means — it is worse than that, it diverges,
+  since Elo against an opponent you never beat is unbounded. So the solver stays out of the
+  pool, gets rated separately as a reference line where the fit is finite, and the headline
+  becomes the fraction of positions where the agent preserves the game-theoretic result.
+  That has a real ceiling at 100%, it is absolute, and it tests the linearity thesis far
+  more sharply than Elo can. Same idea as your 2800 line on the Azul chart, with an exact
+  number instead of an assumption.
+- **Chess is an explicit non-goal**, and the reason is worth keeping: it would fail in the
+  direction that looks like success. Every curve is linear at the start; a from-scratch
+  chess run on this Mac would spend its whole budget in that first sliver and come back
+  perfectly linear, and we would "conclude" chess is a perfectly designed game from a
+  measurement that never reached the interesting part. Onitama, Hex or Breakthrough give
+  the same character at a size where the curve can bend.
+- The document also fixes the rules of the chart: **the x axis is decisions, not games**
+  (an Azul game is ~52 decisions, a Uno hand ~17, a Uno match ~440 — a 26x spread), Elo
+  ceilings are never compared across games, and run1 is the Azul line to compare against
+  with run2 drawn as a search-budget band around it.
+
+## 2026-08-18 — Second game on the same rig: **Uno is training** (`runs/uno1`)
+
+The point of the framework was always to compare *shapes* of learning curves across games.
+Azul is calibrated; Uno is the contrast case — everybody knows it, the rules take a minute,
+and the expectation is that its curve flattens early where Azul's kept climbing.
+
+**What was added, and what was not.** Nothing in the Azul path changed behaviour: all 443
+existing tests pass untouched. The framework was already duck-typed on a state object, so a
+second game needed three small seams — a `ludometer/games.py` registry (`"game": "azul"`
+by default, absent from every run1-run6 config), the four chance/fingerprint helpers moved
+out of `mcts.py` onto the state classes (verbatim), and the encoding/action widths read off
+the state instead of imported as constants. The new code is `ludometer/uno/` (engine +
+three baselines) and `tests/test_uno.py`.
+
+**Hidden information.** Uno is not a perfect-information game, which the search assumes.
+It is handled by determinizing at the root (PIMC): the mover keeps everything they can
+legitimately see — their hand, the discard pile, the opponent's card *count*, both scores —
+and the unseen cards are redealt at random into the opponent's hand and the deck. Every
+draw stays a chance node, so the tree cannot memorise the deck order it was handed. The
+encoding deliberately shows only the observation, so the net cannot read the
+determinization off its own input.
+
+**Two things worth knowing before reading the curve:**
+
+1. **Elo scales are not shared across games.** A Uno 1500 and an Azul 1500 are different
+   numbers — different anchor pools, different variance. The dashboard now draws one
+   overview chart per game for exactly that reason, and tags every run with its game.
+   The honest cross-game comparison is the *shape*, and Elo normalised by each game's own
+   random→ceiling span.
+2. **A match to 500 is ~20 near-independent hands**, and getting the value function right
+   across that took two tries — both failures are worth knowing about, because both would
+   have produced a flat Uno curve that had nothing to do with Uno.
+
+   *First attempt:* label a position mostly by the hand it was played in
+   (`segment_value_weight`). Wrong, and measurably so — that is not a value function, it
+   resets at every hand boundary. The trained net priced a position one card from going
+   out at **+0.75** and the position immediately after actually going out at **+0.02**, so
+   the search saw winning a hand as falling off a cliff and steered away from it.
+
+   *Second attempt:* train on single hands (one hand = one episode, label = who went out),
+   rate over full matches. Correct for training, still wrong for rating: the search inside
+   a match still bootstrapped across hand boundaries. The same checkpoint won **41.5% of
+   single hands against `uno:greedy` and 0.0% of matches** — which is arithmetically
+   impossible for an undistorted agent.
+
+   *What is in the tree now:* the search's horizon ends with the current hand
+   (`UnoState.search_root`). Hands are all but independent — only the score carries over,
+   and the encoding does not even show it — so "win this hand" is what the net predicts
+   and the only thing the tree can bootstrap consistently. Same checkpoint, same
+   opponents, after the fix: **0.150 vs greedy, 0.375 vs heuristic, 0.775 vs random**, up
+   from 0.000 / 0.175 / 0.600. `tests/test_uno.py` pins all of it.
+
+**Measured before launch:** a random Uno match is ~1,100 moves and ~20 hands, a single
+hand is ~42 moves, and an Azul game is ~52 — but only ~40% of Uno moves have more than one
+legal action, and the mean branching factor is **3.2** against Azul's 20-60. So 96
+sims/move here is a *deeper* search than run1's 160 was for Azul. **Which means one "game"
+is not one unit of practice across the two studies:** an Azul game is ~52 decisions, a Uno
+hand ~17, a Uno match ~440. Plot the cross-game comparison against *decisions* and keep
+games as the secondary axis — and treat a conclusion that only survives on one axis as no
+conclusion. Throughput: **1,540 hands/min**, so the 120,000-hand budget is ~3 hours
+including evaluations.
+
+**Baseline ladder** (120 games per pairing, matches to 500): `uno:random` 0,
+`uno:heuristic` +396, `uno:greedy` +572. Note the ordering — the naive "dump your most
+expensive card, save the wilds" greedy beats the hand-written positional heuristic, and no
+amount of parameter tuning on the heuristic closed the gap. That is itself a small data
+point about how much structure Uno actually has for a human-legible rule to exploit.
+
 ## 2026-08-17 — Experiment verdict: strategic heads didn't pay (yet); back to the proven recipe
 
 - **run6 (aux strategic heads + deep policy targets) ran 10k games and underperformed**:

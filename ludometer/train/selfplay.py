@@ -77,7 +77,8 @@ from typing import Any, Self
 
 import numpy as np
 
-from ludometer.azul.engine import ACTION_SPACE, AzulState
+from ludometer.azul.engine import AzulState
+from ludometer.games import DEFAULT_GAME, get_game
 from ludometer.train.mcts import (
     MARGIN_SCALE,
     MAX_GAME_MOVES,
@@ -140,6 +141,7 @@ class GameRecord:
 class SelfPlayConfig:
     """Everything a worker needs to play a game (picklable)."""
 
+    game: str = DEFAULT_GAME
     mcts: MCTSConfig = field(default_factory=MCTSConfig)
     temp_moves: int = 12
     temperature: float = 1.0
@@ -163,6 +165,7 @@ class SelfPlayConfig:
         data = data or {}
         pcr = dict(data.get("pcr") or {})
         return cls(
+            game=str(data.get("game", DEFAULT_GAME)),
             mcts=MCTSConfig.from_dict(data),
             temp_moves=int(data.get("temp_moves", 12)),
             temperature=float(data.get("temperature", 1.0)),
@@ -226,7 +229,7 @@ def pcr_sims(config: SelfPlayConfig, rng: random.Random) -> tuple[int | None, bo
 def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> GameRecord:
     """Play one full game against itself; never mutates anything shared."""
     started = time.perf_counter()
-    state = AzulState.new_game(seed=seed)
+    state = get_game(config.game).new_game(seed)
     mcts = MCTS(
         evaluator, config.mcts, seed=(seed * 2 + 1) & 0x7FFFFFFF, add_noise=True
     )
@@ -241,7 +244,7 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
         states.append(state.encode())
         players.append(state.current_player)
         if len(legal) == 1:
-            policy = np.zeros(ACTION_SPACE, dtype=np.float32)
+            policy = np.zeros(state.ACTION_SPACE, dtype=np.float32)
             policy[legal[0]] = 1.0
             policy_mask.append(1.0)
             action = legal[0]
@@ -250,7 +253,7 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
             # and a cheap move's visit distribution is not a training target.
             sims, full = pcr_sims(config, schedule)
             result = mcts.search(state, add_noise=full, sims=sims)
-            policy = result.policy if full else np.zeros(ACTION_SPACE, dtype=np.float32)
+            policy = result.policy if full else np.zeros(state.ACTION_SPACE, dtype=np.float32)
             policy_mask.append(1.0 if full else 0.0)
             # Two deterministic policies can keep a game going forever (nobody
             # ever completes a pattern line, so no wall tile is ever placed):

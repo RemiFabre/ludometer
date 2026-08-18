@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ludometer.agents import AgentSpec, make_agent, spec_name
-from ludometer.azul.engine import AzulState
+from ludometer.games import DEFAULT_GAME, get_game
 
 __all__ = [
     "GameResult",
@@ -123,6 +123,7 @@ def play_game(
     agent_b: AgentSpec,
     seed: int,
     a_first: bool = True,
+    game: str = DEFAULT_GAME,
 ) -> GameResult:
     """Play one game. ``a_first`` puts agent A in seat 0 (moves first).
 
@@ -134,10 +135,12 @@ def play_game(
     a.seed(_agent_seed(seed, 0 if a_first else 1))
     b.seed(_agent_seed(seed, 1 if a_first else 0))
 
-    state = AzulState.new_game(seed=seed)
+    spec = get_game(game)
+    state = spec.new_game(seed)
+    max_moves = spec.max_moves
     players = (a, b) if a_first else (b, a)
     moves = 0
-    while not state.is_terminal and moves < MAX_MOVES:
+    while not state.is_terminal and moves < max_moves:
         agent = players[state.current_player]
         action = agent.act(state)
         if not state.is_legal(action):
@@ -172,10 +175,10 @@ def play_game(
     )
 
 
-def _play_game_task(task: tuple[AgentSpec, AgentSpec, int, bool]) -> GameResult:
+def _play_game_task(task: tuple[AgentSpec, AgentSpec, int, bool, str]) -> GameResult:
     """Top-level worker so :func:`play_match` can use a process pool."""
-    agent_a, agent_b, seed, a_first = task
-    return play_game(agent_a, agent_b, seed, a_first)
+    agent_a, agent_b, seed, a_first, game = task
+    return play_game(agent_a, agent_b, seed, a_first, game)
 
 
 def play_match(
@@ -185,6 +188,7 @@ def play_match(
     base_seed: int = 0,
     n_workers: int = 1,
     keep_games: bool = False,
+    game: str = DEFAULT_GAME,
 ) -> MatchResult:
     """Play ``n_games`` alternating-seat games and aggregate them.
 
@@ -194,7 +198,9 @@ def play_match(
     """
     if n_games < 0:
         raise ValueError("n_games must be >= 0")
-    tasks = [(agent_a, agent_b, base_seed + i // 2, i % 2 == 0) for i in range(n_games)]
+    tasks = [
+        (agent_a, agent_b, base_seed + i // 2, i % 2 == 0, game) for i in range(n_games)
+    ]
     if n_workers > 1 and n_games > 1:
         chunksize = max(1, n_games // (n_workers * 4))
         ctx = mp.get_context("spawn")
@@ -229,6 +235,7 @@ def round_robin(
     n_games: int = 100,
     base_seed: int = 0,
     n_workers: int = 1,
+    game: str = DEFAULT_GAME,
 ) -> list[MatchResult]:
     """Every unordered pair plays ``n_games``; returns one MatchResult per pair.
 
@@ -245,6 +252,7 @@ def round_robin(
                     n_games=n_games,
                     base_seed=seed,
                     n_workers=n_workers,
+                    game=game,
                 )
             )
     return out

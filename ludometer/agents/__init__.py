@@ -14,6 +14,7 @@ from ludometer.agents.base import Agent
 from ludometer.agents.greedy import GreedyAgent
 from ludometer.agents.heuristic import HeuristicAgent
 from ludometer.agents.random_agent import RandomAgent
+from ludometer.uno.agents import UnoGreedyAgent, UnoHeuristicAgent, UnoRandomAgent
 
 __all__ = [
     "AGENT_REGISTRY",
@@ -22,6 +23,9 @@ __all__ = [
     "GreedyAgent",
     "HeuristicAgent",
     "RandomAgent",
+    "UnoGreedyAgent",
+    "UnoHeuristicAgent",
+    "UnoRandomAgent",
     "make_agent",
     "spec_name",
 ]
@@ -30,6 +34,10 @@ AGENT_REGISTRY: dict[str, Callable[..., Agent]] = {
     "random": RandomAgent,
     "greedy": GreedyAgent,
     "heuristic": HeuristicAgent,
+    # Uno's ladder; specs are game-qualified so one registry serves both games.
+    "uno:random": UnoRandomAgent,
+    "uno:greedy": UnoGreedyAgent,
+    "uno:heuristic": UnoHeuristicAgent,
 }
 
 # A spec is anything :func:`make_agent` understands.

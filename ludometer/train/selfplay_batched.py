@@ -89,7 +89,8 @@ from typing import Any, Self
 
 import numpy as np
 
-from ludometer.azul.engine import ACTION_SPACE, AzulState
+from ludometer.azul.engine import AzulState
+from ludometer.games import get_game
 from ludometer.train.mcts import MCTS, LeafRequest, select_play_action
 from ludometer.train.net import make_net
 from ludometer.train.selfplay import (
@@ -422,7 +423,7 @@ class BatchedSelfPlay:
         """A fresh game with its own RNGs — the seeds the sequential path uses."""
         return _Slot(
             seed=int(seed),
-            state=AzulState.new_game(seed=seed),
+            state=get_game(self.config.game).new_game(seed),
             mcts=MCTS(
                 self.evaluator,
                 self.config.mcts,
@@ -454,7 +455,7 @@ class BatchedSelfPlay:
             slot.states.append(state.encode())
             slot.players.append(state.current_player)
             if len(legal) == 1:
-                policy = np.zeros(ACTION_SPACE, dtype=np.float32)
+                policy = np.zeros(state.ACTION_SPACE, dtype=np.float32)
                 policy[legal[0]] = 1.0
                 slot.policies.append(policy)
                 slot.policy_mask.append(1.0)
@@ -476,7 +477,9 @@ class BatchedSelfPlay:
         config = self.config
         result = slot.mcts.finish_search()
         slot.policies.append(
-            result.policy if slot.full else np.zeros(ACTION_SPACE, dtype=np.float32)
+            result.policy
+            if slot.full
+            else np.zeros(slot.state.ACTION_SPACE, dtype=np.float32)
         )
         slot.policy_mask.append(1.0 if slot.full else 0.0)
         # Two deterministic policies can keep a game going forever (nobody ever

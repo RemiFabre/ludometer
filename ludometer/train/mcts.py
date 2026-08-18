@@ -173,7 +173,7 @@ from typing import Any
 
 import numpy as np
 
-from ludometer.azul.engine import ACTION_SPACE, CENTER, AzulState
+from ludometer.azul.engine import AzulState
 
 __all__ = [
     "MARGIN_SCALE",
@@ -506,20 +506,7 @@ class MCTS:
     @staticmethod
     def _fingerprint(state: AzulState) -> tuple[Any, ...]:
         """Cheap near-unique identity of a position (guards a stale reuse)."""
-        return (
-            state.current_player,
-            state.round_index,
-            state.tiles_left,
-            state.marker_in_center,
-            tuple(state.scores),
-            tuple(state.pl_count[0]),
-            tuple(state.pl_count[1]),
-            tuple(state.pl_color[0]),
-            tuple(state.pl_color[1]),
-            sum(state.walls[0]),
-            sum(state.walls[1]),
-            MCTS._chance_key(state),
-        )
+        return state.fingerprint()
 
     def advance(self, action: int) -> bool:
         """Follow ``action`` from the current root; keep its subtree if we can.
@@ -575,13 +562,13 @@ class MCTS:
         value = 0.0
         margin = 0.0
         if root is None:
-            root = self._new_node(state.clone())
+            root = self._new_node(state.search_root(self._rng))
             if root.is_terminal:
                 raise ValueError("cannot search a terminal state")
             value, margin = self._expand(root)
         self._root = root
         if len(root.legal) == 1:
-            policy = np.zeros(ACTION_SPACE, dtype=np.float32)
+            policy = np.zeros(root.state.ACTION_SPACE, dtype=np.float32)
             policy[root.legal[0]] = 1.0
             if root.n_visits:
                 value = sum(root.wins) / root.n_visits
@@ -625,7 +612,7 @@ class MCTS:
         for a root that was never simulated from.
         """
         total = root.n_visits
-        policy = np.zeros(ACTION_SPACE, dtype=np.float32)
+        policy = np.zeros(root.state.ACTION_SPACE, dtype=np.float32)
         visits: dict[int, int] = {}
         q: dict[int, float] = {}
         margins: dict[int, float] = {}
@@ -677,7 +664,7 @@ class MCTS:
         root = self._reuse_for(state)
         self.reused_visits = root.n_visits if root is not None else 0
         if root is None:
-            root = self._new_node(state.clone())
+            root = self._new_node(state.search_root(self._rng))
             if root.is_terminal:
                 raise ValueError("cannot search a terminal state")
         self._root = root
@@ -786,7 +773,7 @@ class MCTS:
         self._search = None
         root = st.root
         if st.forced:
-            policy = np.zeros(ACTION_SPACE, dtype=np.float32)
+            policy = np.zeros(root.state.ACTION_SPACE, dtype=np.float32)
             policy[root.legal[0]] = 1.0
             value, margin = st.root_value, st.root_margin
             if root.n_visits:
@@ -908,31 +895,19 @@ class MCTS:
         return best_i
 
     def _is_stochastic(self, state: AzulState, action: int) -> bool:
-        """True iff ``action`` empties the board and therefore triggers a refill."""
-        source, rest = divmod(action, 30)
-        color = rest // 6
-        pool = state.center if source == CENTER else state.factories[source]
-        return pool[color] == state.tiles_left
+        """True iff ``action`` resolves a chance event (see the state engines)."""
+        return state.is_stochastic(action)
 
     def _determinize(self, state: AzulState, action: int) -> AzulState:
-        """Clone with a fresh bag order, then apply ``action`` (one refill draw)."""
-        child = state.clone()
+        """Re-sample the hidden order, then apply ``action`` (one determinization)."""
         self._counter += 1
-        child.rng.seed(
-            (self._seed * 1_000_003 + self._counter * 2_654_435_761) & 0x7FFFFFFF
-        )
-        child.rng.shuffle(child.bag)
-        child.apply(action)
-        return child
+        seed = (self._seed * 1_000_003 + self._counter * 2_654_435_761) & 0x7FFFFFFF
+        return state.determinize(action, seed)
 
     @staticmethod
     def _chance_key(state: AzulState) -> bytes:
-        """Identity of a post-refill position: factory + center contents."""
-        parts: list[int] = []
-        for factory in state.factories:
-            parts.extend(factory)
-        parts.extend(state.center)
-        return bytes(parts)
+        """Identity of a position after a chance event."""
+        return state.chance_key()
 
     def _child(self, node: Node, index: int) -> Node:
         entry = node.children[index]

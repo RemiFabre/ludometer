@@ -36,6 +36,7 @@ import torch
 
 from ludometer.eval.arena import play_match
 from ludometer.eval.elo import PairResult, fit_elo
+from ludometer.games import DEFAULT_GAME, get_game
 from ludometer.train.mcts import MAX_GAME_MOVES, STALL_ROUNDS, MCTSConfig
 from ludometer.train.mcts_agent import MCTSAgentSpec
 from ludometer.train.net import (
@@ -94,6 +95,13 @@ class TrainConfig:
     """Flat, JSON-serialisable hyperparameters (``configs/*.json``)."""
 
     run: str = "run"
+    # which rules engine this run trains on (ludometer/games.py). Absent from
+    # every run1-run6 config, so they all keep meaning Azul.
+    game: str = DEFAULT_GAME
+    # The game checkpoints are RATED on, when it differs from the one they train
+    # on. Uno trains on single hands and is rated over matches to 500 (same
+    # engine, same encoding); empty means "the same game".
+    eval_game: str = ""
     seed: int = 20260814
     device: str = "auto"
     workers: int = 8
@@ -280,10 +288,15 @@ class TrainConfig:
     # ------------------------------------------------------------ sub-configs
     def net_config(self) -> Any:
         """``NetConfig`` or ``StructuredConfig``, per :attr:`arch`."""
-        return net_config_from_dict(self.to_dict())
+        data = self.to_dict()
+        spec = get_game(self.game)
+        data.setdefault("input_size", spec.encoded_size)
+        data.setdefault("action_space", spec.action_space)
+        return net_config_from_dict(data)
 
     def selfplay_config(self) -> SelfPlayConfig:
         return SelfPlayConfig(
+            game=self.game,
             mcts=MCTSConfig(
                 sims=self.sims,
                 c_puct=self.c_puct,
@@ -350,8 +363,12 @@ class Trainer:
         self.optimizer = torch.optim.Adam(
             self.net.parameters(), lr=config.lr, weight_decay=config.weight_decay
         )
+        spec = get_game(config.game)
         self.buffer = ReplayBuffer(
-            capacity=config.replay_capacity, seed=config.seed ^ 0x5EED
+            capacity=config.replay_capacity,
+            seed=config.seed ^ 0x5EED,
+            input_size=spec.encoded_size,
+            action_space=spec.action_space,
         )
         self.selfplay = make_selfplay(
             config.net_config(),
@@ -719,8 +736,12 @@ class Trainer:
             if self._stop:
                 break
         if not cfg.pretrain_keep_buffer:
+            spec = get_game(cfg.game)
             self.buffer = ReplayBuffer(
-                capacity=cfg.replay_capacity, seed=cfg.seed ^ 0x5EED
+                capacity=cfg.replay_capacity,
+                seed=cfg.seed ^ 0x5EED,
+                input_size=spec.encoded_size,
+                action_space=spec.action_space,
             )
         # the self-play schedule starts fresh: reset the LR the optimizer holds
         for group in self.optimizer.param_groups:
@@ -960,6 +981,7 @@ class Trainer:
                 n_games=cfg.eval_games,
                 base_seed=base_seed + 100_000 * i,
                 n_workers=cfg.eval_workers,
+                game=cfg.eval_game or cfg.game,
             )
             results.append(
                 PairResult(name, opp_name, match.wins, match.draws, match.losses)
