@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faïence: a tile game against a neural net, in your browser</title>
+<meta name="description" content="Faïence is a free, open-source implementation of the rules of Azul (Michael Kiesling). Play against a neural net trained by self-play. It runs entirely in your browser, no server, no install.">
+<!-- the card a shared link unfolds into -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Faïence: a tile game against a neural net">
+<meta property="og:description" content="A free, open-source implementation of the rules of Azul. The net and its tree search run entirely in your browser: no server, no install, no account.">
+<meta property="og:url" content="https://remifabre-faience.static.hf.space/">
+<meta property="og:image" content="https://remifabre-faience.static.hf.space/social.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%2317509e'/%3E%3Crect x='6' y='6' width='9' height='9' rx='1.5' fill='%2331b8d1'/%3E%3Crect x='17' y='6' width='9' height='9' rx='1.5' fill='%23d99a12'/%3E%3Crect x='6' y='17' width='9' height='9' rx='1.5' fill='%23b23a26'/%3E%3Crect x='17' y='17' width='9' height='9' rx='1.5' fill='%23faf6ec'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-name">Faïence</span>
+    <span class="brand-sub" id="matchup">a tile game for two</span>
+  </div>
+
+  <form class="setup" id="setup" autocomplete="off">
+    <label class="field field-narrow">
+      <span class="field-label">Seed</span>
+      <input type="text" id="seed" inputmode="numeric" placeholder="random">
+    </label>
+    <label class="check">
+      <input type="checkbox" id="first" checked>
+      <span>You go first</span>
+    </label>
+    <button type="submit" class="btn btn-primary" id="deal" disabled>Deal tiles</button>
+  </form>
+</header>
+
+<!-- the net is a 13 MB download: its state gets its own strip, never a pop-up -->
+<div class="engine-bar" id="engine-bar">
+  <span class="engine-dot" id="engine-dot" aria-hidden="true"></span>
+  <span class="engine-text" id="engine-text">Loading the net…</span>
+  <span class="engine-badge">runs entirely in your browser</span>
+</div>
+
+<main class="table">
+
+  <!-- one glance = whole game state; nothing on this page ever covers the board -->
+  <section id="status"></section>
+
+  <!-- the panel opens inline and pushes the table down; this page has no pop-ups -->
+  <section id="settings" aria-label="Settings"></section>
+
+  <!-- the playfield, drawn two ways (settings − / +, defaulted per device in
+       ui/layout.js): "stack" = big boards below the factories, a desktop's
+       default; "side" = factories left, both boards beside them, a phone's. -->
+  <div class="playfield">
+
+  <section class="panel middle-panel">
+    <h2 class="panel-title">The middle of the table</h2>
+    <!-- the tiles you are holding while you choose a row; a picture of the
+         selection, gone the moment you change your mind -->
+    <div class="hand" id="hand" hidden aria-hidden="true">
+      <span class="hand-label">In hand</span>
+      <div class="hand-tiles" id="hand-tiles"></div>
+    </div>
+    <div id="middle"></div>
+    <div class="middle-actions">
+      <span class="brand-sub" id="prompt">Loading the net. The tiles will be dealt in a moment.</span>
+      <!-- move navigation: pure replay of positions the page already has -->
+      <div id="nav" aria-label="Move navigation"></div>
+      <button type="button" class="btn" id="hint" disabled>Suggest a move</button>
+      <button type="button" class="btn hidden" id="cancel">Clear selection</button>
+      <!-- confirm mode: while a move is placed, this row's usual controls make
+           way for the banner — same row, same height, nothing on the page moves -->
+      <div class="confirm-bar" id="confirm-bar" hidden aria-live="polite">
+        <strong class="confirm-title">Validate this move</strong>
+        <span class="confirm-detail" id="confirm-detail"></span>
+        <button type="button" class="btn btn-primary" id="confirm">Play this move</button>
+        <button type="button" class="btn" id="confirm-cancel">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="boards">
+    <section id="board-human" aria-label="Your board"></section>
+    <section id="board-ai" aria-label="The AI's board"></section>
+  </div>
+
+  </div><!-- /.playfield -->
+
+  <section id="scoring" hidden aria-live="polite"></section>
+
+  <!-- Appears when a game ends. With sharing on (the default, and the switch
+       is in Settings) the game was just sent to the training pile by
+       js/upload.js; app.js writes the note accordingly. The buttons offer the
+       same record as a file, for the curious and for players who share
+       nothing. -->
+  <section class="panel record-bar" id="record" hidden>
+    <p class="record-note" id="record-note">Finished, and shared: the moves,
+    the tiles that were dealt, and which net you played are on their way to
+    the public training pile. Thank you. You can keep a copy too, or turn
+    sharing off in Settings.</p>
+    <div class="record-actions">
+      <button type="button" class="btn" id="record-save">Save this game</button>
+      <button type="button" class="btn" id="record-copy">Copy as text</button>
+      <a class="record-link" id="record-dataset"
+         href="https://huggingface.co/datasets/RemiFabre/faience-games"
+         target="_blank" rel="noopener">See the public pile</a>
+    </div>
+  </section>
+
+  <div class="below">
+    <section class="panel">
+      <div class="board-head">
+        <h2 class="panel-title" id="log-title">Move log</h2>
+        <label class="check coach off" id="coach-field" title="Score your moves with the AI's own search">
+          <input type="checkbox" id="coach">
+          <span>Coach mode</span>
+        </label>
+      </div>
+      <p class="coach-legend" id="coach-legend" hidden></p>
+      <ol class="log" id="log" aria-labelledby="log-title"></ol>
+    </section>
+
+    <div class="below-side">
+      <section class="panel about" id="about" aria-labelledby="about-title">
+        <h2 class="panel-title" id="about-title">What this is</h2>
+        <p>Faïence is a free, open-source implementation of the rules of
+        <em>Azul</em>, the tile-laying game by Michael Kiesling. It is a fan
+        project for research, with its own code and artwork, not affiliated
+        with or endorsed by the game's publishers.</p>
+        <p>All of it is open source (MIT):
+        <a href="https://github.com/RemiFabre/ludometer">code and training logs on GitHub</a>.
+        If you like this work, a star on the repo (or a hello in the issues)
+        is always appreciated.</p>
+        <p>Faïence began as a machine-learning experiment: Ludometer, a research
+        framework that measures how good a board game is from the shape of an
+        AI's learning curve. Somewhere along the way the experiment turned into
+        a pleasant opponent, so we are sharing it, playable and free. Nobody
+        earns a cent from this page: no ads, no account, nothing to buy.</p>
+        <p>The opponent is a neural network that learned the game from scratch
+        by playing against itself. Your browser downloads it once and runs it
+        locally.</p>
+        <p id="share-note">This is a research project, and the games are the
+        research material: when you play, you help the net train. So when a
+        game ends (or is abandoned), the page sends an anonymous record of it
+        to be used as training data: the moves, the tiles that were dealt,
+        which net you played, and the score. No name, no account, no
+        location. This is experimental, and there is a switch in Settings if
+        you would rather not.
+        <a href="https://huggingface.co/datasets/RemiFabre/faience-games"
+        target="_blank" rel="noopener">Every record is public</a>, so you can
+        read everything we collect.</p>
+        <p id="tally-note">Beyond that, the only thing that leaves your
+        browser is an anonymous, cookie-free tally of visits, games dealt,
+        and how finished games went. <a href="https://faience.goatcounter.com"
+        target="_blank" rel="noopener">It is public too</a>.</p>
+        <p class="about-meta" id="about-meta"></p>
+      </section>
+    </div>
+  </div>
+
+  <!-- the quiet end of the page: where discarded tiles go. #counts keeps only
+       totals (never per-colour counts) and holds #lid-row, the landing target
+       for every tile that melts into the lid. The "AI thinks for" clock is
+       parsed here, then seated in the settings panel by app.js. -->
+  <section class="panel bottom-bar" aria-label="Tile counts">
+    <label class="field field-narrow" id="think-field">
+      <span class="field-label">AI thinks for</span>
+      <select id="think">
+        <option value="0">Instant (no search)</option>
+        <option value="3">3 seconds</option>
+        <option value="5" selected>5 seconds</option>
+        <option value="10">10 seconds</option>
+      </select>
+    </label>
+    <div class="counts" id="counts"></div>
+  </section>
+
+</main>
+
+<!-- the two round corner buttons: what is this, and the public tally -->
+<nav class="corner" aria-label="About and statistics">
+  <a class="corner-btn" id="corner-stats" href="https://faience.goatcounter.com"
+     target="_blank" rel="noopener" title="Public play statistics: everything this page records">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="10" width="3.4" height="7" rx="1"/><rect x="8.3" y="6" width="3.4" height="11" rx="1"/><rect x="13.6" y="3" width="3.4" height="14" rx="1"/></svg>
+  </a>
+  <button type="button" class="corner-btn" id="corner-about" title="What is this?">?</button>
+</nav>
+
+<div class="fly-layer" id="fly" aria-hidden="true"></div>
+<!-- score pop-ups get their own layer: a number is not a tile, and nothing that
+     counts tile flights should ever count these -->
+<div class="pop-layer" id="pops" aria-hidden="true"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -3,9 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faïence: a tile game against a neural net, in your browser</title>
+<title>Faïence has moved</title>
+<!-- This stub is what the old GitHub Pages URL serves now that the game lives
+     on Hugging Face. It stays a real page rather than an instant redirect for
+     two reasons: link unfurlers and crawlers do not reliably follow JavaScript
+     redirects and the social cards already circulating are generated from this
+     HTML, and an instant redirect on a shared link can read as a hijack to a
+     suspicious visitor. So: the same card tags as always, one sentence, one
+     button. The previous build keeps playing at classic/ as a fallback. -->
 <meta name="description" content="Faïence is a free, open-source implementation of the rules of Azul (Michael Kiesling). Play against a neural net trained by self-play. It runs entirely in your browser, no server, no install.">
-<!-- the card a shared link unfolds into -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Faïence: a tile game against a neural net">
 <meta property="og:description" content="A free, open-source implementation of the rules of Azul. The net and its tree search run entirely in your browser: no server, no install, no account.">
@@ -16,176 +22,63 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%2317509e'/%3E%3Crect x='6' y='6' width='9' height='9' rx='1.5' fill='%2331b8d1'/%3E%3Crect x='17' y='6' width='9' height='9' rx='1.5' fill='%23d99a12'/%3E%3Crect x='6' y='17' width='9' height='9' rx='1.5' fill='%23b23a26'/%3E%3Crect x='17' y='17' width='9' height='9' rx='1.5' fill='%23faf6ec'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    color: #2c2722;
+    font: 16px/1.55 "Avenir Next", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    background-color: #e6dbc6;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, .35) 1px, rgba(0, 0, 0, 0) 1px),
+      radial-gradient(120% 90% at 50% 0%, #efe6d3 0%, #e6dbc6 55%, #d8c9ae 100%);
+    background-size: 7px 7px, 7px 7px, 100% 100%;
+  }
+  .card {
+    max-width: 34em; margin: 24px; padding: 28px 32px;
+    background: linear-gradient(#fdfbf5, #faf6ec);
+    border: 1px solid #e2d7bd; border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(60, 45, 20, .12);
+    text-align: center;
+  }
+  h1 {
+    margin: 0 0 4px; font-weight: 400; font-size: 30px;
+    font-family: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  }
+  p { margin: 10px 0; }
+  .quiet { color: #6a5d4e; font-size: 14px; }
+  .go {
+    display: inline-block; margin: 14px 0 4px; padding: 12px 26px;
+    background: #17509e; color: #fdfbf5; text-decoration: none;
+    font-size: 18px; border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(23, 80, 158, .35);
+  }
+  .go:hover { background: #1a5cb5; }
+  a { color: #17509e; }
+</style>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-name">Faïence</span>
-    <span class="brand-sub" id="matchup">a tile game for two</span>
-  </div>
-
-  <form class="setup" id="setup" autocomplete="off">
-    <label class="field field-narrow">
-      <span class="field-label">Seed</span>
-      <input type="text" id="seed" inputmode="numeric" placeholder="random">
-    </label>
-    <label class="check">
-      <input type="checkbox" id="first" checked>
-      <span>You go first</span>
-    </label>
-    <button type="submit" class="btn btn-primary" id="deal" disabled>Deal tiles</button>
-  </form>
-</header>
-
-<!-- the net is a 13 MB download: its state gets its own strip, never a pop-up -->
-<div class="engine-bar" id="engine-bar">
-  <span class="engine-dot" id="engine-dot" aria-hidden="true"></span>
-  <span class="engine-text" id="engine-text">Loading the net…</span>
-  <span class="engine-badge">runs entirely in your browser</span>
-</div>
-
-<main class="table">
-
-  <!-- one glance = whole game state; nothing on this page ever covers the board -->
-  <section id="status"></section>
-
-  <!-- the panel opens inline and pushes the table down; this page has no pop-ups -->
-  <section id="settings" aria-label="Settings"></section>
-
-  <!-- the playfield, drawn two ways (settings − / +, defaulted per device in
-       ui/layout.js): "stack" = big boards below the factories, a desktop's
-       default; "side" = factories left, both boards beside them, a phone's. -->
-  <div class="playfield">
-
-  <section class="panel middle-panel">
-    <h2 class="panel-title">The middle of the table</h2>
-    <!-- the tiles you are holding while you choose a row; a picture of the
-         selection, gone the moment you change your mind -->
-    <div class="hand" id="hand" hidden aria-hidden="true">
-      <span class="hand-label">In hand</span>
-      <div class="hand-tiles" id="hand-tiles"></div>
-    </div>
-    <div id="middle"></div>
-    <div class="middle-actions">
-      <span class="brand-sub" id="prompt">Loading the net. The tiles will be dealt in a moment.</span>
-      <!-- move navigation: pure replay of positions the page already has -->
-      <div id="nav" aria-label="Move navigation"></div>
-      <button type="button" class="btn" id="hint" disabled>Suggest a move</button>
-      <button type="button" class="btn hidden" id="cancel">Clear selection</button>
-      <!-- confirm mode: while a move is placed, this row's usual controls make
-           way for the banner — same row, same height, nothing on the page moves -->
-      <div class="confirm-bar" id="confirm-bar" hidden aria-live="polite">
-        <strong class="confirm-title">Validate this move</strong>
-        <span class="confirm-detail" id="confirm-detail"></span>
-        <button type="button" class="btn btn-primary" id="confirm">Play this move</button>
-        <button type="button" class="btn" id="confirm-cancel">Cancel</button>
-      </div>
-    </div>
-  </section>
-
-  <div class="boards">
-    <section id="board-human" aria-label="Your board"></section>
-    <section id="board-ai" aria-label="The AI's board"></section>
-  </div>
-
-  </div><!-- /.playfield -->
-
-  <section id="scoring" hidden aria-live="polite"></section>
-
-  <!-- Appears when a game ends: the finished game as a small file the player
-       can keep or send. Nothing is uploaded from here, by design (see
-       js/record.js) - the page still sends nothing but the anonymous tally. -->
-  <section class="panel record-bar" id="record" hidden>
-    <p class="record-note" id="record-note">Finished. If you would like to help
-    train the net, you can save this game and send it to me. It is a small text
-    file: the moves, the tiles that were dealt, and which net you played.
-    Nothing is uploaded from this page.</p>
-    <div class="record-actions">
-      <button type="button" class="btn" id="record-save">Save this game</button>
-      <button type="button" class="btn" id="record-copy">Copy as text</button>
-      <a class="record-link" id="record-issue"
-         href="https://github.com/RemiFabre/ludometer/issues/new?title=Game%20record&amp;body=Paste%20the%20copied%20game%20here%2C%20and%20your%20BoardGameArena%20rating%20if%20you%20have%20one."
-         target="_blank" rel="noopener">Send it as a GitHub issue</a>
-    </div>
-  </section>
-
-  <div class="below">
-    <section class="panel">
-      <div class="board-head">
-        <h2 class="panel-title" id="log-title">Move log</h2>
-        <label class="check coach off" id="coach-field" title="Score your moves with the AI's own search">
-          <input type="checkbox" id="coach">
-          <span>Coach mode</span>
-        </label>
-      </div>
-      <p class="coach-legend" id="coach-legend" hidden></p>
-      <ol class="log" id="log" aria-labelledby="log-title"></ol>
-    </section>
-
-    <div class="below-side">
-      <section class="panel about" id="about" aria-labelledby="about-title">
-        <h2 class="panel-title" id="about-title">What this is</h2>
-        <p>Faïence is a free, open-source implementation of the rules of
-        <em>Azul</em>, the tile-laying game by Michael Kiesling. It is a fan
-        project for research, with its own code and artwork, not affiliated
-        with or endorsed by the game's publishers.</p>
-        <p>All of it is open source (MIT):
-        <a href="https://github.com/RemiFabre/ludometer">code and training logs on GitHub</a>.
-        If you like this work, a star on the repo (or a hello in the issues)
-        is always appreciated.</p>
-        <p>Faïence began as a machine-learning experiment: Ludometer, a research
-        framework that measures how good a board game is from the shape of an
-        AI's learning curve. Somewhere along the way the experiment turned into
-        a pleasant opponent, so we are sharing it, playable and free. Nobody
-        earns a cent from this page: no ads, no account, nothing to buy.</p>
-        <p>The opponent is a neural network that learned the game from scratch
-        by playing against itself. Your browser downloads it once and runs it
-        locally.</p>
-        <p id="tally-note">The only thing that ever leaves your browser is an
-        anonymous, cookie-free tally of visits, games dealt, and how finished
-        games went. <a href="https://faience.goatcounter.com" target="_blank"
-        rel="noopener">It is public</a>, so you can read everything it
-        records.</p>
-        <p class="about-meta" id="about-meta"></p>
-      </section>
-    </div>
-  </div>
-
-  <!-- the quiet end of the page: where discarded tiles go. #counts keeps only
-       totals (never per-colour counts) and holds #lid-row, the landing target
-       for every tile that melts into the lid. The "AI thinks for" clock is
-       parsed here, then seated in the settings panel by app.js. -->
-  <section class="panel bottom-bar" aria-label="Tile counts">
-    <label class="field field-narrow" id="think-field">
-      <span class="field-label">AI thinks for</span>
-      <select id="think">
-        <option value="0">Instant (no search)</option>
-        <option value="3">3 seconds</option>
-        <option value="5" selected>5 seconds</option>
-        <option value="10">10 seconds</option>
-      </select>
-    </label>
-    <div class="counts" id="counts"></div>
-  </section>
-
+<main class="card">
+  <h1>Faïence</h1>
+  <p>The game has moved to Hugging Face. Same game, same rules, still free,
+  still entirely in your browser.</p>
+  <p><a class="go" href="https://remifabre-faience.static.hf.space/">Play at the new address</a></p>
+  <p class="quiet">Bookmark it to come straight here next time:<br>
+  <a href="https://remifabre-faience.static.hf.space/">remifabre-faience.static.hf.space</a></p>
+  <p class="quiet">If the new address is ever unreachable, the previous build
+  <a href="classic/">still plays here</a>.</p>
 </main>
-
-<!-- the two round corner buttons: what is this, and the public tally -->
-<nav class="corner" aria-label="About and statistics">
-  <a class="corner-btn" id="corner-stats" href="https://faience.goatcounter.com"
-     target="_blank" rel="noopener" title="Public play statistics: everything this page records">
-    <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="10" width="3.4" height="7" rx="1"/><rect x="8.3" y="6" width="3.4" height="11" rx="1"/><rect x="13.6" y="3" width="3.4" height="14" rx="1"/></svg>
-  </a>
-  <button type="button" class="corner-btn" id="corner-about" title="What is this?">?</button>
-</nav>
-
-<div class="fly-layer" id="fly" aria-hidden="true"></div>
-<!-- score pop-ups get their own layer: a number is not a tile, and nothing that
-     counts tile flights should ever count these -->
-<div class="pop-layer" id="pops" aria-hidden="true"></div>
-
-<script type="module" src="js/app.js"></script>
+<script>
+  // one anonymous, cookie-free hit on the public tally, so the share of
+  // players still arriving through the old link can be read off the dashboard
+  try {
+    var h = location.hostname;
+    if (h && h !== "localhost" && h !== "127.0.0.1") {
+      new Image().src = "https://faience.goatcounter.com/count?p=" +
+        encodeURIComponent("/moved") + "&e=true&rnd=" + Date.now().toString(36);
+    }
+  } catch (err) {}
+</script>
 </body>
 </html>
