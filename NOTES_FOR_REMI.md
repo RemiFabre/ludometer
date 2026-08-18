@@ -4,6 +4,33 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — uno1 finished: Uno holds about +650 Elo of learnable skill, and stops
+
+`runs/uno1` completed its 120,000 hands cleanly (~4.8 h wall time, 59 eval points).
+The final read, all rated over matches to 500 on Uno's own ladder (random = 0,
+greedy +572, heuristic +396 pre-rated):
+
+- **Curve:** +144 at 0 hands → climbs with Azul-like slope to ~+550 by 40k hands →
+  spends the entire back half of the run oscillating in the **+570–660 band**. Best
+  checkpoint **+662** (ckpt-116736); last point +651 ± 58. The smoothed slope halves at
+  **46% of budget** and never recovers.
+- **Against the ladder:** the final checkpoints beat `uno:random` ~0.95, `uno:heuristic`
+  ~0.5–0.6, and sit at 0.25–0.44 against `uno:greedy` — i.e. the trained net ends *at*
+  the level of the best hand-written baseline, ~80 Elo above it at best. Two plausible
+  readings, not distinguished by this run: the net stopped finding skill, or hand-win
+  optimisation genuinely tops out near greedy's match play (greedy's dump-expensive-cards
+  rule is match-scoring-aware in a way "win the hand" training is not).
+- **The headline picture** (web/compare.html, now the combined absolute chart per Rémi's
+  call): over comparable ~2M-decision budgets, **Azul reaches +2001 above its own random
+  while Uno reaches +662** — a 3.3× gap in distinguishable skill, and Uno's rating scale
+  is *stretched* by match amplification, so the true gap is larger, not smaller.
+- **Shape:** the log fit beats the line for every run (uno1: R² 0.878 log vs 0.776
+  linear; Azul run2: 0.962 vs 0.686). Rémi's expectation that learning is log-shaped —
+  fast early, slow late — is what the data says; the discriminating quantity across
+  games is where the slope dies and how much range the game covers before it does.
+
+Queue: ttt1 next (minutes), then unoplus1 (~3 h), then c4_1 (overnight).
+
 ## 2026-08-19 — Uno verified, Uno+ built, the calibrated pair built, and the comparison page exists
 
 Everything below happened while `runs/uno1` trained (it was untouched; engine edits only

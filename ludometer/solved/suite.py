@@ -84,8 +84,10 @@ def _sample_positions(game: str, want: int, seed: int, min_ply: int) -> list[Any
     pairs = [(a, b) for a in names for b in names]
     by_key: dict[tuple[int, ...], Any] = {}
     game_seed = seed
-    # oversample, then stratify: ~8x the ask, capped for safety
-    while len(by_key) < want * 8 and game_seed < seed + want * 40:
+    # Oversample ~3x the ask, then stratify. The bounds matter: the two-ply
+    # baselines cost ~50-150 ms per Connect Four game, so an 8x ask was over
+    # half an hour of sampling before the first position was ever solved.
+    while len(by_key) < want * 3 and game_seed < seed + want * 8:
         a, b = pairs[game_seed % len(pairs)]
         agents = (make_agent(a), make_agent(b))
         for i, agent in enumerate(agents):
