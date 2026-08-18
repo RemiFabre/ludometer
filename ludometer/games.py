@@ -18,6 +18,7 @@ from typing import Any
 
 from ludometer.azul import engine as _azul
 from ludometer.uno import engine as _uno
+from ludometer.uno import plus as _unoplus
 
 __all__ = ["DEFAULT_GAME", "GAMES", "GameSpec", "get_game"]
 
@@ -68,6 +69,25 @@ GAMES: dict[str, GameSpec] = {
         baselines=("uno:random", "uno:greedy", "uno:heuristic"),
         max_moves=400,
         state_cls=_uno.UnoState,
+        options=(("hand_limit", 1),),
+    ),
+    # Uno+ (uno/plus.py): the rule-knob experiment — same deck and actions,
+    # but draw-always-legal, +2/+4 stacking, the 7-swap and a 9-card deal.
+    "unoplus": GameSpec(
+        name="unoplus",
+        encoded_size=_unoplus.PLUS_ENCODED_SIZE,
+        action_space=_unoplus.UnoPlusState.ACTION_SPACE,
+        baselines=("unoplus:random", "unoplus:greedy", "unoplus:heuristic"),
+        max_moves=8000,  # voluntary draws stretch a match; measured backstop
+        state_cls=_unoplus.UnoPlusState,
+    ),
+    "unoplus_hand": GameSpec(
+        name="unoplus_hand",
+        encoded_size=_unoplus.PLUS_ENCODED_SIZE,
+        action_space=_unoplus.UnoPlusState.ACTION_SPACE,
+        baselines=("unoplus:random", "unoplus:greedy", "unoplus:heuristic"),
+        max_moves=2500,  # early near-random nets bank cards; measured p50 ~1,059
+        state_cls=_unoplus.UnoPlusState,
         options=(("hand_limit", 1),),
     ),
 }

@@ -14,7 +14,14 @@ from ludometer.agents.base import Agent
 from ludometer.agents.greedy import GreedyAgent
 from ludometer.agents.heuristic import HeuristicAgent
 from ludometer.agents.random_agent import RandomAgent
-from ludometer.uno.agents import UnoGreedyAgent, UnoHeuristicAgent, UnoRandomAgent
+from ludometer.uno.agents import (
+    UnoGreedyAgent,
+    UnoHeuristicAgent,
+    UnoPlusGreedyAgent,
+    UnoPlusHeuristicAgent,
+    UnoPlusRandomAgent,
+    UnoRandomAgent,
+)
 
 __all__ = [
     "AGENT_REGISTRY",
@@ -38,6 +45,9 @@ AGENT_REGISTRY: dict[str, Callable[..., Agent]] = {
     "uno:random": UnoRandomAgent,
     "uno:greedy": UnoGreedyAgent,
     "uno:heuristic": UnoHeuristicAgent,
+    "unoplus:random": UnoPlusRandomAgent,
+    "unoplus:greedy": UnoPlusGreedyAgent,
+    "unoplus:heuristic": UnoPlusHeuristicAgent,
 }
 
 # A spec is anything :func:`make_agent` understands.

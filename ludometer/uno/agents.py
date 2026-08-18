@@ -22,7 +22,14 @@ from ludometer.uno.engine import (
     UnoState,
 )
 
-__all__ = ["UnoGreedyAgent", "UnoHeuristicAgent", "UnoRandomAgent"]
+__all__ = [
+    "UnoGreedyAgent",
+    "UnoHeuristicAgent",
+    "UnoPlusGreedyAgent",
+    "UnoPlusHeuristicAgent",
+    "UnoPlusRandomAgent",
+    "UnoRandomAgent",
+]
 
 
 def _best_color(state: UnoState, player: int) -> int:
@@ -62,7 +69,9 @@ class UnoGreedyAgent(Agent):
     name = "uno:greedy"
 
     def act(self, state: UnoState) -> int:
-        legal = state.legal_actions()
+        return self.choose(state, state.legal_actions())
+
+    def choose(self, state: UnoState, legal: list[int]) -> int:
         if legal == [DRAW]:
             return DRAW
         color = _best_color(state, state.current_player)
@@ -93,7 +102,9 @@ class UnoHeuristicAgent(Agent):
         self.wild_cost = wild_cost
 
     def act(self, state: UnoState) -> int:
-        legal = state.legal_actions()
+        return self.choose(state, state.legal_actions())
+
+    def choose(self, state: UnoState, legal: list[int]) -> int:
         if len(legal) == 1:
             return legal[0]
         me = state.current_player
@@ -124,3 +135,28 @@ class UnoHeuristicAgent(Agent):
             if score > best_score:
                 best, best_score = action, score
         return best
+
+
+# ---------------------------------------------------------------------- Uno+
+# Same policies over the richer rules. The one change: Uno+ offers DRAW on
+# every turn (see uno/plus.py R1), and these card-dumping baselines never
+# bank a card voluntarily — they draw only when it is the only legal action
+# (which includes "take the stack" when they cannot answer it).
+class _NeverDrawsByChoice:
+    def act(self, state: UnoState) -> int:
+        legal = state.legal_actions()
+        if len(legal) > 1:
+            legal = [a for a in legal if a != DRAW] or legal
+        return self.choose(state, legal)  # type: ignore[attr-defined]
+
+
+class UnoPlusRandomAgent(UnoRandomAgent):
+    name = "unoplus:random"
+
+
+class UnoPlusGreedyAgent(_NeverDrawsByChoice, UnoGreedyAgent):
+    name = "unoplus:greedy"
+
+
+class UnoPlusHeuristicAgent(_NeverDrawsByChoice, UnoHeuristicAgent):
+    name = "unoplus:heuristic"

@@ -112,6 +112,7 @@ class UnoState:
 
     ACTION_SPACE: int = ACTION_SPACE
     ENCODED_SIZE: int = ENCODED_SIZE
+    DEAL_SIZE: int = HAND_SIZE  # opening hand; Uno+ deals 9 (see uno/plus.py)
 
     __slots__ = (
         "_dead_passes",
@@ -174,10 +175,10 @@ class UnoState:
         self.hands = [[0] * NUM_CARDS, [0] * NUM_CARDS]
         self.hand_size = [0, 0]
         for p in (0, 1):
-            for _ in range(HAND_SIZE):
+            for _ in range(self.DEAL_SIZE):
                 card = deck.pop()
                 self.hands[p][card] += 1
-            self.hand_size[p] = HAND_SIZE
+            self.hand_size[p] = self.DEAL_SIZE
         start = deck.pop()
         while start >= WILD or start % NUM_RANKS > 9:
             deck.insert(0, start)  # back to the bottom, then flip again
