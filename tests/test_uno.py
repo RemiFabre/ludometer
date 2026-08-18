@@ -112,7 +112,7 @@ def test_one_hand_is_its_own_game():
         state = UnoState.new_game(seed=seed, hand_limit=1)
         play_out(state, rng)
         assert state.is_terminal
-        assert state.hand_index == 1
+        assert state.hand_index == 0  # the one hand played, 0-indexed
         assert state.outcome() == state.segment_values[-1]
         assert state.outcome() in (1.0, -1.0)
 
@@ -259,6 +259,84 @@ def test_self_play_plays_a_whole_hand_as_one_episode():
     assert set(np.abs(record.values).round(3).tolist()) == {1.0}
 
 
+def test_illegal_applies_raise_like_azul():
+    state = UnoState.new_game(seed=4)
+    player = state.current_player
+    hand = state.hands[player]
+    # a held colored card that matches neither the color nor the top rank
+    color = state.current_color
+    rank = state.discard[-1] % 13
+    bad = next(
+        (
+            c
+            for c in range(52)
+            if hand[c] and c // 13 != color and c % 13 != rank
+        ),
+        None,
+    )
+    if bad is not None:
+        with pytest.raises(ValueError):
+            state.clone().apply(bad)
+    if state.legal_actions() != [DRAW]:
+        with pytest.raises(ValueError):
+            state.clone().apply(DRAW)
+
+
+def test_the_hand_limit_backstop_goes_to_the_score_leader():
+    """A rating match truncated at the limit belongs to whoever leads on
+    points, even if the other player won the very last hand."""
+    state = UnoState.new_game(seed=11, hand_limit=2)
+    player = state.current_player
+    card = state.current_color * 13 + 5
+    state.hands[player] = [0] * NUM_CARDS
+    state.hands[player][card] = 1
+    state.hand_size[player] = 1
+    state.apply(card)  # hand 1: `player` banks the points
+    leader = player
+    assert state.scores[leader] > 0 and not state.is_terminal
+    # hand 2: the OTHER player goes out against an empty-ish hand (few points)
+    other = 1 - leader
+    state.current_player = other
+    card2 = state.current_color * 13 + 5
+    state.hands[other] = [0] * NUM_CARDS
+    state.hands[other][card2] = 1
+    state.hand_size[other] = 1
+    state.hands[leader] = [0] * NUM_CARDS
+    state.hands[leader][3] = 1  # a red 3: three points on the table
+    state.hand_size[leader] = 1
+    state.apply(card2)
+    assert state.is_terminal
+    if state.scores[leader] > state.scores[other]:
+        assert state.outcome() == (1.0 if leader == 0 else -1.0)
+
+
+def test_a_search_horizon_is_never_decided_by_the_carried_score():
+    """The paid-for trap (NEXT_GAMES.md par.1): inside a match the truncated
+    search world is decided by the CURRENT hand, never the match score."""
+    state = UnoState.new_game(seed=3)
+    state.scores = [0, 200] if state.current_player == 0 else [200, 0]
+    root = state.search_root(random.Random(0))
+    mover = root.current_player
+    card = root.current_color * 13 + 5
+    root.hands[mover] = [0] * NUM_CARDS
+    root.hands[mover][card] = 1
+    root.hand_size[mover] = 1
+    root.apply(card)
+    assert root.is_terminal
+    assert root.outcome() == (1.0 if mover == 0 else -1.0)
+
+
+def test_both_terminal_paths_report_the_same_hand_count():
+    """hand_index counts finished hands the same way however the game ends."""
+    one = UnoState.new_game(seed=6, hand_limit=1)
+    play_out(one, random.Random(1))
+    assert one.hand_index == 0  # one hand played, index of the last hand
+    assert len(one.segment_values) == 1
+    match = UnoState.new_game(seed=6)
+    play_out(match, random.Random(1))
+    assert len(match.segment_values) == match.hand_index + 1
+
+
 def test_the_search_horizon_ends_with_the_current_hand():
     """Inside a match, a search must not bootstrap across a hand boundary."""
     state = UnoState.new_game(seed=5)
@@ -271,5 +349,5 @@ def test_the_search_horizon_ends_with_the_current_hand():
     # play the horizon out: the game ends with the hand, and the hand decides
     play_out(root, random.Random(3))
     assert root.is_terminal
-    assert root.hand_index == state.hand_index + 1
+    assert root.hand_index == state.hand_index  # the horizon hand, 0-indexed
     assert root.outcome() == root.segment_values[-1]

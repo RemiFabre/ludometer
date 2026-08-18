@@ -242,9 +242,19 @@ class TrainConfig:
             raise ValueError("pretrain needs pretrain_epochs >= 1")
         # Both game names must resolve NOW: a typo in eval_game would otherwise
         # only surface inside an eval worker process, hours into the run.
-        get_game(self.game)
+        spec = get_game(self.game)
         if self.eval_game:
             get_game(self.eval_game)
+        if self.tree_reuse and not getattr(spec.state_cls, "TREE_REUSE_OK", True):
+            raise ValueError(
+                f"tree_reuse is a silent no-op for {self.game}: a kept subtree "
+                "is a determinization the reuse guard always rejects"
+            )
+        if self.margin_head and self.game.startswith("uno"):
+            raise ValueError(
+                "the margin target tanh(diff/20) is Azul's scale; Uno hand "
+                "scores saturate it (tanh(50/20)=0.99) - retune MARGIN_SCALE first"
+            )
         if self.selfplay not in ("workers", "batched"):
             raise ValueError(
                 f"unknown selfplay engine {self.selfplay!r} (workers | batched)"

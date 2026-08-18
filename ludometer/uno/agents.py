@@ -79,7 +79,9 @@ class UnoGreedyAgent(Agent):
         for action in legal:
             card = _card_of(action)
             wild = card >= WILD
-            # non-wild first, then most points, then the color we hold most of
+            # non-wild first, then most points; a wild declares the color we
+            # hold most of (colored plays tie-break by action id — this agent
+            # is a rated Elo anchor, so its behaviour is frozen as-is).
             key = (
                 0 if wild else 1,
                 CARD_POINTS[card],
@@ -114,12 +116,14 @@ class UnoHeuristicAgent(Agent):
         best, best_score = legal[0], -1e30
         for action in legal:
             if action == DRAW:
-                score = -1e6
+                score = -1e6  # unreachable in plain Uno; real for Uno+ stacks
             else:
                 card = _card_of(action)
                 score = float(CARD_POINTS[card])  # get the expensive cards out
                 if mine == 1:
-                    score += 1e6  # this action empties the hand and wins it
+                    # uniform across the legal plays in plain Uno (every play
+                    # goes out); kept because Uno+ mixes plays with DRAW
+                    score += 1e6
                 if card >= WILD:
                     score -= self.wild_cost  # a wild is always playable later
                     if action % 4 == want:

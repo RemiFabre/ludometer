@@ -51,6 +51,7 @@ class Connect4State:
 
     ACTION_SPACE: int = ACTION_SPACE
     ENCODED_SIZE: int = ENCODED_SIZE
+    num_players: int = 2
 
     __slots__ = ("finished", "mask", "ply", "position", "scores", "winner")
 

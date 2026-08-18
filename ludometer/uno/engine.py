@@ -113,9 +113,15 @@ class UnoState:
     ACTION_SPACE: int = ACTION_SPACE
     ENCODED_SIZE: int = ENCODED_SIZE
     DEAL_SIZE: int = HAND_SIZE  # opening hand; Uno+ deals 9 (see uno/plus.py)
+    num_players: int = 2  # interface parity with AzulState (generic drivers)
+    # Tree reuse can never fire here: a kept subtree's root is a determinized
+    # world whose fingerprint (it embeds both hands) never matches the real
+    # state, so the knob would be a silent no-op. TrainConfig rejects it.
+    TREE_REUSE_OK: bool = False
 
     __slots__ = (
         "_dead_passes",
+        "_horizon",
         "current_color",
         "current_player",
         "deck",
@@ -148,6 +154,9 @@ class UnoState:
         self.segment_values: list[float] = []
         self.finished = False
         self._dead_passes = 0
+        #: True on search_root clones: this world's hand_limit is a search
+        #: horizon, so a limit exit is decided by the hand, never the score.
+        self._horizon = False
         self.rng = random.Random()
 
     # ------------------------------------------------------------------ setup
@@ -207,6 +216,7 @@ class UnoState:
         other.segment_values = list(self.segment_values)
         other.finished = self.finished
         other._dead_passes = self._dead_passes
+        other._horizon = self._horizon
         rng = _NEW_RANDOM(random.Random)
         rng.setstate(self.rng.getstate())
         other.rng = rng
@@ -296,6 +306,8 @@ class UnoState:
         opponent = 1 - player
 
         if action_id == DRAW:
+            if self._has_playable(player):
+                raise ValueError("draw is only legal when nothing is playable")
             if self._draw(player, 1) == 0:
                 self._dead_passes += 1
                 if self._dead_passes >= 2:  # nobody can move and nothing to draw
@@ -320,6 +332,14 @@ class UnoState:
         hand = self.hands[player]
         if not hand[card]:
             raise ValueError(f"action {action_id}: no {CARD_NAMES[card]} in hand")
+        top = self.discard[-1]
+        if card < WILD and card // NUM_RANKS != self.current_color and not (
+            top < WILD and card % NUM_RANKS == top % NUM_RANKS
+        ):
+            raise ValueError(
+                f"action {action_id}: {CARD_NAMES[card]} matches neither the "
+                f"color nor the rank of {CARD_NAMES[top]}"
+            )
         hand[card] -= 1
         self.hand_size[player] -= 1
         self.discard.append(card)
@@ -368,10 +388,13 @@ class UnoState:
             if self.scores[winner] >= TARGET_SCORE:
                 self.finished = True
                 return
-        self.hand_index += 1
-        if self.hand_index >= self.hand_limit:
+        # `hand_index` stays the 0-based index of the last finished hand on
+        # EVERY terminal path, so hands-played is hand_index + 1 however the
+        # game ends; it only advances when the next hand is actually dealt.
+        if self.hand_index + 1 >= self.hand_limit:
             self.finished = True
             return
+        self.hand_index += 1
         self.first_player = 1 - self.first_player
         self._deal()
 
@@ -383,9 +406,16 @@ class UnoState:
             return 1.0
         if self.scores[1] >= TARGET_SCORE and self.scores[0] < TARGET_SCORE:
             return -1.0
-        # Nobody reached the target, so the game ended on `hand_limit`: either a
-        # single-hand training episode or a search horizon (see `search_root`).
-        # Both mean the same thing — the hand just played is the whole result.
+        # Nobody reached the target, so the game ended on `hand_limit`. For a
+        # single-hand training episode or a search horizon the hand just played
+        # is the whole result — pricing a horizon by the carried match score is
+        # exactly the value-function trap in NEXT_GAMES.md §1. A *rating* match
+        # truncated at the MAX_HANDS backstop, though, belongs to whoever
+        # leads on points, like every card game scores an interrupted session.
+        if self.hand_limit > 1 and not self._horizon:
+            if self.scores[0] != self.scores[1]:
+                return 1.0 if self.scores[0] > self.scores[1] else -1.0
+            return 0.0
         return self.segment_values[-1] if self.segment_values else 0.0
 
     # ---------------------------------------------------- search integration
@@ -441,6 +471,7 @@ class UnoState:
         # ~0 of a freshly dealt hand and quietly avoids winning (measured: 41%
         # of hands won, 0% of matches).
         child.hand_limit = child.hand_index + 1
+        child._horizon = True
         me = self.current_player
         unseen: list[int] = []
         for card in range(NUM_CARDS):

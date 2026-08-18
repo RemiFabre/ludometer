@@ -91,6 +91,7 @@ class UnoPlusState(UnoState):
         other.segment_values = list(self.segment_values)
         other.finished = self.finished
         other._dead_passes = self._dead_passes
+        other._horizon = self._horizon
         other.pending_draw = self.pending_draw
         other.pending_kind = self.pending_kind
         other.known = [list(self.known[0]), list(self.known[1])]
@@ -142,6 +143,8 @@ class UnoPlusState(UnoState):
             return
 
         if action_id == DRAW:
+            if not self._may_draw() and self._has_playable(player):
+                raise ValueError("draw is barred (cap/exhausted) and plays exist")
             if self._may_draw() and self._draw(player, 1):
                 self._dead_passes = 0
             else:
@@ -171,6 +174,14 @@ class UnoPlusState(UnoState):
         hand = self.hands[player]
         if not hand[card]:
             raise ValueError(f"action {action_id}: card {card} not in hand")
+        top = self.discard[-1]
+        if (
+            not self.pending_draw
+            and card < WILD
+            and card // NUM_RANKS != self.current_color
+            and not (top < WILD and card % NUM_RANKS == top % NUM_RANKS)
+        ):
+            raise ValueError(f"action {action_id}: matches neither color nor rank")
         hand[card] -= 1
         self.hand_size[player] -= 1
         self.discard.append(card)
@@ -245,6 +256,7 @@ class UnoPlusState(UnoState):
         the remainder is determinized. Horizon: the current hand (see base)."""
         child = self.clone()
         child.hand_limit = child.hand_index + 1
+        child._horizon = True
         me = self.current_player
         known = self.known[me]
         unseen: list[int] = []

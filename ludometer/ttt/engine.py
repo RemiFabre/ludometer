@@ -47,6 +47,7 @@ class TicTacToeState:
 
     ACTION_SPACE: int = ACTION_SPACE
     ENCODED_SIZE: int = ENCODED_SIZE
+    num_players: int = 2
 
     __slots__ = ("finished", "me", "ply", "scores", "them", "winner")
 
