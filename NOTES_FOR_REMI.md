@@ -4,6 +4,19 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — ttt1: the calibration flatline, in both metrics, in 2.1 minutes
+
+The first solved game through the full pipeline, and the ludometer passes its own
+calibration test. **Elo:** +351 at zero games (that is the 96-sim search alone), one jump
+to ~+550 after the first 256 games, then dead flat — every later checkpoint draws its
+predecessor 0.5. **% optimal** (the headline for solved games, on the 2,000-position
+suite): 94.0% at zero games → saturated at ~97.8% by game 768 → never moves again.
+Blunder rate settles at ~2.5%. The residual ~2% is the *evaluator's* 64-sim budget, not
+missing knowledge — the same final checkpoint scores 99.2% optimal at 256 sims. On the
+combined chart, tic-tac-toe's entire 30k-decision budget is a sliver that ends before
+Azul's first bend. If the study's statistics did not scream "trivial" here, they would be
+broken; they scream it.
+
 ## 2026-08-19 — uno1 finished: Uno holds about +650 Elo of learnable skill, and stops
 
 `runs/uno1` completed its 120,000 hands cleanly (~4.8 h wall time, 59 eval points).
