@@ -4,6 +4,23 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — Perfect play is ratable after all, and tic-tac-toe's ceiling is *reached*
+
+Rémi's observation, confirmed: "perfect play has unbounded Elo" only holds while the
+opponent loses every game. Once the agent draws, the fit is finite. So `ttt:perfect` /
+`c4:perfect` now exist (exact WDL-optimal moves from the solver, random among the optimal
+set), the gauntlet learned `--game`, and a 200-games-per-pairing tic-tac-toe gauntlet
+(random anchored at 0) says:
+
+perfect +527 ± 25, **ttt1-net@256sims +519 ± 25** (head-to-head with perfect: 0.50 — all
+draws), net@64sims +506, heuristic +488, greedy +381. The trained net is statistically
+indistinguishable from perfect play. Even against random, perfect only scores 0.95: from a
+drawn game it cannot force wins against accidental good defense, which is exactly why its
+rating stays bounded. The measured line is on the tictactoe panel of web/compare.html.
+
+Connect Four gets the same treatment once c4_1 exists (and once the solver proves it can
+afford the opening — to be probed when the suite build frees the CPU).
+
 ## 2026-08-19 — ttt1: the calibration flatline, in both metrics, in 2.1 minutes
 
 The first solved game through the full pipeline, and the ludometer passes its own

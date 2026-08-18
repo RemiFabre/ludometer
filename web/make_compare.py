@@ -77,6 +77,10 @@ RUN_REFS = [
 #: pre-rated baseline reference lines per game (from the journal's gauntlets)
 BASELINE_ELOS = {
     "uno": (("uno:greedy", 572.0), ("uno:heuristic", 396.0)),
+    # measured by gauntlet (200 games/pairing, random=0): perfect play is
+    # ratable because the trained net draws it - +527 +/- 25, and the net at
+    # 256 sims sits at +519: the ceiling is reached, not just visible.
+    "tictactoe": (("perfect play", 526.6),),
 }
 
 
