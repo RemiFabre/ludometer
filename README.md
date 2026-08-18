@@ -46,7 +46,8 @@ games is the *shape* of the curve.
   [Hugging Face Space](https://huggingface.co/spaces/RemiFabre/faience); `web/ingest/`
   is the small companion Space that collects shared games into the public dataset
   [faience-games](https://huggingface.co/datasets/RemiFabre/faience-games), and the old
-  GitHub Pages address serves a moved notice plus a playable fallback at `classic/`
+  GitHub Pages address serves a moved notice (an unlinked emergency fallback stays
+  deployed at `classic/`)
 
 ## Play in your browser (no install)
 
@@ -56,8 +57,9 @@ The public game is called **Faïence** — a free, open-source implementation of
 of Azul, with its own code and artwork. It lives on
 [Hugging Face](https://huggingface.co/spaces/RemiFabre/faience); the original address,
 [remifabre.github.io/ludometer](https://remifabre.github.io/ludometer/), shows a moved
-notice with a button (and keeps the previous build playable at `classic/`), so every
-link already shared keeps working. How many people play it, and how the games go,
+notice with a button, so every link already shared keeps working. (The previous build
+stays deployed at `classic/` as an unlinked emergency fallback; it is not advertised
+because games played there are never recorded.) How many people play it, and how the games go,
 is counted by an anonymous, cookie-free tally that is
 **[public for anyone to read](https://faience.goatcounter.com)** — that link is also in
 the game itself, so players can see exactly what is recorded (visits, games dealt, and

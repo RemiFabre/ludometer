@@ -12,7 +12,9 @@ What you need for editing your posts:
 - **The play link is https://remifabre-faience.static.hf.space/** — that is the one to
   put everywhere. The old remifabre.github.io/ludometer/ address now shows a small
   "the game has moved" page with a button (same social card as before, so old links
-  still unfurl), and keeps the previous build playable at `classic/` as a fallback.
+  still unfurl). The previous build stays deployed at `classic/` as an emergency
+  fallback but is deliberately not linked from the stub (your call, 2026-08-18):
+  games played there are never recorded, so everyone is pointed at the new address.
 - **Every finished or abandoned game is shared by default**, with a visible
   "Share played games" switch in the game's Settings and honest text in the About
   panel. Records go to the ingest Space (https://remifabre-faience-ingest.hf.space,
