@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="refresh" content="60" />
+<title>Ludometer Cross-Game Comparison</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  color-scheme: dark;
+  --plane: #0b1013; --surface: #151c20; --surface-2: #1b2429;
+  --ink: #eaf0f1; --ink-2: #9dafb5; --muted: #6d8188;
+  --grid: #1f2a2f; --axis: #36484f; --hairline: rgba(234,240,241,0.10);
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b; --accent: #3987e5;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ui-sans-serif, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --r: 10px;
+}
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--plane); color: var(--ink);
+  font-family: var(--sans); font-size: 15px; line-height: 1.55;
+  padding: 0 22px 72px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* masthead ------------------------------------------------------------- */
+.masthead { padding: 46px 0 26px; border-bottom: 1px solid var(--hairline); }
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.brand h1 {
+  font-size: 27px; margin: 0; font-weight: 600; letter-spacing: -0.015em;
+}
+.thesis {
+  font-family: var(--serif); font-style: italic; color: var(--ink-2); font-size: 17px;
+}
+.masthead-meta {
+  margin: 14px 0 0; display: flex; gap: 22px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.eyebrow {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted);
+}
+.cta {
+  margin-left: auto; text-decoration: none; white-space: nowrap;
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface-2); color: var(--accent);
+}
+.cta:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); }
+
+/* panels --------------------------------------------------------------- */
+.panel { padding: 34px 0 6px; border-bottom: 1px solid var(--hairline); }
+.panel-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 18px; flex-wrap: wrap;
+}
+.run-id { display: flex; flex-direction: column; gap: 2px; }
+.run-id h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.panel-secondary .run-id h2 { font-size: 19px; }
+.panel-state { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--hairline); background: var(--surface-2); color: var(--ink);
+}
+.pill .glyph { font-size: 10px; line-height: 1; }
+.pill-run { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.pill-run .glyph { animation: beat 2.4s ease-in-out infinite; }
+.pill-done { color: var(--ink-2); }
+.pill-failed { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 50%, transparent); }
+.pill-unknown { color: var(--muted); }
+@keyframes beat { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
+.hb { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.hb-stale { color: var(--crit); }
+.hb-warn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 50%, transparent);
+  padding: 3px 8px; border-radius: 999px;
+}
+.run-note {
+  margin: 16px 0 0; font-family: var(--serif); font-size: 15.5px; color: var(--ink-2);
+  border-left: 2px solid var(--axis); padding-left: 14px;
+}
+.integrity {
+  margin: 14px 0 0; font-family: var(--mono); font-size: 12px; color: var(--warn);
+}
+
+/* tiles ---------------------------------------------------------------- */
+.tiles {
+  margin: 22px 0 26px; display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+}
+.tile {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r);
+  padding: 14px 16px 15px; display: flex; flex-direction: column; gap: 4px;
+}
+.tile-label {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--muted);
+}
+.tile-value { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.tile-value .u {
+  font-size: 13px; font-weight: 400; color: var(--ink-2); margin-left: 6px; letter-spacing: 0;
+}
+.tile-sub { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.tile-hero { grid-column: span 2; background: var(--surface-2); }
+.tile-hero .tile-value { font-size: 54px; letter-spacing: -0.03em; }
+.tile-hero .tile-value .u { font-size: 17px; }
+
+/* figures -------------------------------------------------------------- */
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.figure {
+  margin: 0; background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r); padding: 18px 18px 14px; min-width: 0;
+}
+.figure-wide { grid-column: 1 / -1; }
+.fig-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.fig-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+.fig-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); max-width: 62ch; }
+.readout { display: flex; gap: 20px; flex-wrap: wrap; }
+.stat-inline { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.stat-inline .k {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--muted);
+}
+.stat-inline .v {
+  font-family: var(--mono); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.stat-inline .v.small { font-size: 12.5px; color: var(--ink-2); }
+.stat-inline .v .u { font-size: 10.5px; color: var(--muted); margin-left: 4px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0 2px; }
+.legend-item {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+}
+.key { width: 18px; height: 8px; overflow: visible; flex: none; }
+.plot { position: relative; margin-top: 4px; }
+/* Each chart carries its natural pixel width inline, so SVG text renders at its
+   nominal size. max-width lets it shrink on narrow viewports but never blow up. */
+svg.chart { display: block; max-width: 100%; height: auto; overflow: visible; }
+svg.chart .grid { stroke: var(--grid); stroke-width: 1; }
+svg.chart .axis { stroke: var(--axis); stroke-width: 1; }
+svg.chart .ref { stroke: var(--axis); stroke-width: 1; }
+svg.chart .series-line { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+svg.chart text { font-family: var(--mono); fill: var(--muted); }
+svg.chart .tick { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+svg.chart .tick-y { text-anchor: end; }
+svg.chart .tick-x { text-anchor: middle; }
+svg.chart .axis-title { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+svg.chart .ref-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+svg.chart .point-label { font-size: 11px; fill: #9dafb5; font-variant-numeric: tabular-nums; }
+svg.chart .plot-note { font-size: 11px; fill: #9dafb5; }
+svg.chart .crosshair { stroke: var(--axis); stroke-width: 1; opacity: 0; }
+svg.chart .hotdot { fill: none; stroke: var(--ink); stroke-width: 2; opacity: 0; }
+svg.chart.hot .crosshair, svg.chart.hot .hotdot { opacity: 1; }
+
+/* tooltip -------------------------------------------------------------- */
+.tip {
+  position: absolute; pointer-events: none; z-index: 20; min-width: 130px;
+  background: #1b2429; border: 1px solid var(--hairline); border-radius: 8px;
+  padding: 9px 11px; box-shadow: 0 10px 26px rgba(0,0,0,0.45);
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+  opacity: 0; transition: opacity 0.09s linear;
+}
+.tip.on { opacity: 1; }
+.tip .tip-x { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
+.tip .tip-row { display: flex; align-items: center; gap: 7px; margin-top: 5px; white-space: nowrap; }
+.tip .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.tip .tip-name { color: var(--ink-2); }
+.tip .tip-val { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* tables & details ----------------------------------------------------- */
+details { margin-top: 14px; }
+summary {
+  cursor: pointer; font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+}
+summary:hover { color: var(--ink-2); }
+.table-wrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 11.5px; }
+th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--muted); font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
+td { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+th:first-child, td:first-child { text-align: left; }
+.table-note { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.cfg { margin: 12px 0 0; display: grid; gap: 2px 18px; }
+.cfg-row { display: flex; gap: 14px; border-bottom: 1px solid var(--grid); padding: 4px 0; }
+.cfg dt { font-family: var(--mono); font-size: 11.5px; color: var(--muted); min-width: 190px; }
+.cfg dd {
+  margin: 0; font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.empty {
+  margin: 26px 0; font-family: var(--mono); font-size: 12px; color: var(--muted);
+  border: 1px dashed var(--grid); border-radius: 8px; padding: 20px; text-align: center;
+}
+
+/* journal -------------------------------------------------------------- */
+.journal { padding: 40px 0 0; }
+.section-head { margin-bottom: 20px; }
+.section-head h2 { margin: 2px 0 0; font-size: 22px; font-weight: 600; }
+.section-sub { margin: 6px 0 0; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.prose {
+  font-family: var(--serif); font-size: 16.5px; line-height: 1.68; color: var(--ink-2);
+  max-width: 68ch;
+}
+.prose h2 {
+  font-family: var(--sans); font-size: 18px; font-weight: 600; color: var(--ink);
+  margin: 34px 0 10px; letter-spacing: -0.01em;
+}
+.prose h3 {
+  font-family: var(--sans); font-size: 16px; font-weight: 600; color: var(--ink);
+  margin: 30px 0 10px; letter-spacing: -0.005em;
+}
+.prose h2 + p, .prose h3 + p { margin-top: 0; }
+.prose h4, .prose h5, .prose h6 {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); margin: 24px 0 8px; font-weight: 500;
+}
+.prose p { margin: 0 0 14px; }
+.prose ul, .prose ol { margin: 0 0 16px; padding-left: 22px; }
+.prose li { margin: 0 0 7px; }
+.prose strong { color: var(--ink); font-weight: 600; }
+.prose code, .prose pre {
+  font-family: var(--mono); font-size: 13px; background: var(--surface);
+  border: 1px solid var(--hairline); border-radius: 5px;
+}
+.prose code { padding: 1px 5px; color: var(--ink); }
+.prose pre { padding: 12px 14px; overflow-x: auto; }
+.prose pre code { border: 0; padding: 0; background: none; }
+.md-rule { border: 0; border-top: 1px solid var(--grid); margin: 26px 0; }
+
+.foot {
+  margin-top: 46px; padding-top: 18px; border-top: 1px solid var(--hairline);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  display: flex; gap: 20px; flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .tile-hero { grid-column: 1 / -1; }
+  .tile-hero .tile-value { font-size: 44px; }
+  /* The wide chart is the only one that has to shrink below 1:1 here; scale its
+     in-SVG type up in user units so it lands near its nominal size again. */
+  .figure-wide svg.chart .tick { font-size: 16px; }
+  .figure-wide svg.chart .axis-title, .figure-wide svg.chart .ref-label { font-size: 15px; }
+  .figure-wide svg.chart .point-label, .figure-wide svg.chart .plot-note { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head><body>
+<div class="wrap"><header class="masthead"><div class="brand"><h1>Ludometer · cross-game comparison</h1><p class="thesis">What does each game’s learning curve look like — and where does the slope die?</p><a class="cta" href="dashboard.html">Live training monitor →</a></div><div class="masthead-meta"><span>generated 2026-08-18 23:26:42</span><span>3 runs</span><span>auto-refresh 60s</span></div></header><section class="panel"><div class="grid"><figure class="figure figure-wide"><div class="fig-head"><div><h3 class="fig-title">The shape of learning, game against game</h3><p class="fig-sub">Each curve normalised to its own run: 0 = its games-0 rating, 1 = its best checkpoint. Elo numbers are never compared across games — only this shape is. The marked point is where the smoothed slope first stays below half its early value.</p></div></div><div class="legend"><span class="legend-item"><svg class="key" viewBox="0 0 18 8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#3987e5" stroke-width="2" /></svg>Azul run1</span><span class="legend-item"><svg class="key" viewBox="0 0 18 8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#6d8188" stroke-width="2" stroke-dasharray="5 4" /></svg>Azul run2 (256 sims) — context</span><span class="legend-item"><svg class="key" viewBox="0 0 18 8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#d95926" stroke-width="2" /></svg>Uno</span></div><div class="plot"><svg class="chart" style="width:1080px" viewBox="0 0 1080 360" preserveAspectRatio="xMidYMid meet" role="img" tabindex="0" aria-label="Normalised learning-curve shapes" data-chart="{&quot;plot&quot;:[54,18,1008,302],&quot;series&quot;:[{&quot;n&quot;:&quot;Azul run1&quot;,&quot;c&quot;:&quot;#3987e5&quot;,&quot;p&quot;:[[54.0,299.2,&quot;0% of budget&quot;,&quot;0.00 of range&quot;],[75.0,290.9,&quot;2% of budget&quot;,&quot;0.03 of range&quot;],[96.0,284.3,&quot;4% of budget&quot;,&quot;0.06 of range&quot;],[117.0,267.7,&quot;6% of budget&quot;,&quot;0.13 of range&quot;],[138.0,255.0,&quot;8% of budget&quot;,&quot;0.18 of range&quot;],[159.0,241.4,&quot;10% of budget&quot;,&quot;0.23 of range&quot;],[180.0,228.4,&quot;12% of budget&quot;,&quot;0.29 of range&quot;],[201.0,217.1,&quot;15% of budget&quot;,&quot;0.33 of range&quot;],[222.0,207.8,&quot;17% of budget&quot;,&quot;0.37 of range&quot;],[243.0,197.8,&quot;19% of budget&quot;,&quot;0.41 of range&quot;],[264.0,192.9,&quot;21% of budget&quot;,&quot;0.43 of range&quot;],[285.0,187.5,&quot;23% of budget&quot;,&quot;0.45 of range&quot;],[306.0,182.5,&quot;25% of budget&quot;,&quot;0.47 of range&quot;],[327.0,175.6,&quot;27% of budget&quot;,&quot;0.50 of range&quot;],[348.0,169.2,&quot;29% of budget&quot;,&quot;0.52 of range&quot;],[369.0,161.3,&quot;31% of budget&quot;,&quot;0.56 of range&quot;],[390.0,153.5,&quot;33% of budget&quot;,&quot;0.59 of range&quot;],[411.0,146.2,&quot;35% of budget&quot;,&quot;0.62 of range&quot;],[432.0,141.6,&quot;38% of budget&quot;,&quot;0.64 of range&quot;],[453.0,137.0,&quot;40% of budget&quot;,&quot;0.65 of range&quot;],[474.0,135.7,&quot;42% of budget&quot;,&quot;0.66 of range&quot;],[495.0,134.8,&quot;44% of budget&quot;,&quot;0.66 of range&quot;],[516.0,132.2,&quot;46% of budget&quot;,&quot;0.67 of range&quot;],[537.0,130.7,&quot;48% of budget&quot;,&quot;0.68 of range&quot;],[558.0,127.4,&quot;50% of budget&quot;,&quot;0.69 of range&quot;],[579.0,125.9,&quot;52% of budget&quot;,&quot;0.70 of range&quot;],[600.0,122.3,&quot;54% of budget&quot;,&quot;0.71 of range&quot;],[621.0,119.0,&quot;56% of budget&quot;,&quot;0.73 of range&quot;],[642.0,116.7,&quot;58% of budget&quot;,&quot;0.74 of range&quot;],[663.0,116.3,&quot;60% of budget&quot;,&quot;0.74 of range&quot;],[684.0,111.3,&quot;62% of budget&quot;,&quot;0.76 of range&quot;],[705.0,110.8,&quot;65% of budget&quot;,&quot;0.76 of range&quot;],[726.0,108.3,&quot;67% of budget&quot;,&quot;0.77 of range&quot;],[747.0,103.7,&quot;69% of budget&quot;,&quot;0.79 of range&quot;],[768.0,102.1,&quot;71% of budget&quot;,&quot;0.79 of range&quot;],[789.0,97.5,&quot;73% of budget&quot;,&quot;0.81 of range&quot;],[810.0,90.6,&quot;75% of budget&quot;,&quot;0.84 of range&quot;],[831.0,86.4,&quot;77% of budget&quot;,&quot;0.86 of range&quot;],[852.0,83.2,&quot;79% of budget&quot;,&quot;0.87 of range&quot;],[873.0,78.2,&quot;81% of budget&quot;,&quot;0.89 of range&quot;],[894.0,76.5,&quot;83% of budget&quot;,&quot;0.90 of range&quot;],[915.0,73.4,&quot;85% of budget&quot;,&quot;0.91 of range&quot;],[936.0,71.6,&quot;88% of budget&quot;,&quot;0.92 of range&quot;],[957.0,68.4,&quot;90% of budget&quot;,&quot;0.93 of range&quot;],[978.0,63.9,&quot;92% of budget&quot;,&quot;0.95 of range&quot;],[999.0,58.5,&quot;94% of budget&quot;,&quot;0.97 of range&quot;],[1020.0,56.2,&quot;96% of budget&quot;,&quot;0.98 of range&quot;],[1041.0,53.5,&quot;98% of budget&quot;,&quot;0.99 of range&quot;],[1062.0,51.2,&quot;100% of budget&quot;,&quot;1.00 of range&quot;]]},{&quot;n&quot;:&quot;Azul run2 (256 sims)&quot;,&quot;c&quot;:&quot;#6d8188&quot;,&quot;p&quot;:[[54.0,299.2,&quot;0% of budget&quot;,&quot;0.00 of range&quot;],[75.9,287.4,&quot;2% of budget&quot;,&quot;0.05 of range&quot;],[97.8,275.2,&quot;4% of budget&quot;,&quot;0.10 of range&quot;],[119.7,247.6,&quot;7% of budget&quot;,&quot;0.21 of range&quot;],[141.7,219.5,&quot;9% of budget&quot;,&quot;0.32 of range&quot;],[163.6,194.3,&quot;11% of budget&quot;,&quot;0.42 of range&quot;],[185.5,172.9,&quot;13% of budget&quot;,&quot;0.51 of range&quot;],[207.4,152.9,&quot;15% of budget&quot;,&quot;0.59 of range&quot;],[229.3,142.2,&quot;17% of budget&quot;,&quot;0.63 of range&quot;],[251.2,134.5,&quot;20% of budget&quot;,&quot;0.66 of range&quot;],[273.1,128.4,&quot;22% of budget&quot;,&quot;0.69 of range&quot;],[295.0,119.0,&quot;24% of budget&quot;,&quot;0.73 of range&quot;],[317.0,114.1,&quot;26% of budget&quot;,&quot;0.75 of range&quot;],[338.9,109.5,&quot;28% of budget&quot;,&quot;0.77 of range&quot;],[360.8,103.2,&quot;30% of budget&quot;,&quot;0.79 of range&quot;],[382.7,99.1,&quot;33% of budget&quot;,&quot;0.81 of range&quot;],[404.6,97.6,&quot;35% of budget&quot;,&quot;0.81 of range&quot;],[426.5,95.2,&quot;37% of budget&quot;,&quot;0.82 of range&quot;],[448.4,92.5,&quot;39% of budget&quot;,&quot;0.83 of range&quot;],[470.3,89.5,&quot;41% of budget&quot;,&quot;0.85 of range&quot;],[492.3,87.8,&quot;43% of budget&quot;,&quot;0.85 of range&quot;],[514.2,85.4,&quot;46% of budget&quot;,&quot;0.86 of range&quot;],[536.1,82.8,&quot;48% of budget&quot;,&quot;0.87 of range&quot;],[558.0,80.3,&quot;50% of budget&quot;,&quot;0.88 of range&quot;],[579.9,75.7,&quot;52% of budget&quot;,&quot;0.90 of range&quot;],[601.8,70.6,&quot;54% of budget&quot;,&quot;0.92 of range&quot;],[623.7,68.5,&quot;57% of budget&quot;,&quot;0.93 of range&quot;],[645.7,66.2,&quot;59% of budget&quot;,&quot;0.94 of range&quot;],[667.6,64.2,&quot;61% of budget&quot;,&quot;0.95 of range&quot;],[689.5,64.2,&quot;63% of budget&quot;,&quot;0.95 of range&quot;],[711.4,64.2,&quot;65% of budget&quot;,&quot;0.95 of range&quot;],[733.3,62.9,&quot;67% of budget&quot;,&quot;0.95 of range&quot;],[755.2,61.3,&quot;70% of budget&quot;,&quot;0.96 of range&quot;],[777.1,58.5,&quot;72% of budget&quot;,&quot;0.97 of range&quot;],[799.0,57.5,&quot;74% of budget&quot;,&quot;0.97 of range&quot;],[821.0,57.1,&quot;76% of budget&quot;,&quot;0.98 of range&quot;],[842.9,56.7,&quot;78% of budget&quot;,&quot;0.98 of range&quot;],[864.8,55.2,&quot;80% of budget&quot;,&quot;0.98 of range&quot;],[886.7,55.4,&quot;83% of budget&quot;,&quot;0.98 of range&quot;],[908.6,54.9,&quot;85% of budget&quot;,&quot;0.99 of range&quot;],[930.5,54.7,&quot;87% of budget&quot;,&quot;0.99 of range&quot;],[952.4,53.1,&quot;89% of budget&quot;,&quot;0.99 of range&quot;],[974.3,53.0,&quot;91% of budget&quot;,&quot;0.99 of range&quot;],[996.3,51.4,&quot;93% of budget&quot;,&quot;1.00 of range&quot;],[1018.2,52.3,&quot;96% of budget&quot;,&quot;1.00 of range&quot;],[1040.1,51.2,&quot;98% of budget&quot;,&quot;1.00 of range&quot;],[1062.0,51.3,&quot;100% of budget&quot;,&quot;1.00 of range&quot;]]},{&quot;n&quot;:&quot;Uno&quot;,&quot;c&quot;:&quot;#d95926&quot;,&quot;p&quot;:[[54.0,299.2,&quot;0% of budget&quot;,&quot;0.00 of range&quot;],[78.0,290.3,&quot;2% of budget&quot;,&quot;0.04 of range&quot;],[102.0,276.0,&quot;5% of budget&quot;,&quot;0.09 of range&quot;],[126.0,265.4,&quot;7% of budget&quot;,&quot;0.14 of range&quot;],[150.0,255.0,&quot;10% of budget&quot;,&quot;0.18 of range&quot;],[174.0,251.1,&quot;12% of budget&quot;,&quot;0.19 of range&quot;],[198.0,233.8,&quot;14% of budget&quot;,&quot;0.26 of range&quot;],[222.0,233.3,&quot;17% of budget&quot;,&quot;0.27 of range&quot;],[246.0,215.3,&quot;19% of budget&quot;,&quot;0.34 of range&quot;],[270.0,195.4,&quot;21% of budget&quot;,&quot;0.42 of range&quot;],[294.0,191.0,&quot;24% of budget&quot;,&quot;0.44 of range&quot;],[318.0,197.1,&quot;26% of budget&quot;,&quot;0.41 of range&quot;],[342.0,190.3,&quot;29% of budget&quot;,&quot;0.44 of range&quot;],[366.0,188.0,&quot;31% of budget&quot;,&quot;0.45 of range&quot;],[390.0,191.5,&quot;33% of budget&quot;,&quot;0.43 of range&quot;],[414.0,167.6,&quot;36% of budget&quot;,&quot;0.53 of range&quot;],[438.0,142.1,&quot;38% of budget&quot;,&quot;0.63 of range&quot;],[462.0,131.5,&quot;40% of budget&quot;,&quot;0.68 of range&quot;],[486.0,121.1,&quot;43% of budget&quot;,&quot;0.72 of range&quot;],[510.0,107.5,&quot;45% of budget&quot;,&quot;0.77 of range&quot;],[534.0,110.8,&quot;48% of budget&quot;,&quot;0.76 of range&quot;],[558.0,114.4,&quot;50% of budget&quot;,&quot;0.75 of range&quot;],[582.0,99.7,&quot;52% of budget&quot;,&quot;0.80 of range&quot;],[606.0,88.5,&quot;55% of budget&quot;,&quot;0.85 of range&quot;],[630.0,78.9,&quot;57% of budget&quot;,&quot;0.89 of range&quot;],[654.0,74.3,&quot;60% of budget&quot;,&quot;0.91 of range&quot;],[678.0,67.7,&quot;62% of budget&quot;,&quot;0.93 of range&quot;],[702.0,77.7,&quot;64% of budget&quot;,&quot;0.89 of range&quot;],[726.0,81.2,&quot;67% of budget&quot;,&quot;0.88 of range&quot;],[750.0,81.8,&quot;69% of budget&quot;,&quot;0.88 of range&quot;],[774.0,79.8,&quot;71% of budget&quot;,&quot;0.88 of range&quot;],[798.0,83.3,&quot;74% of budget&quot;,&quot;0.87 of range&quot;],[822.0,78.3,&quot;76% of budget&quot;,&quot;0.89 of range&quot;],[846.0,70.5,&quot;79% of budget&quot;,&quot;0.92 of range&quot;],[870.0,69.4,&quot;81% of budget&quot;,&quot;0.93 of range&quot;],[894.0,62.5,&quot;83% of budget&quot;,&quot;0.95 of range&quot;],[918.0,53.0,&quot;86% of budget&quot;,&quot;0.99 of range&quot;],[942.0,51.2,&quot;88% of budget&quot;,&quot;1.00 of range&quot;],[966.0,57.4,&quot;90% of budget&quot;,&quot;0.98 of range&quot;],[990.0,61.4,&quot;93% of budget&quot;,&quot;0.96 of range&quot;],[1014.0,62.3,&quot;95% of budget&quot;,&quot;0.96 of range&quot;],[1038.0,68.9,&quot;98% of budget&quot;,&quot;0.93 of range&quot;],[1062.0,68.1,&quot;100% of budget&quot;,&quot;0.93 of range&quot;]]}]}"><line x1="54" y1="299.17" x2="1062" y2="299.17" class="grid" /><text x="44" y="302.67" class="tick tick-y">0</text><line x1="54" y1="237.19" x2="1062" y2="237.19" class="grid" /><text x="44" y="240.69" class="tick tick-y">0.25</text><line x1="54" y1="175.2" x2="1062" y2="175.2" class="grid" /><text x="44" y="178.7" class="tick tick-y">0.5</text><line x1="54" y1="113.21" x2="1062" y2="113.21" class="grid" /><text x="44" y="116.71" class="tick tick-y">0.75</text><line x1="54" y1="51.22" x2="1062" y2="51.22" class="grid" /><text x="44" y="54.72" class="tick tick-y">1</text><text x="54" y="340" class="tick tick-x">0%</text><text x="154.8" y="340" class="tick tick-x">10%</text><text x="255.6" y="340" class="tick tick-x">20%</text><text x="356.4" y="340" class="tick tick-x">30%</text><text x="457.2" y="340" class="tick tick-x">40%</text><text x="558" y="340" class="tick tick-x">50%</text><text x="658.8" y="340" class="tick tick-x">60%</text><text x="759.6" y="340" class="tick tick-x">70%</text><text x="860.4" y="340" class="tick tick-x">80%</text><text x="961.2" y="340" class="tick tick-x">90%</text><text x="1062" y="340" class="tick tick-x">100%</text><line x1="54" y1="320" x2="1062" y2="320" class="axis" /><path d="M54 299.17 L75 290.89 L96 284.26 L117 267.75 L138 254.98 L159 241.45 L180 228.41 L201 217.08 L222 207.78 L243 197.78 L264 192.89 L285 187.54 L306 182.5 L327 175.58 L348 169.2 L369 161.33 L390 153.49 L411 146.16 L432 141.59 L453 137.02 L474 135.73 L495 134.83 L516 132.19 L537 130.67 L558 127.38 L579 125.91 L600 122.34 L621 119.03 L642 116.72 L663 116.31 L684 111.33 L705 110.82 L726 108.28 L747 103.74 L768 102.13 L789 97.47 L810 90.55 L831 86.42 L852 83.16 L873 78.22 L894 76.47 L915 73.41 L936 71.61 L957 68.43 L978 63.94 L999 58.54 L1020 56.19 L1041 53.47 L1062 51.22" class="series-line" stroke="#3987e5" stroke-width="2" opacity="1" /><circle cx="421.5" cy="141.59" r="4.5" fill="#3987e5" stroke="#151c20" stroke-width="2" /><path d="M54 299.17 L75.91 287.41 L97.83 275.23 L119.74 247.57 L141.65 219.49 L163.57 194.29 L185.48 172.93 L207.39 152.86 L229.3 142.18 L251.22 134.49 L273.13 128.42 L295.04 119 L316.96 114.09 L338.87 109.48 L360.78 103.16 L382.7 99.13 L404.61 97.63 L426.52 95.2 L448.43 92.49 L470.35 89.46 L492.26 87.79 L514.17 85.4 L536.09 82.85 L558 80.33 L579.91 75.73 L601.83 70.64 L623.74 68.51 L645.65 66.23 L667.57 64.2 L689.48 64.16 L711.39 64.24 L733.3 62.88 L755.22 61.28 L777.13 58.48 L799.04 57.52 L820.96 57.12 L842.87 56.71 L864.78 55.19 L886.7 55.4 L908.61 54.86 L930.52 54.69 L952.43 53.06 L974.35 53 L996.26 51.44 L1018.17 52.29 L1040.09 51.22 L1062 51.26" class="series-line" stroke="#6d8188" stroke-width="1.5" opacity="0.75" stroke-dasharray="4 4" /><path d="M54 299.17 L78 290.33 L102 276 L126 265.44 L150 255.03 L174 251.09 L198 233.84 L222 233.33 L246 215.29 L270 195.41 L294 190.96 L318 197.1 L342 190.28 L366 187.98 L390 191.53 L414 167.63 L438 142.1 L462 131.5 L486 121.06 L510 107.52 L534 110.78 L558 114.43 L582 99.72 L606 88.54 L630 78.9 L654 74.35 L678 67.74 L702 77.73 L726 81.23 L750 81.76 L774 79.81 L798 83.28 L822 78.31 L846 70.46 L870 69.38 L894 62.5 L918 53.03 L942 51.22 L966 57.4 L990 61.41 L1014 62.3 L1038 68.91 L1062 68.05" class="series-line" stroke="#d95926" stroke-width="2" opacity="1" /><circle cx="690" cy="67.74" r="4.5" fill="#d95926" stroke="#151c20" stroke-width="2" /><text x="1062" y="355" class="axis-title" text-anchor="end">fraction of the run&#x27;s budget (decisions)</text><text transform="translate(12 169) rotate(-90)" class="axis-title" text-anchor="middle">fraction of own Elo range</text><text x="421.5" y="127.59" class="point-label" text-anchor="middle">slope ½ at 36%</text><text x="690" y="53.74" class="point-label" text-anchor="middle">slope ½ at 63%</text><g class="hoverlay" aria-hidden="true"><line class="crosshair" x1="0" y1="18" x2="0" y2="320" /><circle class="hotdot" cx="-99" cy="-99" r="5.5" /></g></svg></div></figure></div></section><section class="panel"><h2>Absolute curves, one scale per game</h2><div class="grid"><figure class="figure"><div class="fig-head"><div><h3 class="fig-title">azul — Elo against decisions</h3><p class="fig-sub">Anchored to this game&#x27;s own baseline pool (random = 0).</p></div></div><div class="legend"><span class="legend-item"><svg class="key" viewBox="0 0 18 8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#3987e5" stroke-width="2" /></svg>Azul run1</span><span class="legend-item"><svg class="key" viewBox="0 0 18 8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#6d8188" stroke-width="2" stroke-dasharray="5 4" /></svg>Azul run2 (256 sims)</span></div><div class="plot"><svg class="chart" style="width:520px" viewBox="0 0 520 300" preserveAspectRatio="xMidYMid meet" role="img" tabindex="0" aria-label="azul Elo curve" data-chart="{&quot;plot&quot;:[54,18,448,242],&quot;series&quot;:[{&quot;n&quot;:&quot;Azul run1&quot;,&quot;c&quot;:&quot;#3987e5&quot;,&quot;p&quot;:[[54.0,243.3,&quot;0 decisions (0 games)&quot;,&quot;+125 Elo&quot;],[63.3,228.3,&quot;27.1k decisions (512 games)&quot;,&quot;+262 Elo&quot;],[72.7,209.2,&quot;54.3k decisions (1.0k games)&quot;,&quot;+435 Elo&quot;],[82.0,201.8,&quot;81.4k decisions (1.5k games)&quot;,&quot;+502 Elo&quot;],[91.3,195.5,&quot;109k decisions (2.0k games)&quot;,&quot;+559 Elo&quot;],[100.7,180.7,&quot;136k decisions (2.6k games)&quot;,&quot;+694 Elo&quot;],[110.0,179.8,&quot;163k decisions (3.1k games)&quot;,&quot;+702 Elo&quot;],[119.3,157.9,&quot;190k decisions (3.6k games)&quot;,&quot;+901 Elo&quot;],[128.7,152.4,&quot;217k decisions (4.1k games)&quot;,&quot;+951 Elo&quot;],[138.0,152.5,&quot;244k decisions (4.6k games)&quot;,&quot;+950 Elo&quot;],[147.3,145.4,&quot;271k decisions (5.1k games)&quot;,&quot;+1014 Elo&quot;],[156.7,141.9,&quot;298k decisions (5.6k games)&quot;,&quot;+1046 Elo&quot;],[166.0,139.4,&quot;326k decisions (6.1k games)&quot;,&quot;+1069 Elo&quot;],[175.3,132.1,&quot;353k decisions (6.7k games)&quot;,&quot;+1135 Elo&quot;],[184.7,133.4,&quot;380k decisions (7.2k games)&quot;,&quot;+1124 Elo&quot;],[194.0,119.2,&quot;407k decisions (7.7k games)&quot;,&quot;+1253 Elo&quot;],[203.3,117.7,&quot;434k decisions (8.2k games)&quot;,&quot;+1266 Elo&quot;],[212.7,109.6,&quot;461k decisions (8.7k games)&quot;,&quot;+1340 Elo&quot;],[222.0,102.4,&quot;488k decisions (9.2k games)&quot;,&quot;+1406 Elo&quot;],[231.3,105.7,&quot;515k decisions (9.7k games)&quot;,&quot;+1376 Elo&quot;],[240.7,101.9,&quot;543k decisions (10.2k games)&quot;,&quot;+1410 Elo&quot;],[250.0,100.4,&quot;570k decisions (10.8k games)&quot;,&quot;+1423 Elo&quot;],[259.3,104.7,&quot;597k decisions (11.3k games)&quot;,&quot;+1385 Elo&quot;],[268.7,99.0,&quot;624k decisions (11.8k games)&quot;,&quot;+1436 Elo&quot;],[278.0,95.6,&quot;651k decisions (12.3k games)&quot;,&quot;+1467 Elo&quot;],[287.3,96.1,&quot;678k decisions (12.8k games)&quot;,&quot;+1463 Elo&quot;],[296.7,88.0,&quot;705k decisions (13.3k games)&quot;,&quot;+1536 Elo&quot;],[306.0,99.1,&quot;732k decisions (13.8k games)&quot;,&quot;+1435 Elo&quot;],[315.3,85.5,&quot;760k decisions (14.3k games)&quot;,&quot;+1559 Elo&quot;],[324.7,83.1,&quot;787k decisions (14.8k games)&quot;,&quot;+1581 Elo&quot;],[334.0,87.3,&quot;814k decisions (15.4k games)&quot;,&quot;+1542 Elo&quot;],[343.3,86.4,&quot;841k decisions (15.9k games)&quot;,&quot;+1551 Elo&quot;],[352.7,80.2,&quot;868k decisions (16.4k games)&quot;,&quot;+1607 Elo&quot;],[362.0,83.5,&quot;895k decisions (16.9k games)&quot;,&quot;+1577 Elo&quot;],[371.3,73.5,&quot;922k decisions (17.4k games)&quot;,&quot;+1668 Elo&quot;],[380.7,70.1,&quot;949k decisions (17.9k games)&quot;,&quot;+1698 Elo&quot;],[390.0,80.3,&quot;977k decisions (18.4k games)&quot;,&quot;+1606 Elo&quot;],[399.3,62.5,&quot;1.0M decisions (18.9k games)&quot;,&quot;+1767 Elo&quot;],[408.7,57.3,&quot;1.0M decisions (19.5k games)&quot;,&quot;+1815 Elo&quot;],[418.0,57.8,&quot;1.1M decisions (20.0k games)&quot;,&quot;+1811 Elo&quot;],[427.3,57.8,&quot;1.1M decisions (20.5k games)&quot;,&quot;+1811 Elo&quot;],[436.7,61.6,&quot;1.1M decisions (21.0k games)&quot;,&quot;+1776 Elo&quot;],[446.0,55.9,&quot;1.1M decisions (21.5k games)&quot;,&quot;+1828 Elo&quot;],[455.3,45.7,&quot;1.2M decisions (22.0k games)&quot;,&quot;+1920 Elo&quot;],[464.7,50.9,&quot;1.2M decisions (22.5k games)&quot;,&quot;+1873 Elo&quot;],[474.0,45.7,&quot;1.2M decisions (23.0k games)&quot;,&quot;+1920 Elo&quot;],[483.3,44.5,&quot;1.2M decisions (23.6k games)&quot;,&quot;+1931 Elo&quot;],[492.7,35.4,&quot;1.3M decisions (24.1k games)&quot;,&quot;+2014 Elo&quot;],[502.0,36.8,&quot;1.3M decisions (24.6k games)&quot;,&quot;+2001 Elo&quot;]]},{&quot;n&quot;:&quot;Azul run2 (256 sims)&quot;,&quot;c&quot;:&quot;#6d8188&quot;,&quot;p&quot;:[[54.0,219.6,&quot;0 decisions (0 games)&quot;,&quot;+340 Elo&quot;],[63.3,213.4,&quot;27.1k decisions (512 games)&quot;,&quot;+397 Elo&quot;],[72.7,186.0,&quot;54.3k decisions (1.0k games)&quot;,&quot;+646 Elo&quot;],[82.0,174.4,&quot;81.4k decisions (1.5k games)&quot;,&quot;+752 Elo&quot;],[91.3,156.9,&quot;109k decisions (2.0k games)&quot;,&quot;+910 Elo&quot;],[100.7,125.5,&quot;136k decisions (2.6k games)&quot;,&quot;+1195 Elo&quot;],[110.0,117.9,&quot;163k decisions (3.1k games)&quot;,&quot;+1265 Elo&quot;],[119.3,100.3,&quot;190k decisions (3.6k games)&quot;,&quot;+1424 Elo&quot;],[128.7,101.7,&quot;217k decisions (4.1k games)&quot;,&quot;+1412 Elo&quot;],[138.0,88.6,&quot;244k decisions (4.6k games)&quot;,&quot;+1530 Elo&quot;],[147.3,89.2,&quot;271k decisions (5.1k games)&quot;,&quot;+1525 Elo&quot;],[156.7,91.7,&quot;298k decisions (5.6k games)&quot;,&quot;+1502 Elo&quot;],[166.0,79.7,&quot;326k decisions (6.1k games)&quot;,&quot;+1612 Elo&quot;],[175.3,69.6,&quot;353k decisions (6.7k games)&quot;,&quot;+1703 Elo&quot;],[184.7,71.9,&quot;380k decisions (7.2k games)&quot;,&quot;+1682 Elo&quot;],[194.0,73.5,&quot;407k decisions (7.7k games)&quot;,&quot;+1668 Elo&quot;],[203.3,70.2,&quot;434k decisions (8.2k games)&quot;,&quot;+1697 Elo&quot;],[212.7,66.0,&quot;461k decisions (8.7k games)&quot;,&quot;+1736 Elo&quot;],[222.0,64.5,&quot;488k decisions (9.2k games)&quot;,&quot;+1749 Elo&quot;],[231.3,63.6,&quot;515k decisions (9.7k games)&quot;,&quot;+1757 Elo&quot;],[240.7,64.2,&quot;543k decisions (10.2k games)&quot;,&quot;+1752 Elo&quot;],[250.0,59.9,&quot;570k decisions (10.8k games)&quot;,&quot;+1791 Elo&quot;],[259.3,60.3,&quot;597k decisions (11.3k games)&quot;,&quot;+1788 Elo&quot;],[268.7,56.4,&quot;624k decisions (11.8k games)&quot;,&quot;+1823 Elo&quot;],[278.0,54.9,&quot;651k decisions (12.3k games)&quot;,&quot;+1836 Elo&quot;],[287.3,55.7,&quot;678k decisions (12.8k games)&quot;,&quot;+1830 Elo&quot;],[296.7,44.3,&quot;705k decisions (13.3k games)&quot;,&quot;+1933 Elo&quot;],[306.0,42.9,&quot;732k decisions (13.8k games)&quot;,&quot;+1945 Elo&quot;],[315.3,49.2,&quot;760k decisions (14.3k games)&quot;,&quot;+1889 Elo&quot;],[324.7,47.2,&quot;787k decisions (14.8k games)&quot;,&quot;+1907 Elo&quot;],[334.0,48.8,&quot;814k decisions (15.4k games)&quot;,&quot;+1892 Elo&quot;],[343.3,44.1,&quot;841k decisions (15.9k games)&quot;,&quot;+1934 Elo&quot;],[352.7,43.2,&quot;868k decisions (16.4k games)&quot;,&quot;+1943 Elo&quot;],[362.0,44.5,&quot;895k decisions (16.9k games)&quot;,&quot;+1931 Elo&quot;],[371.3,41.7,&quot;922k decisions (17.4k games)&quot;,&quot;+1956 Elo&quot;],[380.7,39.3,&quot;949k decisions (17.9k games)&quot;,&quot;+1979 Elo&quot;],[390.0,40.9,&quot;977k decisions (18.4k games)&quot;,&quot;+1964 Elo&quot;],[399.3,41.8,&quot;1.0M decisions (18.9k games)&quot;,&quot;+1955 Elo&quot;],[408.7,43.1,&quot;1.0M decisions (19.5k games)&quot;,&quot;+1944 Elo&quot;],[418.0,36.6,&quot;1.1M decisions (20.0k games)&quot;,&quot;+2003 Elo&quot;],[427.3,40.0,&quot;1.1M decisions (20.5k games)&quot;,&quot;+1972 Elo&quot;],[436.7,39.0,&quot;1.1M decisions (21.0k games)&quot;,&quot;+1981 Elo&quot;],[446.0,41.3,&quot;1.1M decisions (21.5k games)&quot;,&quot;+1960 Elo&quot;],[455.3,37.6,&quot;1.2M decisions (22.0k games)&quot;,&quot;+1994 Elo&quot;],[464.7,36.4,&quot;1.2M decisions (22.5k games)&quot;,&quot;+2005 Elo&quot;],[474.0,34.7,&quot;1.2M decisions (23.0k games)&quot;,&quot;+2020 Elo&quot;],[483.3,42.0,&quot;1.2M decisions (23.6k games)&quot;,&quot;+1954 Elo&quot;]]}]}"><line x1="54" y1="257.1" x2="502" y2="257.1" class="grid" /><text x="44" y="260.6" class="tick tick-y">+0</text><line x1="54" y1="202.06" x2="502" y2="202.06" class="grid" /><text x="44" y="205.56" class="tick tick-y">+500</text><line x1="54" y1="147.01" x2="502" y2="147.01" class="grid" /><text x="44" y="150.51" class="tick tick-y">+1000</text><line x1="54" y1="91.97" x2="502" y2="91.97" class="grid" /><text x="44" y="95.47" class="tick tick-y">+1500</text><line x1="54" y1="36.92" x2="502" y2="36.92" class="grid" /><text x="44" y="40.42" class="tick tick-y">+2000</text><text x="54" y="280" class="tick tick-x">0</text><text x="140.02" y="280" class="tick tick-x">250k</text><text x="226.04" y="280" class="tick tick-x">500k</text><text x="312.06" y="280" class="tick tick-x">750k</text><text x="398.08" y="280" class="tick tick-x">1.0M</text><text x="484.1" y="280" class="tick tick-x">1.2M</text><line x1="54" y1="260" x2="502" y2="260" class="axis" /><path d="M54 243.31 L63.33 228.25 L72.67 209.24 L82 201.82 L91.33 195.52 L100.67 180.69 L110 179.84 L119.33 157.94 L128.67 152.39 L138 152.54 L147.33 145.43 L156.67 141.93 L166 139.4 L175.33 132.12 L184.67 133.42 L194 119.21 L203.33 117.74 L212.67 109.56 L222 102.37 L231.33 105.65 L240.67 101.87 L250 100.42 L259.33 104.66 L268.67 98.97 L278 95.64 L287.33 96.09 L296.67 87.95 L306 99.09 L315.33 85.45 L324.67 83.07 L334 87.33 L343.33 86.39 L352.67 80.21 L362 83.51 L371.33 73.45 L380.67 70.14 L390 80.28 L399.33 62.53 L408.67 57.3 L418 57.78 L427.33 57.78 L436.67 61.56 L446 55.87 L455.33 45.72 L464.67 50.95 L474 45.72 L483.33 44.54 L492.67 35.39 L502 36.81" class="series-line" stroke="#3987e5" stroke-width="2" opacity="1" /><line x1="54" y1="249.72" x2="54" y2="236.9" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="63.33" y1="233.24" x2="63.33" y2="223.26" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="72.67" y1="215.05" x2="72.67" y2="203.42" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="82" y1="207.39" x2="82" y2="196.25" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="91.33" y1="201.2" x2="91.33" y2="189.84" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="100.67" y1="186.91" x2="100.67" y2="174.47" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="110" y1="185.66" x2="110" y2="174.03" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="119.33" y1="164.86" x2="119.33" y2="151.01" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="128.67" y1="158.41" x2="128.67" y2="146.37" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="138" y1="158.5" x2="138" y2="146.59" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="147.33" y1="149.73" x2="147.33" y2="141.12" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="156.67" y1="147.94" x2="156.67" y2="135.92" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="166" y1="145.4" x2="166" y2="133.4" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="175.33" y1="138.22" x2="175.33" y2="126.02" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="184.67" y1="139.42" x2="184.67" y2="127.42" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="194" y1="123.72" x2="194" y2="114.69" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="203.33" y1="123.75" x2="203.33" y2="111.73" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="212.67" y1="115.7" x2="212.67" y2="103.42" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="222" y1="108.48" x2="222" y2="96.26" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="231.33" y1="111.69" x2="231.33" y2="99.62" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="240.67" y1="106.13" x2="240.67" y2="97.61" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="250" y1="106.44" x2="250" y2="94.41" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="259.33" y1="110.71" x2="259.33" y2="98.62" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="268.67" y1="103.24" x2="268.67" y2="94.7" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="278" y1="101.67" x2="278" y2="89.6" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="287.33" y1="102.1" x2="287.33" y2="90.08" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="296.67" y1="92.29" x2="296.67" y2="83.61" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="306" y1="105.36" x2="306" y2="92.83" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="315.33" y1="89.83" x2="315.33" y2="81.07" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="324.67" y1="89.1" x2="324.67" y2="77.05" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="334" y1="93.38" x2="334" y2="81.29" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="343.33" y1="90.65" x2="343.33" y2="82.13" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="352.67" y1="84.49" x2="352.67" y2="75.93" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="362" y1="89.55" x2="362" y2="77.48" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="371.33" y1="77.81" x2="371.33" y2="69.09" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="380.67" y1="76.17" x2="380.67" y2="64.11" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="390" y1="86.5" x2="390" y2="74.06" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="399.33" y1="67.05" x2="399.33" y2="58.02" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="408.67" y1="63.37" x2="408.67" y2="51.24" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="418" y1="63.79" x2="418" y2="51.76" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="427.33" y1="62.03" x2="427.33" y2="53.53" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="436.67" y1="65.83" x2="436.67" y2="57.29" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="446" y1="60.14" x2="446" y2="51.6" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="455.33" y1="51.94" x2="455.33" y2="39.5" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="464.67" y1="57.02" x2="464.67" y2="44.88" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="474" y1="49.99" x2="474" y2="41.45" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="483.33" y1="48.79" x2="483.33" y2="40.29" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="492.67" y1="41.58" x2="492.67" y2="29.21" stroke="#3987e5" stroke-width="1" opacity="0.45" /><line x1="502" y1="42.83" x2="502" y2="30.8" stroke="#3987e5" stroke-width="1" opacity="0.45" /><path d="M54 219.63 L63.33 213.44 L72.67 186.04 L82 174.36 L91.33 156.92 L100.67 125.52 L110 117.88 L119.33 100.31 L128.67 101.67 L138 88.63 L147.33 89.17 L156.67 91.75 L166 79.66 L175.33 69.61 L184.67 71.92 L194 73.47 L203.33 70.25 L212.67 65.96 L222 64.52 L231.33 63.63 L240.67 64.25 L250 59.94 L259.33 60.26 L268.67 56.42 L278 54.94 L287.33 55.69 L296.67 44.28 L306 42.95 L315.33 49.16 L324.67 47.18 L334 48.79 L343.33 44.15 L352.67 43.22 L362 44.51 L371.33 41.75 L380.67 39.28 L390 40.89 L399.33 41.85 L408.67 43.12 L418 36.56 L427.33 40 L436.67 39.05 L446 41.27 L455.33 37.57 L464.67 36.35 L474 34.69 L483.33 41.96" class="series-line" stroke="#6d8188" stroke-width="1.5" opacity="0.75" stroke-dasharray="4 4" /><line x1="54" y1="228.76" x2="54" y2="210.5" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="63.33" y1="218.69" x2="63.33" y2="208.19" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="72.67" y1="193.14" x2="72.67" y2="178.94" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="82" y1="180.47" x2="82" y2="168.25" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="91.33" y1="163.46" x2="91.33" y2="150.38" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="100.67" y1="133.4" x2="100.67" y2="117.65" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="110" y1="123.85" x2="110" y2="111.92" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="119.33" y1="106.5" x2="119.33" y2="94.13" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="128.67" y1="107.35" x2="128.67" y2="95.99" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="138" y1="92.86" x2="138" y2="84.41" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="147.33" y1="94.62" x2="147.33" y2="83.72" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="156.67" y1="95.82" x2="156.67" y2="87.68" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="166" y1="83.73" x2="166" y2="75.59" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="175.33" y1="74.64" x2="175.33" y2="64.58" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="184.67" y1="76.92" x2="184.67" y2="66.92" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="194" y1="77.35" x2="194" y2="69.6" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="203.33" y1="74.07" x2="203.33" y2="66.43" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="212.67" y1="69.73" x2="212.67" y2="62.18" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="222" y1="69.29" x2="222" y2="59.76" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="231.33" y1="68.38" x2="231.33" y2="58.89" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="240.67" y1="69.02" x2="240.67" y2="59.48" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="250" y1="63.63" x2="250" y2="56.26" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="259.33" y1="64.91" x2="259.33" y2="55.62" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="268.67" y1="60.05" x2="268.67" y2="52.79" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="278" y1="59.45" x2="278" y2="50.42" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="287.33" y1="60.22" x2="287.33" y2="51.17" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="296.67" y1="47.88" x2="296.67" y2="40.68" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="306" y1="47.24" x2="306" y2="38.65" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="315.33" y1="53.57" x2="315.33" y2="44.74" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="324.67" y1="50.72" x2="324.67" y2="43.65" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="334" y1="52.35" x2="334" y2="45.24" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="343.33" y1="47.66" x2="343.33" y2="40.63" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="352.67" y1="46.71" x2="352.67" y2="39.73" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="362" y1="48.01" x2="362" y2="41.01" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="371.33" y1="45.24" x2="371.33" y2="38.26" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="380.67" y1="43.54" x2="380.67" y2="35.02" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="390" y1="45.16" x2="390" y2="36.62" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="399.33" y1="45.34" x2="399.33" y2="38.36" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="408.67" y1="46.62" x2="408.67" y2="39.62" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="418" y1="40.05" x2="418" y2="33.07" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="427.33" y1="44.27" x2="427.33" y2="35.72" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="436.67" y1="42.53" x2="436.67" y2="35.57" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="446" y1="44.76" x2="446" y2="37.78" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="455.33" y1="41.05" x2="455.33" y2="34.1" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="464.67" y1="39.82" x2="464.67" y2="32.88" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="474" y1="38.94" x2="474" y2="30.44" stroke="#6d8188" stroke-width="1" opacity="0.45" /><line x1="483.33" y1="46.27" x2="483.33" y2="37.64" stroke="#6d8188" stroke-width="1" opacity="0.45" /><text x="502" y="295" class="axis-title" text-anchor="end">cumulative decisions</text><text transform="translate(12 139) rotate(-90)" class="axis-title" text-anchor="middle">Elo (this game&#x27;s ladder)</text><g class="hoverlay" aria-hidden="true"><line class="crosshair" x1="0" y1="18" x2="0" y2="260" /><circle class="hotdot" cx="-99" cy="-99" r="5.5" /></g></svg></div></figure><figure class="figure"><div class="fig-head"><div><h3 class="fig-title">uno — Elo against decisions</h3><p class="fig-sub">Anchored to this game&#x27;s own baseline pool (random = 0). A run is still training - the curve is not final.</p></div></div><div class="legend"><span class="legend-item"><svg class="key" viewBox="0 0 18 8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#d95926" stroke-width="2" /></svg>Uno</span></div><div class="plot"><svg class="chart" style="width:520px" viewBox="0 0 520 300" preserveAspectRatio="xMidYMid meet" role="img" tabindex="0" aria-label="uno Elo curve" data-chart="{&quot;plot&quot;:[54,18,448,242],&quot;series&quot;:[{&quot;n&quot;:&quot;Uno&quot;,&quot;c&quot;:&quot;#d95926&quot;,&quot;p&quot;:[[54.0,243.3,&quot;0 decisions (0 games)&quot;,&quot;+87 Elo&quot;],[64.7,230.3,&quot;38.5k decisions (2.0k games)&quot;,&quot;+121 Elo&quot;],[75.3,189.9,&quot;77.0k decisions (4.1k games)&quot;,&quot;+225 Elo&quot;],[86.0,196.1,&quot;116k decisions (6.1k games)&quot;,&quot;+209 Elo&quot;],[96.7,164.2,&quot;154k decisions (8.2k games)&quot;,&quot;+292 Elo&quot;],[107.3,205.9,&quot;193k decisions (10.2k games)&quot;,&quot;+184 Elo&quot;],[118.0,193.4,&quot;231k decisions (12.3k games)&quot;,&quot;+216 Elo&quot;],[128.7,176.0,&quot;270k decisions (14.3k games)&quot;,&quot;+261 Elo&quot;],[139.3,135.0,&quot;308k decisions (16.4k games)&quot;,&quot;+367 Elo&quot;],[150.0,162.4,&quot;347k decisions (18.4k games)&quot;,&quot;+296 Elo&quot;],[160.7,142.0,&quot;385k decisions (20.5k games)&quot;,&quot;+349 Elo&quot;],[171.3,123.0,&quot;424k decisions (22.5k games)&quot;,&quot;+398 Elo&quot;],[182.0,160.2,&quot;462k decisions (24.6k games)&quot;,&quot;+302 Elo&quot;],[192.7,156.8,&quot;501k decisions (26.6k games)&quot;,&quot;+311 Elo&quot;],[203.3,138.2,&quot;539k decisions (28.7k games)&quot;,&quot;+359 Elo&quot;],[214.0,133.9,&quot;578k decisions (30.7k games)&quot;,&quot;+370 Elo&quot;],[224.7,135.6,&quot;616k decisions (32.8k games)&quot;,&quot;+366 Elo&quot;],[235.3,75.6,&quot;655k decisions (34.8k games)&quot;,&quot;+520 Elo&quot;],[246.0,66.4,&quot;693k decisions (36.9k games)&quot;,&quot;+544 Elo&quot;],[256.7,100.7,&quot;732k decisions (38.9k games)&quot;,&quot;+456 Elo&quot;],[267.3,96.9,&quot;770k decisions (41.0k games)&quot;,&quot;+465 Elo&quot;],[278.0,87.6,&quot;809k decisions (43.0k games)&quot;,&quot;+489 Elo&quot;],[288.7,87.1,&quot;847k decisions (45.1k games)&quot;,&quot;+490 Elo&quot;],[299.3,79.3,&quot;886k decisions (47.1k games)&quot;,&quot;+511 Elo&quot;],[310.0,48.6,&quot;924k decisions (49.2k games)&quot;,&quot;+590 Elo&quot;],[320.7,57.3,&quot;963k decisions (51.2k games)&quot;,&quot;+568 Elo&quot;],[331.3,53.4,&quot;1.0M decisions (53.2k games)&quot;,&quot;+578 Elo&quot;],[342.0,71.0,&quot;1.0M decisions (55.3k games)&quot;,&quot;+532 Elo&quot;],[352.7,56.0,&quot;1.1M decisions (57.3k games)&quot;,&quot;+571 Elo&quot;],[363.3,83.9,&quot;1.1M decisions (59.4k games)&quot;,&quot;+499 Elo&quot;],[374.0,69.7,&quot;1.2M decisions (61.4k games)&quot;,&quot;+536 Elo&quot;],[384.7,55.3,&quot;1.2M decisions (63.5k games)&quot;,&quot;+573 Elo&quot;],[395.3,64.1,&quot;1.2M decisions (65.5k games)&quot;,&quot;+550 Elo&quot;],[406.0,68.2,&quot;1.3M decisions (67.6k games)&quot;,&quot;+539 Elo&quot;],[416.7,66.3,&quot;1.3M decisions (69.6k games)&quot;,&quot;+544 Elo&quot;],[427.3,41.9,&quot;1.3M decisions (71.7k games)&quot;,&quot;+607 Elo&quot;],[438.0,51.5,&quot;1.4M decisions (73.7k games)&quot;,&quot;+582 Elo&quot;],[448.7,39.8,&quot;1.4M decisions (75.8k games)&quot;,&quot;+613 Elo&quot;],[459.3,34.7,&quot;1.5M decisions (77.8k games)&quot;,&quot;+626 Elo&quot;],[470.0,59.9,&quot;1.5M decisions (79.9k games)&quot;,&quot;+561 Elo&quot;],[480.7,63.8,&quot;1.5M decisions (81.9k games)&quot;,&quot;+551 Elo&quot;],[491.3,65.7,&quot;1.6M decisions (84.0k games)&quot;,&quot;+546 Elo&quot;],[502.0,42.9,&quot;1.6M decisions (86.0k games)&quot;,&quot;+605 Elo&quot;]]}]}"><line x1="54" y1="199.66" x2="502" y2="199.66" class="grid" /><text x="44" y="203.16" class="tick tick-y">+200</text><line x1="54" y1="122.19" x2="502" y2="122.19" class="grid" /><text x="44" y="125.69" class="tick tick-y">+400</text><line x1="54" y1="44.72" x2="502" y2="44.72" class="grid" /><text x="44" y="48.22" class="tick tick-y">+600</text><text x="54" y="280" class="tick tick-x">0</text><text x="192.52" y="280" class="tick tick-x">500k</text><text x="331.04" y="280" class="tick tick-x">1.0M</text><text x="469.56" y="280" class="tick tick-x">1.5M</text><line x1="54" y1="260" x2="502" y2="260" class="axis" /><line x1="54" y1="55.57" x2="502" y2="55.57" class="ref" /><text x="58" y="49.57" class="ref-label" text-anchor="start">uno:greedy +572</text><line x1="54" y1="123.74" x2="502" y2="123.74" class="ref" /><text x="58" y="117.74" class="ref-label" text-anchor="start">uno:heuristic +396</text><path d="M54 243.31 L64.67 230.3 L75.33 189.94 L86 196.13 L96.67 164.18 L107.33 205.89 L118 193.42 L128.67 175.99 L139.33 135.05 L150 162.36 L160.67 142.02 L171.33 123 L182 160.23 L192.67 156.82 L203.33 138.19 L214 133.89 L224.67 135.55 L235.33 75.59 L246 66.41 L256.67 100.65 L267.33 96.9 L278 87.6 L288.67 87.14 L299.33 79.35 L310 48.56 L320.67 57.31 L331.33 53.44 L342 71.02 L352.67 55.95 L363.33 83.92 L374 69.71 L384.67 55.33 L395.33 64.13 L406 68.23 L416.67 66.3 L427.33 41.93 L438 51.5 L448.67 39.76 L459.33 34.69 L470 59.91 L480.67 63.82 L491.33 65.68 L502 42.94" class="series-line" stroke="#d95926" stroke-width="2" opacity="1" /><line x1="54" y1="267.67" x2="54" y2="218.95" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="64.67" y1="247.53" x2="64.67" y2="213.06" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="75.33" y1="208.64" x2="75.33" y2="171.23" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="86" y1="214.18" x2="86" y2="178.08" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="96.67" y1="179.28" x2="96.67" y2="149.07" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="107.33" y1="224.14" x2="107.33" y2="187.65" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="118" y1="207.95" x2="118" y2="178.9" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="128.67" y1="190.71" x2="128.67" y2="161.27" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="139.33" y1="150.78" x2="139.33" y2="119.32" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="150" y1="181.76" x2="150" y2="142.95" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="160.67" y1="157.28" x2="160.67" y2="126.76" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="171.33" y1="138.54" x2="171.33" y2="107.47" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="182" y1="179.94" x2="182" y2="140.51" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="192.67" y1="171.96" x2="192.67" y2="141.67" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="203.33" y1="153.53" x2="203.33" y2="122.85" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="214" y1="149.23" x2="214" y2="118.55" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="224.67" y1="150.85" x2="224.67" y2="120.25" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="235.33" y1="92.75" x2="235.33" y2="58.43" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="246" y1="88.37" x2="246" y2="44.45" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="256.67" y1="122.31" x2="256.67" y2="79" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="267.33" y1="112.85" x2="267.33" y2="80.94" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="278" y1="103.56" x2="278" y2="71.64" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="288.67" y1="103.09" x2="288.67" y2="71.18" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="299.33" y1="95.35" x2="299.33" y2="63.35" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="310" y1="65.02" x2="310" y2="32.09" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="320.67" y1="79.43" x2="320.67" y2="35.19" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="331.33" y1="69.59" x2="331.33" y2="37.28" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="342" y1="87.21" x2="342" y2="54.83" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="352.67" y1="72.15" x2="352.67" y2="39.76" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="363.33" y1="100.23" x2="363.33" y2="67.61" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="374" y1="85.86" x2="374" y2="53.55" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="384.67" y1="71.53" x2="384.67" y2="39.14" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="395.33" y1="80.28" x2="395.33" y2="47.98" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="406" y1="84.35" x2="406" y2="52.12" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="416.67" y1="82.41" x2="416.67" y2="50.18" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="427.33" y1="58.32" x2="427.33" y2="25.55" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="438" y1="73.73" x2="438" y2="29.27" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="448.67" y1="56.03" x2="448.67" y2="23.5" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="459.33" y1="57.19" x2="459.33" y2="12.19" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="470" y1="82.29" x2="470" y2="37.52" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="480.67" y1="80.09" x2="480.67" y2="47.55" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="491.33" y1="81.94" x2="491.33" y2="49.41" stroke="#d95926" stroke-width="1" opacity="0.45" /><line x1="502" y1="59.29" x2="502" y2="26.59" stroke="#d95926" stroke-width="1" opacity="0.45" /><text x="502" y="295" class="axis-title" text-anchor="end">cumulative decisions</text><text transform="translate(12 139) rotate(-90)" class="axis-title" text-anchor="middle">Elo (this game&#x27;s ladder)</text><g class="hoverlay" aria-hidden="true"><line class="crosshair" x1="0" y1="18" x2="0" y2="260" /><circle class="hotdot" cx="-99" cy="-99" r="5.5" /></g></svg></div></figure></div></section><section class="panel"><h2>The numbers behind the shapes</h2><details class="data-table"><summary>Data table</summary><div class="table-wrap"><table><thead><tr><th>run</th><th>game</th><th>Elo start → best</th><th>games</th><th>decisions</th><th>slope ½ at</th><th>R² 25% / 50% / full</th></tr></thead><tbody><tr><td>Azul run1</td><td>azul</td><td>+274 → +1982</td><td>24.6k</td><td>1.3M</td><td>36% of budget</td><td>0.960 / 0.929 / 0.909</td></tr><tr><td>Azul run2 (256 sims)</td><td>azul</td><td>+461 → +1993</td><td>23.6k</td><td>1.2M</td><td>27% of budget</td><td>0.952 / 0.805 / 0.686</td></tr><tr><td>Uno</td><td>uno</td><td>+144 → +598</td><td>86.0k</td><td>1.6M</td><td>63% of budget</td><td>0.660 / 0.814 / 0.825</td></tr></tbody></table></div></details><p class="fig-sub" style="margin-top:10px">R² of a straight-line fit over the first 25%, 50% and 100% of each run — shown three ways because a high value mostly measures truncation, not design (every curve is straight at the start). The informative column is where the slope dies.</p></section><footer class="foot"><span>ludometer · generated by web/make_compare.py</span><span>static page, no external requests</span><span>2026-08-18 23:26:42</span></footer></div>
+<script>
+(function () {
+  'use strict';
+
+  // Heartbeat ages tick in the browser, so an open tab still shows the truth
+  // between regenerations.
+  var STALE = 180;
+  function dur(s) {
+    s = Math.max(0, Math.round(s));
+    var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+    var m = Math.floor((s % 3600) / 60), x = s % 60;
+    if (d) return d + 'd ' + h + 'h';
+    if (h) return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+    if (m) return m + 'm ' + (x < 10 ? '0' : '') + x + 's';
+    return x + 's';
+  }
+  function ticker() {
+    var now = Date.now() / 1000;
+    var nodes = document.querySelectorAll('.hb[data-updated]');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i], age = now - parseFloat(el.getAttribute('data-updated'));
+      if (age < 0) age = 0;
+      var live = el.getAttribute('data-live') === '1';
+      el.textContent = (live ? 'updated ' : 'last write ') + dur(age) + ' ago';
+      if (live) el.classList.toggle('hb-stale', age > STALE);
+    }
+  }
+  ticker();
+  setInterval(ticker, 1000);
+
+  // Nearest-point crosshair + tooltip for every chart. Values are also in each
+  // chart's data table, so hover only ever enhances.
+  var tip = document.createElement('div');
+  tip.className = 'tip';
+  document.body.appendChild(tip);
+
+  function pointer(svg, evt) {
+    var box = svg.getBoundingClientRect();
+    var vb = svg.viewBox.baseVal;
+    var scale = box.width / (vb.width || 1);
+    return {
+      x: (evt.clientX - box.left) / (scale || 1),
+      y: (evt.clientY - box.top) / (scale || 1),
+      box: box, scale: scale
+    };
+  }
+
+  function show(svg, data, px, py, geom) {
+    var best = null, bestD = Infinity;
+    for (var s = 0; s < data.series.length; s++) {
+      var pts = data.series[s].p;
+      for (var i = 0; i < pts.length; i++) {
+        var dx = pts[i][0] - px, dy = pts[i][1] - py;
+        var d = dx * dx + dy * dy * 0.3;
+        if (d < bestD) { bestD = d; best = { s: s, i: i }; }
+      }
+    }
+    if (!best || bestD > 90 * 90) { hide(svg); return; }
+    var anchor = data.series[best.s].p[best.i];
+    var rows = '';
+    for (var t = 0; t < data.series.length; t++) {
+      var series = data.series[t];
+      for (var k = 0; k < series.p.length; k++) {
+        if (Math.abs(series.p[k][0] - anchor[0]) < 0.6) {
+          rows += '<div class="tip-row"><span class="swatch" style="background:' + series.c +
+            '"></span><span class="tip-name">' + series.n + '</span><span class="tip-val">' +
+            series.p[k][3] + '</span></div>';
+          break;
+        }
+      }
+    }
+    tip.innerHTML = '<div class="tip-x">' + anchor[2] + '</div>' + rows;
+    tip.classList.add('on');
+    svg.classList.add('hot');
+    var cross = svg.querySelector('.crosshair');
+    var dot = svg.querySelector('.hotdot');
+    if (cross) { cross.setAttribute('x1', anchor[0]); cross.setAttribute('x2', anchor[0]); }
+    if (dot) { dot.setAttribute('cx', anchor[0]); dot.setAttribute('cy', anchor[1]); }
+    var host = svg.parentNode;
+    var hostBox = host.getBoundingClientRect();
+    var left = geom.box.left - hostBox.left + anchor[0] * geom.scale + 14;
+    var top = geom.box.top - hostBox.top + anchor[1] * geom.scale - 12;
+    if (left + tip.offsetWidth > hostBox.width) left -= tip.offsetWidth + 28;
+    tip.style.left = Math.max(0, left) + 'px';
+    tip.style.top = Math.max(0, top) + 'px';
+    host.appendChild(tip);
+  }
+
+  function hide(svg) {
+    tip.classList.remove('on');
+    if (svg) svg.classList.remove('hot');
+  }
+
+  var charts = document.querySelectorAll('svg.chart[data-chart]');
+  for (var c = 0; c < charts.length; c++) {
+    (function (svg) {
+      var data;
+      try { data = JSON.parse(svg.getAttribute('data-chart')); } catch (e) { return; }
+      if (!data || !data.series || !data.series.length) return;
+      var cursor = { s: 0, i: data.series[0].p.length - 1 };
+      svg.addEventListener('mousemove', function (evt) {
+        var p = pointer(svg, evt);
+        show(svg, data, p.x, p.y, p);
+      });
+      svg.addEventListener('mouseleave', function () { hide(svg); });
+      svg.addEventListener('blur', function () { hide(svg); });
+      svg.addEventListener('keydown', function (evt) {
+        var step = evt.key === 'ArrowRight' ? 1 : (evt.key === 'ArrowLeft' ? -1 : 0);
+        if (!step) return;
+        evt.preventDefault();
+        var pts = data.series[cursor.s].p;
+        cursor.i = Math.min(pts.length - 1, Math.max(0, cursor.i + step));
+        var target = pts[cursor.i];
+        var box = svg.getBoundingClientRect();
+        var vb = svg.viewBox.baseVal;
+        show(svg, data, target[0], target[1],
+             { box: box, scale: box.width / (vb.width || 1) });
+      });
+    })(charts[c]);
+  }
+})();
+</script>
+</body></html>
