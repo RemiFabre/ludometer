@@ -158,3 +158,51 @@ def test_the_oracle_scores_100_percent_and_random_does_not():
     assert sloppy["n"] == perfect["n"]
     assert sloppy["pct_optimal"] < 1.0
     assert sloppy["blunder_rate"] > 0.0
+
+
+# --------------------------------------------------------------- perfect play
+def test_the_perfect_tictactoe_agent_never_loses():
+    from ludometer.agents import make_agent
+
+    perfect = make_agent("ttt:perfect")
+    perfect.seed(0)
+    for spec in ("ttt:random", "ttt:greedy", "ttt:perfect"):
+        rival = make_agent(spec)
+        rival.seed(1)
+        for seed in range(6):
+            for perfect_seat in (0, 1):
+                state = TicTacToeState.new_game(seed=seed)
+                agents = (perfect, rival) if perfect_seat == 0 else (rival, perfect)
+                for a in agents:
+                    a.seed(seed * 2 + perfect_seat)
+                while not state.is_terminal:
+                    state.apply(agents[state.current_player].act(state))
+                outcome = state.outcome()
+                lost = outcome == (-1.0 if perfect_seat == 0 else 1.0)
+                assert not lost, f"perfect lost to {spec} (seed {seed})"
+                if spec == "ttt:perfect":
+                    assert outcome == 0.0  # perfect vs perfect always draws
+
+
+def test_the_perfect_connect4_agent_converts_a_won_midgame():
+    from ludometer.agents import make_agent
+
+    perfect = make_agent("c4:perfect")
+    perfect.seed(0)
+    rival = make_agent("c4:heuristic")
+    rival.seed(2)
+    # a deep-enough midgame that the WDL solve is cheap (ply 14+)
+    state = Connect4State.new_game(seed=0)
+    roll = random.Random(7)
+    while state.ply < 14 and not state.is_terminal:
+        state.apply(roll.choice(state.legal_actions()))
+    if state.is_terminal:
+        pytest.skip("rollout ended early")
+    value = solve_state(state)
+    mover = state.current_player
+    agents = {mover: perfect, 1 - mover: rival}
+    while not state.is_terminal:
+        state.apply(agents[state.current_player].act(state))
+    outcome = state.outcome()
+    if value == 1:
+        assert outcome == (1.0 if mover == 0 else -1.0)

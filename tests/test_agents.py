@@ -69,9 +69,11 @@ def test_registry_covers_the_baselines():
         "ttt:random",
         "ttt:greedy",
         "ttt:heuristic",
+        "ttt:perfect",
         "c4:random",
         "c4:greedy",
         "c4:heuristic",
+        "c4:perfect",
     }
     for name, factory in AGENT_REGISTRY.items():
         agent = factory()

@@ -18,9 +18,11 @@ from ludometer.ttt.engine import WIN_MASKS, TicTacToeState
 __all__ = [
     "C4GreedyAgent",
     "C4HeuristicAgent",
+    "C4PerfectAgent",
     "C4RandomAgent",
     "TTTGreedyAgent",
     "TTTHeuristicAgent",
+    "TTTPerfectAgent",
     "TTTRandomAgent",
 ]
 
@@ -138,3 +140,50 @@ class C4HeuristicAgent(_TwoPlyAgent):
             if col in options:
                 return col
         return self.rng.choice(options)  # pragma: no cover - options never empty
+
+
+# ------------------------------------------------------------- perfect play
+class _PerfectAgent(Agent):
+    """Plays a game-theoretically value-preserving move, chosen at random among
+    the optimal set. In a game where the board only ever gains material there
+    are no cycles, so any value-preserving line converts a won position.
+
+    Never an Elo *anchor* (against weak opposition its rating diverges), but
+    ratable against strong opposition: once the opponent draws games the fit
+    is finite, and the result is the exact "perfect play" reference line the
+    solved-game charts carry (NEXT_GAMES.md §3).
+    """
+
+    def __init__(self, seed: int = 0) -> None:
+        self.rng = random.Random(seed)
+
+    def seed(self, n: int) -> None:
+        self.rng.seed(n)
+
+    def act(self, state) -> int:
+        from ludometer.solved.suite import solve_state  # local: optional dep cycle
+
+        best_value = None
+        best: list[int] = []
+        me = state.current_player
+        for action in state.legal_actions():
+            child = state.clone()
+            child.apply(action)
+            if child.is_terminal:
+                outcome = child.outcome()
+                value = int(outcome if me == 0 else -outcome)
+            else:
+                value = -solve_state(child)
+            if best_value is None or value > best_value:
+                best_value, best = value, [action]
+            elif value == best_value:
+                best.append(action)
+        return self.rng.choice(best)
+
+
+class TTTPerfectAgent(_PerfectAgent):
+    name = "ttt:perfect"
+
+
+class C4PerfectAgent(_PerfectAgent):
+    name = "c4:perfect"

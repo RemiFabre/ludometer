@@ -120,6 +120,7 @@ def run_gauntlet(
     base_seed: int = 0,
     workers: int = 1,
     log: Any = print,
+    game: str = "azul",
 ) -> list[MatchResult]:
     """Every unordered pair plays ``games`` alternating-seat games."""
     if len(specs) < 2:
@@ -134,6 +135,7 @@ def run_gauntlet(
                 n_games=games,
                 base_seed=seed,
                 n_workers=workers,
+                game=game,
             )
             if log is not None:
                 log(
@@ -155,6 +157,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--games", type=int, default=20, help="games per pairing")
     parser.add_argument("--workers", type=int, default=1, help="worker processes")
     parser.add_argument("--seed", type=int, default=0, help="base seed")
+    parser.add_argument(
+        "--game", default="azul", help="rules engine to play (ludometer/games.py)"
+    )
     parser.add_argument(
         "--nice", type=int, default=19, help="niceness to run at (0 = leave alone)"
     )
@@ -188,7 +193,12 @@ def main(argv: list[str] | None = None) -> int:
 
     log = None if args.quiet else print
     results = run_gauntlet(
-        specs, games=args.games, base_seed=args.seed, workers=args.workers, log=log
+        specs,
+        games=args.games,
+        base_seed=args.seed,
+        workers=args.workers,
+        log=log,
+        game=args.game,
     )
     pairs = [PairResult(m.name_a, m.name_b, m.wins, m.draws, m.losses) for m in results]
     fit = fit_elo(pairs, anchors=anchors, error_method="fisher")

@@ -17,9 +17,11 @@ from ludometer.agents.random_agent import RandomAgent
 from ludometer.agents.perfect_info import (
     C4GreedyAgent,
     C4HeuristicAgent,
+    C4PerfectAgent,
     C4RandomAgent,
     TTTGreedyAgent,
     TTTHeuristicAgent,
+    TTTPerfectAgent,
     TTTRandomAgent,
 )
 from ludometer.uno.agents import (
@@ -59,9 +61,13 @@ AGENT_REGISTRY: dict[str, Callable[..., Agent]] = {
     "ttt:random": TTTRandomAgent,
     "ttt:greedy": TTTGreedyAgent,
     "ttt:heuristic": TTTHeuristicAgent,
+    # ttt:perfect / c4:perfect play exact WDL-optimal moves. They are for
+    # gauntlets and reference lines only - never in a training anchor pool.
+    "ttt:perfect": TTTPerfectAgent,
     "c4:random": C4RandomAgent,
     "c4:greedy": C4GreedyAgent,
     "c4:heuristic": C4HeuristicAgent,
+    "c4:perfect": C4PerfectAgent,
 }
 
 # A spec is anything :func:`make_agent` understands.
