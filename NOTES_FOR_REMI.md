@@ -4,6 +4,21 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — c4_1 extended to 90k games: Connect Four bends like a log, and its perfect
+play stays out of Elo's reach (of the solver's, not the net's)
+
+Rémi asked for more Connect Four, so the run resumed to 90,000 games (65 min). The honest
+round-robin ladder (checkpoints bound each other, random = 0): +317 at zero games → +865
+at the original 30k budget → **+1143 at 90k** (±68). Tripling the budget bought ~+280 Elo
+— the slope bends but is not dead; the log shape again. Two closures alongside: the
+pure-Python solver cannot price the *opening* (ply-14 positions already cost ~110 s; the
+empty board would be days), so `c4:perfect` cannot be Elo-rated the way tic-tac-toe's was
+— Connect Four's absolute anchor is **% optimal** on the solved suite instead, which is
+finishing its last ~100 shallow solves. And the chart got Rémi's redesign: pictogram
+annotations (boil-a-litre line at 133 Wh, tic-tac-toe as 9 minutes of a 10 W LED),
+tic-tac-toe in violet, run2 retired, per-game tags, Uno+ rules as bullets, raw + smoothed
+chart twins.
+
 ## 2026-08-19 — c4_1 trained in 22 minutes, and promptly broke the Elo ladder (as §3 predicted)
 
 Connect Four trained its 30,000 games in **21.7 minutes** (games are ~27 decisions; the
