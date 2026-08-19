@@ -4,6 +4,20 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — Lost Cities, first pass: the control case behaves exactly as recruited
+
+`lc1` (10,000 games ≈ 2.2M decisions, uno1's budget, same net and search). The honest
+round-robin ladder (random = 0): **untrained net + search rates just +27** — in a game
+where the -20 expedition investment pays off thirty moves later, search without knowledge
+buys nothing (contrast +316 in Connect Four, +701 in Uno+; that number is itself a
+game-character measurement). From there the net climbs +561 → +898 in a steady line and
+is **still rising at budget's end, below both handwritten baselines** (greedy +995,
+heuristic +1141 — the commit-to-three-colours heuristic is genuinely strong). Same dials
+as Uno, same budget: Uno went flat at half its run; Lost Cities has not begun to bend.
+The flatness was Uno's. The in-run trainer ladder saturated again (net beats random 1.00
+→ ratchet to +1044) — rerate.json is the curve of record, as for Connect Four. lc1
+extends after the Connect Four 250k slope-resolution run.
+
 ## 2026-08-19 — c4_1 extended to 90k games: Connect Four bends like a log, and its perfect
 play stays out of Elo's reach (of the solver's, not the net's)
 
