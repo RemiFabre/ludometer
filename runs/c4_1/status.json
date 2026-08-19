@@ -2,10 +2,10 @@
   "run": "c4_1",
   "state": "done",
   "started": "2026-08-19T05:30:32Z",
-  "updated": "2026-08-19T05:52:12Z",
-  "ended": "2026-08-19T05:52:11Z",
+  "updated": "2026-08-19T10:00:46Z",
+  "ended": "2026-08-19T10:00:46Z",
   "error": null,
-  "games": 30000,
-  "steps": 3249,
+  "games": 90000,
+  "steps": 10317,
   "note": "stopped (target reached)"
 }
