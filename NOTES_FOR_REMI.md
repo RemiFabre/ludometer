@@ -4,6 +4,20 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — c4_1 trained in 22 minutes, and promptly broke the Elo ladder (as §3 predicted)
+
+Connect Four trained its 30,000 games in **21.7 minutes** (games are ~27 decisions; the
+overnight estimate was 20x too cautious). The interesting part is the failure: by game
+4096 the net beats `c4:random` 1.00 and `c4:greedy` ~0.9, and from there the trainer's
+Elo fit **diverges** — +2278 → +3614 → +5985 — because no opponent in the pool can bound
+it from above and each frozen checkpoint carries the inflated number forward. That is the
+§3 warning ("Elo against an opponent you never beat is unbounded") happening live, and it
+is exactly why the solved games are headlined by % optimal instead. Two repairs are in
+flight: a round-robin rerate of the checkpoints against each other (they bound each other;
+`runs/c4_1/rerate.json`, the run5 pattern), which web/compare.html now prefers over a
+saturated elo.jsonl; and the %-optimal walk over the checkpoints once the ply-14 suite
+finishes its expensive tail.
+
 ## 2026-08-19 — unoplus1 finished: the house rules roughly tripled Uno's learnable depth
 
 **The rule-knob experiment has its answer.** Same trainer, same net shape, same search;

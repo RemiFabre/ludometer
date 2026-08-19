@@ -95,21 +95,51 @@ class Curve:
         return CONTEXT if self.ref.context else GAME_COLOR[self.ref.game]
 
 
+def _rerate_points(run_dir: Path, rows: list) -> list | None:
+    """A self-consistent post-hoc ladder, if the run has one (rerate.json).
+
+    The trainer's own Elo pass can saturate: when a net beats every anchor
+    (c4_1 hits 1.00 vs random by game 4096) the fit diverges and each frozen
+    checkpoint carries the inflated number forward. A round-robin where the
+    checkpoints bound each other (ludometer.eval.gauntlet --json) replaces it.
+    Labels are g<games>; decisions come from the run's own elo.jsonl mapping.
+    """
+    data = dash.read_json(run_dir / "rerate.json")
+    ratings = data.get("elo") or {}
+    errors = data.get("elo_err") or {}
+    dec_by_games = {}
+    for row in rows:
+        g, d = dash.num(row, "games"), dash.num(row, "decisions")
+        if g is not None and d is not None:
+            dec_by_games[g] = d
+    points = []
+    for label, elo in ratings.items():
+        if not label.startswith("g") or not label[1:].isdigit():
+            continue
+        games = int(label[1:])
+        decisions = dec_by_games.get(games, games * 1.0)
+        points.append((games, decisions, float(elo), float(errors.get(label, 0.0))))
+    points.sort()
+    return points if len(points) >= 3 else None
+
+
 def load_curves() -> list[Curve]:
     curves = []
     for ref in RUN_REFS:
         run_dir = REPO / "runs" / ref.name
         rows, _ = dash.read_jsonl(run_dir / "elo.jsonl")
-        points = []
-        for row in rows:
-            games = dash.num(row, "games")
-            elo = dash.num(row, "elo")
-            if games is None or elo is None:
-                continue
-            decisions = dash.num(row, "decisions")
-            if decisions is None:
-                decisions = games * ref.decisions_per_game
-            points.append((games, decisions, elo, dash.num(row, "elo_err") or 0.0))
+        points = _rerate_points(run_dir, rows)
+        if points is None:
+            points = []
+            for row in rows:
+                games = dash.num(row, "games")
+                elo = dash.num(row, "elo")
+                if games is None or elo is None:
+                    continue
+                decisions = dash.num(row, "decisions")
+                if decisions is None:
+                    decisions = games * ref.decisions_per_game
+                points.append((games, decisions, elo, dash.num(row, "elo_err") or 0.0))
         if len(points) < 3:
             continue
         status = dash.read_json(run_dir / "status.json")
