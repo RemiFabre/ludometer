@@ -4,6 +4,22 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — Lost Cities resolved at ~+890: the control case closes the study's first arc
+
+`lc1` finished its 30,000-game extension. Final single-fit ladder (random = 0): untrained
++19 → +560 → +642 → +728 → +792 → +843 → **~+890 at 24-30k games**, where the increments
+finally shrink to noise — statistically even with `lc:greedy` (+949 ± 54), still below
+`lc:heuristic` (+1115). Read against Uno: same hidden-hand/high-luck dials, but the curve
+climbed for ~6.6M decisions — three times Uno's budget — before first easing, and it
+never showed Uno's early half-run flatline. The handwritten heuristic staying on top is
+its own small finding: Lost Cities rewards a kind of long-horizon commitment discipline
+that 96-sim search plus a small MLP had not fully learned by this budget.
+
+Every game in the study now has a resolved or characterised curve. The first arc of the
+ludometer — build, calibrate, contrast, control — is complete; what remains is
+presentation and the Connect Four %-optimal anchor (suite rebuilding with checkpointed
+writes after the external kill).
+
 ## 2026-08-19 — Connect Four resolved: the slope dies around +1145 at ~225k games
 
 Rémi wanted the growth question answered, so c4_1 ran to 250,000 games (3.3 h more). The
