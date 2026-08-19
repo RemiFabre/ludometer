@@ -250,7 +250,34 @@ def truncation_r2(curve: Curve) -> dict[str, float | None]:
 
 
 # ------------------------------------------------------------------- panels
-def combined_panel(curves: list[Curve]) -> str:
+def _draw_order(curves: list[Curve], key) -> list[Curve]:
+    """Longest series first, shortest last — so the little curves (tic-tac-toe's
+    sliver) are painted ON TOP of the big ones instead of vanishing under them."""
+    return sorted(curves, key=lambda c: -key(c))
+
+
+def _vline(plot: "dash.Plot", x_value: float, label: str) -> None:
+    if not plot.xlo <= x_value <= plot.xhi:
+        return
+    x = plot.X(x_value)
+    plot.back.append(
+        f'<line x1="{dash.coord(x)}" y1="{dash.coord(plot.y0)}" '
+        f'x2="{dash.coord(x)}" y2="{dash.coord(plot.y0 + plot.ph)}" class="ref" />'
+    )
+    plot.front.append(
+        f'<text x="{dash.coord(x + 5)}" y="{dash.coord(plot.y0 + 12)}" '
+        f'class="ref-label" text-anchor="start">{dash.esc(label)}</text>'
+    )
+
+
+# Boiling 1 L of water (20 -> 100 °C) is 4.186 kJ/kg·K x 80 K = 335 kJ = 93 Wh
+# of heat; an electric stove delivers ~70% of what it draws, so the wall pays
+# ~133 Wh. At the laptop's ~45 W that is ~3 hours of training.
+KETTLE_WH = 93.0 / 0.70
+LAPTOP_W = 45.0
+
+
+def combined_panel(curves: list[Curve], smoothed: bool = False) -> str:
     """THE chart (Rémi's call): every run's absolute Elo on one shared axis.
 
     Each game is still anchored to its own ladder (random = 0), so the height
@@ -273,13 +300,17 @@ def combined_panel(curves: list[Curve]) -> str:
         y_title="Elo above its own random baseline",
     )
     entries = []
-    for curve in curves:
-        pts = [(p[1], p[2]) for p in curve.points]
+    for curve in _draw_order(curves, lambda c: c.points[-1][1]):
+        ys_line = [p[2] for p in curve.points]
+        if smoothed:
+            ys_line = smooth(ys_line)
+        pts = [(p[1], y) for p, y in zip(curve.points, ys_line)]
         plot.line(pts, curve.color,
                   width=2.2 if not curve.ref.context else 1.5,
                   opacity=1.0 if not curve.ref.context else 0.7,
                   dash="4 4" if curve.ref.context else None)
-        plot.errbars([(p[1], p[2], p[3]) for p in curve.points], curve.color)
+        if not smoothed:
+            plot.errbars([(p[1], p[2], p[3]) for p in curve.points], curve.color)
         plot.register(
             curve.ref.label,
             curve.color,
@@ -300,6 +331,16 @@ def combined_panel(curves: list[Curve]) -> str:
         entries.append((curve.ref.label, curve.color,
                         "dash" if curve.ref.context else "line"))
     svg = plot.svg("All games, absolute Elo, one axis")
+    if smoothed:
+        return dash.figure(
+            "The same chart, smoothed",
+            "A 5-point moving average over each curve, error bars dropped - "
+            "the shapes without the eval noise. Read trends here, exact "
+            "values on the raw chart above.",
+            svg,
+            legend_html=dash.legend(entries),
+            wide=True,
+        )
     return dash.figure(
         "How much skill does each game hold?",
         "Every run on one axis, each anchored to its own ladder (random = 0). "
@@ -339,8 +380,13 @@ def compute_panel(curves: list[Curve]) -> str:
         x_title="wall-clock training time (same laptop; ~45 Wh per hour)",
         y_title="Elo above its own random baseline",
     )
+    _vline(
+        plot,
+        KETTLE_WH / LAPTOP_W,
+        f"boil 1 L of water on a stove (~{KETTLE_WH:.0f} Wh)",
+    )
     entries = []
-    for curve in curves:
+    for curve in _draw_order(curves, lambda c: c.points[-1][4]):
         pts = [(p[4] / 3600.0, p[2]) for p in curve.points if p[4]]
         if len(pts) < 2:
             continue
@@ -356,13 +402,22 @@ def compute_panel(curves: list[Curve]) -> str:
         entries.append((curve.ref.label, curve.color,
                         "dash" if curve.ref.context else "line"))
     svg = plot.svg("Elo against training hours")
+    bulb = ""
+    ttt = next((c for c in curves if c.ref.game == "tictactoe"), None)
+    if ttt and ttt.points[-1][4]:
+        wh = ttt.points[-1][4] / 3600.0 * LAPTOP_W
+        bulb = (
+            f" Tic-tac-toe's entire run cost ~{wh:.1f} Wh: a 10 W LED bulb "
+            f"left on for {wh / 10 * 60:.0f} minutes solves the game."
+        )
     return dash.figure(
         "The same chart in computational effort",
         "x is wall-clock training time on the one laptop every run used - "
         "literal compute spent, including its evaluation pauses. A 'decision' "
         "is cheaper to think about in some games than others; an hour is an "
-        "hour. At ~45 W, one hour is roughly 45 Wh - Azul run1's whole curve "
-        "cost about a quarter of a kWh.",
+        "hour. The reference line is the energy to boil one litre of water on "
+        "an electric stove (93 Wh of heat at ~70% efficiency): learning Azul "
+        "to +2000 costs about one pot of tea, Uno+ about two." + bulb,
         svg,
         legend_html=dash.legend(entries),
         wide=True,
@@ -587,6 +642,7 @@ def build_page(now: float) -> str:
         body.append('<p class="empty">No comparable runs found under runs/.</p>')
     else:
         body.append(f'<section class="panel"><div class="grid">{combined_panel(curves)}</div></section>')
+        body.append(f'<section class="panel"><div class="grid">{combined_panel(curves, smoothed=True)}</div></section>')
         body.append(notes_section())
         compute = compute_panel(curves)
         if compute:
