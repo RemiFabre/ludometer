@@ -45,7 +45,7 @@ GAME_COLOR = {
     "azul": dash.SERIES[0],  # blue
     "uno": dash.SERIES[1],  # orange
     "unoplus": dash.SERIES[2],  # aqua
-    "tictactoe": dash.SERIES[3],  # yellow
+    "tictactoe": dash.SERIES[6],  # violet - far from Uno's orange (Remi)
     "connect4": dash.SERIES[4],  # magenta
 }
 CONTEXT = dash.MUTED  # run2 and other same-game context lines
@@ -67,7 +67,6 @@ class RunRef:
 
 RUN_REFS = [
     RunRef("run1", "azul", "Azul run1", 52.98),
-    RunRef("run2", "azul", "Azul run2 (256 sims)", 52.98, context=True),
     RunRef("uno1", "uno", "Uno", 18.8),
     RunRef("unoplus1", "unoplus", "Uno+ (house rules)", 40.0),
     RunRef("ttt1", "tictactoe", "Tic-tac-toe", 5.5),
@@ -85,21 +84,39 @@ BASELINE_ELOS = {
 
 
 GAME_NOTES = {
-    "azul": "Azul (Kiesling 2017): perfect information, no luck once the round is "
-            "drafted; the calibrated deep reference. run1 trains at 160 sims/move, "
-            "run2 at 256.",
-    "uno": "Uno, official 2-player rules (draw only when stuck, no stacking): "
-           "~64% of turns are forced, mean branching 3.2. Trained on single hands, "
-           "rated over matches to 500.",
-    "unoplus": "Uno+ = Uno plus four house rules: draw is ALWAYS legal (atomic, "
-               "15-card cap), +2/+4 stack like-on-like with the victim choosing, "
-               "playing a 7 swaps hands (both players then know the opposing hand "
-               "exactly - the search tracks that knowledge), and a 9-card deal. "
-               "Forced turns drop to ~19%; near-wins become revocable.",
-    "tictactoe": "Tic-tac-toe: solved, drawn, 9 actions. The calibration case - "
-                 "the study must report it as trivial, and does.",
-    "connect4": "Connect Four: solved (first-player win), 7 actions, no luck. The "
-                "non-trivial half of the calibrated pair.",
+    "azul": {
+        "tags": "perfect information · no luck after the draft · unsolved",
+        "html": "Azul (Kiesling 2017): the calibrated deep reference.",
+    },
+    "uno": {
+        "tags": "hidden hands · high luck · unsolved",
+        "html": "Uno, official 2-player rules (draw only when stuck, no stacking). "
+                "First to 500 points wins.",
+    },
+    "unoplus": {
+        "tags": "hidden hands · high luck · unsolved",
+        "html": "Uno+ = Uno plus four house rules. First to 500 points wins."
+                "<ul style='margin:6px 0 6px 18px;padding:0'>"
+                "<li>9-card deal (instead of 7).</li>"
+                "<li>Drawing a card is always a legal move (up to a 15-card hand cap).</li>"
+                "<li>+2 and +4 stack, like on like: instead of drawing, you may answer "
+                "a +2 with your own +2 (or a +4 with a +4), passing the grown penalty "
+                "back - whoever runs out of answers draws the whole stack.</li>"
+                "<li>Playing a 7 swaps hands (both players then know the opposing "
+                "hand exactly).</li>"
+                "</ul>"
+                "Note: with the default Uno rules ~64% of turns are forced; with the "
+                "Uno+ rules that drops to ~19%.",
+    },
+    "tictactoe": {
+        "tags": "perfect information · no luck · solved (draw)",
+        "html": "Tic-tac-toe: a solved game used as calibration. The agent reaches "
+                "perfect play very rapidly, as expected.",
+    },
+    "connect4": {
+        "tags": "perfect information · no luck · solved (first player wins)",
+        "html": "Connect Four: tic-tac-toe's character, but a much deeper game.",
+    },
 }
 
 
@@ -275,6 +292,67 @@ def _vline(plot: "dash.Plot", x_value: float, label: str) -> None:
 # ~133 Wh. At the laptop's ~45 W that is ~3 hours of training.
 KETTLE_WH = 93.0 / 0.70
 LAPTOP_W = 45.0
+_ANNO = dash.INK_2  # annotation ink: brighter than the grid, quieter than data
+
+
+def _pot_icon(x: float, y: float) -> str:
+    """A ~30px pot of water steaming on a stove, drawn in hairline strokes."""
+    return (
+        f'<g transform="translate({dash.coord(x)} {dash.coord(y)})" '
+        f'stroke="{_ANNO}" fill="none" stroke-width="1.4" stroke-linecap="round">'
+        '<path d="M4 8 q2 -4 0 -7" /><path d="M11 8 q2 -4 0 -7" />'
+        '<path d="M18 8 q2 -4 0 -7" />'
+        '<rect x="0" y="11" width="22" height="12" rx="1.5" />'
+        '<line x1="-5" y1="14" x2="0" y2="14" /><line x1="22" y1="14" x2="27" y2="14" />'
+        '<line x1="-3" y1="27" x2="25" y2="27" />'
+        '<line x1="1" y1="30" x2="5" y2="30" /><line x1="9" y1="30" x2="13" y2="30" />'
+        '<line x1="17" y1="30" x2="21" y2="30" />'
+        "</g>"
+    )
+
+
+def _bulb_icon(x: float, y: float) -> str:
+    """A ~22px light bulb with rays."""
+    return (
+        f'<g transform="translate({dash.coord(x)} {dash.coord(y)})" '
+        f'stroke="{_ANNO}" fill="none" stroke-width="1.4" stroke-linecap="round">'
+        '<circle cx="8" cy="8" r="6.5" />'
+        '<path d="M5.5 14 v3 h5 v-3" /><line x1="6" y1="19.5" x2="10" y2="19.5" />'
+        '<line x1="8" y1="-3" x2="8" y2="-6" /><line x1="16" y1="0" x2="18.5" y2="-2.5" />'
+        '<line x1="0" y1="0" x2="-2.5" y2="-2.5" /><line x1="17" y1="8" x2="20.5" y2="8" />'
+        '<line x1="-1" y1="8" x2="-4.5" y2="8" />'
+        "</g>"
+    )
+
+
+def _arrow(x1: float, y1: float, x2: float, y2: float) -> str:
+    """A curved annotation arrow from (x1,y1) to (x2,y2), head at the target."""
+    mx, my = (x1 + x2) / 2, min(y1, y2) - 14
+    import math as _m
+
+    angle = _m.atan2(y2 - my, x2 - mx)
+    a1 = angle + _m.radians(155)
+    a2 = angle - _m.radians(155)
+    head = (
+        f"M {dash.coord(x2)} {dash.coord(y2)} "
+        f"L {dash.coord(x2 + 7 * _m.cos(a1))} {dash.coord(y2 + 7 * _m.sin(a1))} "
+        f"M {dash.coord(x2)} {dash.coord(y2)} "
+        f"L {dash.coord(x2 + 7 * _m.cos(a2))} {dash.coord(y2 + 7 * _m.sin(a2))}"
+    )
+    return (
+        f'<path d="M {dash.coord(x1)} {dash.coord(y1)} Q {dash.coord(mx)} {dash.coord(my)} '
+        f'{dash.coord(x2)} {dash.coord(y2)}" stroke="{_ANNO}" fill="none" stroke-width="1.3" />'
+        f'<path d="{head}" stroke="{_ANNO}" fill="none" stroke-width="1.3" stroke-linecap="round" />'
+    )
+
+
+def _anno_text(x: float, y: float, lines: list[str], anchor: str = "start") -> str:
+    spans = "".join(
+        f'<text x="{dash.coord(x)}" y="{dash.coord(y + i * 13)}" class="ref-label" '
+        f'text-anchor="{anchor}">{dash.esc(line)}</text>'
+        for i, line in enumerate(lines)
+    )
+    return spans
 
 
 def combined_panel(curves: list[Curve], smoothed: bool = False) -> str:
@@ -380,11 +458,23 @@ def compute_panel(curves: list[Curve]) -> str:
         x_title="wall-clock training time (same laptop; ~45 Wh per hour)",
         y_title="Elo above its own random baseline",
     )
-    _vline(
-        plot,
-        KETTLE_WH / LAPTOP_W,
-        f"boil 1 L of water on a stove (~{KETTLE_WH:.0f} Wh)",
-    )
+    kettle_h = KETTLE_WH / LAPTOP_W
+    _vline(plot, kettle_h, "")
+    if plot.xlo <= kettle_h <= plot.xhi:
+        kx = plot.X(kettle_h)
+        py = plot.y0 + plot.ph - 150
+        plot.front.append(_pot_icon(kx + 52, py))
+        plot.front.append(_arrow(kx + 48, py + 20, kx + 4, py + 4))
+        plot.front.append(
+            _anno_text(
+                kx + 34,
+                py + 48,
+                [
+                    "energy needed to boil one litre",
+                    f"of water on the stove — {KETTLE_WH:.0f} Wh",
+                ],
+            )
+        )
     entries = []
     for curve in _draw_order(curves, lambda c: c.points[-1][4]):
         pts = [(p[4] / 3600.0, p[2]) for p in curve.points if p[4]]
@@ -401,15 +491,32 @@ def compute_panel(curves: list[Curve]) -> str:
         )
         entries.append((curve.ref.label, curve.color,
                         "dash" if curve.ref.context else "line"))
-    svg = plot.svg("Elo against training hours")
     bulb = ""
     ttt = next((c for c in curves if c.ref.game == "tictactoe"), None)
     if ttt and ttt.points[-1][4]:
-        wh = ttt.points[-1][4] / 3600.0 * LAPTOP_W
+        t_end = ttt.points[-1][4] / 3600.0
+        elo_end = ttt.points[-1][2]
+        wh = t_end * LAPTOP_W
+        minutes = wh / 10 * 60
+        bx = plot.X(t_end) + 96
+        by = plot.Y(elo_end) + 34
+        plot.front.append(_bulb_icon(bx, by))
+        plot.front.append(_arrow(bx - 4, by + 4, plot.X(t_end) + 4, plot.Y(elo_end) + 8))
+        plot.front.append(
+            _anno_text(
+                bx + 30,
+                by + 4,
+                [
+                    "tic-tac-toe is solved for",
+                    f"~{minutes:.0f} minutes of a 10 W LED",
+                ],
+            )
+        )
         bulb = (
             f" Tic-tac-toe's entire run cost ~{wh:.1f} Wh: a 10 W LED bulb "
-            f"left on for {wh / 10 * 60:.0f} minutes solves the game."
+            f"left on for {minutes:.0f} minutes solves the game."
         )
+    svg = plot.svg("Elo against training hours")
     return dash.figure(
         "The same chart in computational effort",
         "x is wall-clock training time on the one laptop every run used - "
@@ -425,14 +532,17 @@ def compute_panel(curves: list[Curve]) -> str:
 
 
 def notes_section() -> str:
-    items = "".join(
-        f'<p class="fig-sub" style="margin:6px 0"><strong style="color:{GAME_COLOR[g]}">'
-        f"{g}</strong> — {dash.esc(text)}</p>"
-        for g, text in GAME_NOTES.items()
-    )
+    items = []
+    for g, note in GAME_NOTES.items():
+        items.append(
+            f'<div style="margin:10px 0"><p class="fig-sub" style="margin:0">'
+            f'<strong style="color:{GAME_COLOR[g]}">{g}</strong>'
+            f'<span style="opacity:.75">&nbsp; {dash.esc(note["tags"])}</span></p>'
+            f'<div class="fig-sub" style="margin:2px 0 0">{note["html"]}</div></div>'
+        )
     return (
         '<section class="panel"><h2>The games, and what was changed</h2>'
-        + items
+        + "".join(items)
         + "</section>"
     )
 
