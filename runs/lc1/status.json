@@ -2,10 +2,10 @@
   "run": "lc1",
   "state": "done",
   "started": "2026-08-19T10:08:36Z",
-  "updated": "2026-08-19T11:23:49Z",
-  "ended": "2026-08-19T11:23:49Z",
+  "updated": "2026-08-19T16:00:48Z",
+  "ended": "2026-08-19T16:00:48Z",
   "error": null,
-  "games": 10000,
-  "steps": 5801,
+  "games": 30000,
+  "steps": 15692,
   "note": "stopped (target reached)"
 }
