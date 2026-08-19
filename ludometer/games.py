@@ -18,6 +18,7 @@ from typing import Any
 
 from ludometer.azul import engine as _azul
 from ludometer.c4 import engine as _c4
+from ludometer.lostcities import engine as _lc
 from ludometer.ttt import engine as _ttt
 from ludometer.uno import engine as _uno
 from ludometer.uno import plus as _unoplus
@@ -101,6 +102,15 @@ GAMES: dict[str, GameSpec] = {
         baselines=("ttt:random", "ttt:greedy", "ttt:heuristic"),
         max_moves=20,
         state_cls=_ttt.TicTacToeState,
+    ),
+    # Lost Cities (NEXT_GAMES.md par.5): Uno's dials, a great game's design.
+    "lostcities": GameSpec(
+        name="lostcities",
+        encoded_size=_lc.ENCODED_SIZE,
+        action_space=_lc.ACTION_SPACE,
+        baselines=("lc:random", "lc:greedy", "lc:heuristic"),
+        max_moves=600,  # ~44 deck draws; pile-draw loops are the backstop's job
+        state_cls=_lc.LostCitiesState,
     ),
     "connect4": GameSpec(
         name="connect4",

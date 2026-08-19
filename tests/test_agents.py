@@ -74,6 +74,9 @@ def test_registry_covers_the_baselines():
         "c4:greedy",
         "c4:heuristic",
         "c4:perfect",
+        "lc:random",
+        "lc:greedy",
+        "lc:heuristic",
     }
     for name, factory in AGENT_REGISTRY.items():
         agent = factory()

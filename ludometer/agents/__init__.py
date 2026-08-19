@@ -24,6 +24,11 @@ from ludometer.agents.perfect_info import (
     TTTPerfectAgent,
     TTTRandomAgent,
 )
+from ludometer.lostcities.agents import (
+    LCGreedyAgent,
+    LCHeuristicAgent,
+    LCRandomAgent,
+)
 from ludometer.uno.agents import (
     UnoGreedyAgent,
     UnoHeuristicAgent,
@@ -68,6 +73,9 @@ AGENT_REGISTRY: dict[str, Callable[..., Agent]] = {
     "c4:greedy": C4GreedyAgent,
     "c4:heuristic": C4HeuristicAgent,
     "c4:perfect": C4PerfectAgent,
+    "lc:random": LCRandomAgent,
+    "lc:greedy": LCGreedyAgent,
+    "lc:heuristic": LCHeuristicAgent,
 }
 
 # A spec is anything :func:`make_agent` understands.
