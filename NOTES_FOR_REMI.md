@@ -4,6 +4,18 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — Connect Four resolved: the slope dies around +1145 at ~225k games
+
+Rémi wanted the growth question answered, so c4_1 ran to 250,000 games (3.3 h more). The
+definitive single-fit ladder (13 checkpoints + 3 baselines, random = 0): +279 untrained →
+fast climb to ~+930 by 67k games → a ~90k-game shelf → a second climb to **~+1145 by
+225k games → flat at 250k** (+1147 → +1143). The slope is resolved; the plateau is real.
+The double-shelf (long pause at +930, late breakthrough) is visible but within ±64 error
+bars per point — worth remembering, not worth claiming. Cross-fit caveat: this 16-agent
+fit re-bases earlier numbers (g89392 reads +935 here vs +1143 in the 10-agent fit);
+shapes within one fit are the currency, and the chart always draws one fit. This chart is
+the socials candidate Rémi asked for.
+
 ## 2026-08-19 — Lost Cities, first pass: the control case behaves exactly as recruited
 
 `lc1` (10,000 games ≈ 2.2M decisions, uno1's budget, same net and search). The honest
