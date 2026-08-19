@@ -84,6 +84,25 @@ BASELINE_ELOS = {
 }
 
 
+GAME_NOTES = {
+    "azul": "Azul (Kiesling 2017): perfect information, no luck once the round is "
+            "drafted; the calibrated deep reference. run1 trains at 160 sims/move, "
+            "run2 at 256.",
+    "uno": "Uno, official 2-player rules (draw only when stuck, no stacking): "
+           "~64% of turns are forced, mean branching 3.2. Trained on single hands, "
+           "rated over matches to 500.",
+    "unoplus": "Uno+ = Uno plus four house rules: draw is ALWAYS legal (atomic, "
+               "15-card cap), +2/+4 stack like-on-like with the victim choosing, "
+               "playing a 7 swaps hands (both players then know the opposing hand "
+               "exactly - the search tracks that knowledge), and a 9-card deal. "
+               "Forced turns drop to ~19%; near-wins become revocable.",
+    "tictactoe": "Tic-tac-toe: solved, drawn, 9 actions. The calibration case - "
+                 "the study must report it as trivial, and does.",
+    "connect4": "Connect Four: solved (first-player win), 7 actions, no luck. The "
+                "non-trivial half of the calibrated pair.",
+}
+
+
 @dataclass
 class Curve:
     ref: RunRef
@@ -108,17 +127,28 @@ def _rerate_points(run_dir: Path, rows: list) -> list | None:
     ratings = data.get("elo") or {}
     errors = data.get("elo_err") or {}
     dec_by_games = {}
+    t_by_games = {}
     for row in rows:
         g, d = dash.num(row, "games"), dash.num(row, "decisions")
         if g is not None and d is not None:
             dec_by_games[g] = d
+        if g is not None and dash.num(row, "t") is not None:
+            t_by_games[g] = dash.num(row, "t")
     points = []
     for label, elo in ratings.items():
         if not label.startswith("g") or not label[1:].isdigit():
             continue
         games = int(label[1:])
         decisions = dec_by_games.get(games, games * 1.0)
-        points.append((games, decisions, float(elo), float(errors.get(label, 0.0))))
+        points.append(
+            (
+                games,
+                decisions,
+                float(elo),
+                float(errors.get(label, 0.0)),
+                t_by_games.get(games, 0.0),
+            )
+        )
     points.sort()
     return points if len(points) >= 3 else None
 
@@ -139,7 +169,8 @@ def load_curves() -> list[Curve]:
                 decisions = dash.num(row, "decisions")
                 if decisions is None:
                     decisions = games * ref.decisions_per_game
-                points.append((games, decisions, elo, dash.num(row, "elo_err") or 0.0))
+                points.append((games, decisions, elo, dash.num(row, "elo_err") or 0.0,
+                               dash.num(row, "t") or 0.0))
         if len(points) < 3:
             continue
         status = dash.read_json(run_dir / "status.json")
@@ -273,12 +304,81 @@ def combined_panel(curves: list[Curve]) -> str:
         "How much skill does each game hold?",
         "Every run on one axis, each anchored to its own ladder (random = 0). "
         "A curve that tops out lower offers less distinguishable skill above "
-        "random - the depth of the game, in one picture. Caveat: rating units "
-        "differ per game (Uno is rated over matches, which stretch a per-hand "
-        "edge), so read heights as indicative, shapes as exact.",
+        "random - the depth of the game, in one picture. Curves do not start at "
+        "zero because the first checkpoint is the UNTRAINED net driven by the "
+        "search, which already beats random play. Caveat: rating units differ "
+        "per game (Uno is rated over matches, which stretch a per-hand edge), "
+        "so read heights as indicative, shapes as exact.",
         svg,
         legend_html=dash.legend(entries),
         wide=True,
+    )
+
+
+def compute_panel(curves: list[Curve]) -> str:
+    """Elo against wall-clock training time - Remi's "computational learning
+    effort" axis. Every run trained on the same M-series laptop, so hours are
+    literal compute (and energy: ~45 W under load, so 1 h is roughly 45 Wh).
+    A decision is not the same amount of thinking in every game; an hour is.
+    """
+    plot = dash.Plot(width=1080, height=380)
+    xs, ys = [], []
+    for c in curves:
+        for p in c.points:
+            if p[4]:
+                xs.append(p[4] / 3600.0)
+                ys.append(p[2])
+    if not xs:
+        return ""
+    xt, yt = plot.scale(xs, ys, x_count=8)
+    plot.frame(
+        xt,
+        yt,
+        lambda v: f"{v:g}h",
+        lambda v: f"{v:+.0f}",
+        x_title="wall-clock training time (same laptop; ~45 Wh per hour)",
+        y_title="Elo above its own random baseline",
+    )
+    entries = []
+    for curve in curves:
+        pts = [(p[4] / 3600.0, p[2]) for p in curve.points if p[4]]
+        if len(pts) < 2:
+            continue
+        plot.line(pts, curve.color,
+                  width=2.0 if not curve.ref.context else 1.5,
+                  opacity=1.0 if not curve.ref.context else 0.7,
+                  dash="4 4" if curve.ref.context else None)
+        plot.register(
+            curve.ref.label,
+            curve.color,
+            [(x, y, f"{x:.2f} h (~{x * 45:.0f} Wh)", f"{y:+.0f} Elo") for x, y in pts],
+        )
+        entries.append((curve.ref.label, curve.color,
+                        "dash" if curve.ref.context else "line"))
+    svg = plot.svg("Elo against training hours")
+    return dash.figure(
+        "The same chart in computational effort",
+        "x is wall-clock training time on the one laptop every run used - "
+        "literal compute spent, including its evaluation pauses. A 'decision' "
+        "is cheaper to think about in some games than others; an hour is an "
+        "hour. At ~45 W, one hour is roughly 45 Wh - Azul run1's whole curve "
+        "cost about a quarter of a kWh.",
+        svg,
+        legend_html=dash.legend(entries),
+        wide=True,
+    )
+
+
+def notes_section() -> str:
+    items = "".join(
+        f'<p class="fig-sub" style="margin:6px 0"><strong style="color:{GAME_COLOR[g]}">'
+        f"{g}</strong> — {dash.esc(text)}</p>"
+        for g, text in GAME_NOTES.items()
+    )
+    return (
+        '<section class="panel"><h2>The games, and what was changed</h2>'
+        + items
+        + "</section>"
     )
 
 
@@ -334,6 +434,11 @@ def elo_panel(game: str, curves: list[Curve]) -> str:
     ys = [p[2] for c in mine for p in c.points]
     for _, elo in BASELINE_ELOS.get(game, ()):  # keep reference lines in frame
         ys.append(elo)
+    for c in mine:
+        rerate = dash.read_json(REPO / "runs" / c.ref.name / "rerate.json")
+        perfect = (rerate.get("elo") or {}).get("perfect")
+        if perfect is not None:
+            ys.append(float(perfect))
     xt, yt = plot.scale(xs, ys)
     plot.frame(
         xt,
@@ -343,7 +448,16 @@ def elo_panel(game: str, curves: list[Curve]) -> str:
         x_title="cumulative decisions",
         y_title="Elo (this game's ladder)",
     )
-    for name, elo in BASELINE_ELOS.get(game, ()):
+    refs = list(BASELINE_ELOS.get(game, ()))
+    for c in mine:
+        rerate = dash.read_json(REPO / "runs" / c.ref.name / "rerate.json")
+        perfect = (rerate.get("elo") or {}).get("perfect")
+        if perfect is not None:
+            refs = [(r for r in refs if r[0] != "perfect play")] and [
+                r for r in refs if r[0] != "perfect play"
+            ]
+            refs.append(("perfect play (same fit)", float(perfect)))
+    for name, elo in refs:
         plot.hline(elo, f"{name} {elo:+.0f}")
     entries = []
     for curve in mine:
@@ -473,6 +587,10 @@ def build_page(now: float) -> str:
         body.append('<p class="empty">No comparable runs found under runs/.</p>')
     else:
         body.append(f'<section class="panel"><div class="grid">{combined_panel(curves)}</div></section>')
+        body.append(notes_section())
+        compute = compute_panel(curves)
+        if compute:
+            body.append(f'<section class="panel"><div class="grid">{compute}</div></section>')
         body.append(f'<section class="panel"><div class="grid">{shape_panel(curves)}</div></section>')
         panels = [elo_panel(g, curves) for g in ("azul", "uno", "unoplus", "tictactoe", "connect4")]
         panels = [p for p in panels if p]
