@@ -47,6 +47,7 @@ GAME_COLOR = {
     "unoplus": dash.SERIES[2],  # aqua
     "tictactoe": dash.SERIES[6],  # violet - far from Uno's orange (Remi)
     "connect4": dash.SERIES[4],  # magenta
+    "lostcities": dash.SERIES[5],  # green
 }
 CONTEXT = dash.MUTED  # run2 and other same-game context lines
 
@@ -71,6 +72,7 @@ RUN_REFS = [
     RunRef("unoplus1", "unoplus", "Uno+ (house rules)", 40.0),
     RunRef("ttt1", "tictactoe", "Tic-tac-toe", 5.5),
     RunRef("c4_1", "connect4", "Connect Four", 30.0),
+    RunRef("lc1", "lostcities", "Lost Cities", 220.0),
 ]
 
 #: pre-rated baseline reference lines per game (from the journal's gauntlets)
@@ -116,6 +118,15 @@ GAME_NOTES = {
     "connect4": {
         "tags": "perfect information · no luck · solved (first player wins)",
         "html": "Connect Four: tic-tac-toe's character, but a much deeper game.",
+    },
+    "lostcities": {
+        "tags": "hidden hand · high luck · unsolved · Knizia 1999",
+        "html": "Lost Cities: Uno's dials on a great game's design - the control case. "
+                "The rules in four lines: on your turn play one card onto one of your "
+                "five colour expeditions (ascending only) or discard it, then draw from "
+                "the deck or a discard pile. Starting an expedition costs 20 points; its "
+                "cards earn them back. Handshake cards played first multiply the colour's "
+                "result. The game ends when the deck runs out; higher total wins.",
     },
 }
 
@@ -441,10 +452,11 @@ def compute_panel(curves: list[Curve]) -> str:
     A decision is not the same amount of thinking in every game; an hour is.
     """
     plot = dash.Plot(width=1080, height=380)
+    CUT_H = 4.2  # Remi: Uno+'s long flat tail adds nothing - trim like Azul's
     xs, ys = [], []
     for c in curves:
         for p in c.points:
-            if p[4]:
+            if p[4] and p[4] / 3600.0 <= CUT_H:
                 xs.append(p[4] / 3600.0)
                 ys.append(p[2])
     if not xs:
@@ -477,9 +489,19 @@ def compute_panel(curves: list[Curve]) -> str:
         )
     entries = []
     for curve in _draw_order(curves, lambda c: c.points[-1][4]):
-        pts = [(p[4] / 3600.0, p[2]) for p in curve.points if p[4]]
+        pts = [
+            (p[4] / 3600.0, p[2])
+            for p in curve.points
+            if p[4] and p[4] / 3600.0 <= CUT_H
+        ]
+        clipped = sum(1 for p in curve.points if p[4] / 3600.0 > CUT_H)
         if len(pts) < 2:
             continue
+        if clipped and not curve.ref.context:
+            end_t = curve.points[-1][4] / 3600.0
+            plot.label(pts[-1][0], pts[-1][1],
+                       f"continues flat to {end_t:.1f}h",
+                       anchor="end", dy=-10)
         plot.line(pts, curve.color,
                   width=2.0 if not curve.ref.context else 1.5,
                   opacity=1.0 if not curve.ref.context else 0.7,
