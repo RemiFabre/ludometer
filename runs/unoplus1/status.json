@@ -1,0 +1,11 @@
+{
+  "run": "unoplus1",
+  "state": "done",
+  "started": "2026-08-18T22:16:27Z",
+  "updated": "2026-08-19T05:29:35Z",
+  "ended": "2026-08-19T05:29:35Z",
+  "error": null,
+  "games": 50000,
+  "steps": 37673,
+  "note": "stopped (target reached)"
+}

@@ -4,6 +4,32 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-19 — unoplus1 finished: the house rules roughly tripled Uno's learnable depth
+
+**The rule-knob experiment has its answer.** Same trainer, same net shape, same search;
+four house rules. On its own ladder (random = 0, rated over matches to 500):
+
+- **Uno+ reaches +1853 and is still climbing at the end** (last eval is the best one,
+  0.81 vs its greedy, 0.94 vs its heuristic). Plain Uno reached +662 and spent its whole
+  back half flat at its greedy's level.
+- Learned range: **~+1150 Elo of climb for Uno+ vs ~+510 for Uno**; slope-half at 82% of
+  budget vs 46%. The log fit beats the line for both (0.879 / 0.878 vs 0.820 / 0.776).
+- The value head prices "one card from going out" at **+0.75 in Uno+ vs +0.98 in Uno**
+  (boundary diagnostic on the final checkpoint; fresh hands at 0.0 in both). That drop is
+  the rules working: stacking and the 7-swap make a near-win genuinely revocable, which
+  is where the extra counterplay - and depth - comes from.
+
+Honesty box, before this becomes a slide: (1) the two Uno ladders share only their
+random=0 anchor, so cross-reading +1853 vs +662 inherits the usual cross-pool caveat -
+the games-0 MCTS already rates +701 on Uno+'s ladder vs +144 on Uno's, i.e. the scales
+are not identical; the *learned range* comparison is the safer number. (2) The decisions
+budget overshot: early near-random nets bank cards and played ~445-decision hands, so the
+run consumed **7.5M decisions, 3.4x uno1's 2.2M** - visible and honest on the decisions
+axis, but "same budget" it was not (at uno1's 2.2M mark Uno+ was already ~+1550). Even
+the trained net keeps hands at ~95 searched decisions: voluntarily drawing is part of
+good Uno+ play, not just early-net noise. (3) max_game_moves=2500 truncation applied to
+some early self-play hands; the trainer log shows it fading to zero as the net learned.
+
 ## 2026-08-19 — Perfect play is ratable after all, and tic-tac-toe's ceiling is *reached*
 
 Rémi's observation, confirmed: "perfect play has unbounded Elo" only holds while the
