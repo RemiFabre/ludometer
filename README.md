@@ -19,6 +19,23 @@ widely considered excellent — then reuse the framework to evaluate new board g
 game's own anchor pool, so the two are never compared as numbers: what carries across
 games is the *shape* of the curve.
 
+## The first arc's results (2026-08, six games)
+
+The answer so far: **learning is log-shaped, not linear, in every game measured** — and
+the discriminating quantities are where the slope dies and how much range the game covers
+first. All curves, methods and caveats live on **`web/compare.html`**
+(`python3 web/make_compare.py` regenerates it); the running journal is
+`NOTES_FOR_REMI.md`.
+
+| game | ceiling above its own random | verdict |
+|---|---|---|
+| Tic-tac-toe | +515, reached in 2 min | draws perfect play — the calibration passes |
+| Uno | +651, flat from half-run | the recruited shallow case |
+| Lost Cities | ~+890 after 3× Uno's budget | same dials as Uno, opposite shape: the flatness was Uno's |
+| Connect Four | ~+1145 plateau at 225k games | Elo and %-optimal *disagree* — the study's most interesting result |
+| Uno+ (4 house rules) | +1853, still rising | one rule set ≈ tripled Uno's depth |
+| Azul | +2001, never bent | the deep reference |
+
 ## ▶ Play it — and read how it works
 
 - **Play against the AI in your browser, no install:**
