@@ -1,0 +1,12 @@
+{"ckpt": "ckpt-000000", "games": 0, "pct_optimal": 0.874, "blunder_rate": 0.2018, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-021504", "games": 21504, "pct_optimal": 0.9105, "blunder_rate": 0.1404, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-044336", "games": 44336, "pct_optimal": 0.911, "blunder_rate": 0.1413, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-066864", "games": 66864, "pct_optimal": 0.9135, "blunder_rate": 0.1321, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-089392", "games": 89392, "pct_optimal": 0.914, "blunder_rate": 0.1339, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-112016", "games": 112016, "pct_optimal": 0.9125, "blunder_rate": 0.1349, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-134544", "games": 134544, "pct_optimal": 0.9125, "blunder_rate": 0.1321, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-157072", "games": 157072, "pct_optimal": 0.915, "blunder_rate": 0.133, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-179600", "games": 179600, "pct_optimal": 0.916, "blunder_rate": 0.1294, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-202128", "games": 202128, "pct_optimal": 0.919, "blunder_rate": 0.1229, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-224656", "games": 224656, "pct_optimal": 0.917, "blunder_rate": 0.1284, "n": 2000, "won_positions": 1090, "sims": 64}
+{"ckpt": "ckpt-249232", "games": 249232, "pct_optimal": 0.9155, "blunder_rate": 0.1303, "n": 2000, "won_positions": 1090, "sims": 64}

@@ -4,6 +4,25 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-20 — The last measurement disagrees with the second-to-last, and §3 called it
+
+Connect Four's %-optimal walk (2,000 solved positions, ply ≥ 14, evaluated at the same 64
+sims as every rating): the net hits **~91% optimal by 21k games and never improves** —
+flat at 91.5% ± 0.4 across the entire 230k games in which its Elo climbed another +370.
+And the final net scores *below* the handwritten heuristic on the suite (91.5% vs 93.8%,
+13% vs 10% blunders on won positions) while beating it nine games in ten. The §3 brief:
+"if the two charts disagree, that disagreement is itself the most interesting result in
+the study." They disagree. The reconciliation, honestly stated: the suite is off-policy
+for the net (positions sampled from baseline games), its floor is ply 14 (the Python
+solver's affordability limit — the net's opening play is never graded), and Elo rewards
+whole-game exploitation that per-position WDL preservation cannot see. Elo says "better
+at winning"; %-optimal says "not more midgame-perfect"; Connect Four's late Elo gains
+apparently live in the opening and in opponent modelling, not in midgame exactness.
+Baseline sanity on the suite: random 77.8% (ply-14 positions are generous), greedy 90.7%,
+heuristic 93.8%.
+
+With that, every planned measurement of the first arc is done.
+
 ## 2026-08-19 — Lost Cities resolved at ~+890: the control case closes the study's first arc
 
 `lc1` finished its 30,000-game extension. Final single-fit ladder (random = 0): untrained
