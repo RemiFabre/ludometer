@@ -16,7 +16,7 @@
  * back on every click, so a reload keeps whatever you chose.
  */
 
-import { SPEEDS, initSpeed, prefersReducedMotion, setSpeed, speed } from "./animate.js";
+import { SPEEDS, initSpeed, setSpeed, speed } from "./animate.js";
 import { confirmOn, initConfirm, setConfirm } from "./confirm.js";
 import { boardsMode, initBoards, setBoardsMode } from "./layout.js";
 import { initPopups, popupsOn, setPopups } from "./popups.js";
@@ -188,11 +188,11 @@ export function createSettings(host, options = {}) {
     if (options.confirm) bits.push(confirmOn() ? "confirm on" : "confirm off");
     if (options.boards) bits.push(boardsMode() === "stack" ? "boards +" : "boards −");
     summary.textContent = bits.join(" · ");
-    hint.textContent = prefersReducedMotion()
-      ? "Your system asks apps to reduce motion. The tiles still move here, because " +
-        "this switch (not that one) decides. Pick Off if you would rather they did not."
-      : "Tiles always travel to where they land. Slow it down to follow a long turn, " +
-        "or turn it off for instant play.";
+    // one sentence whatever the OS motion preference: this switch decides
+    // either way (see animate.js), and saying so here read as a lecture
+    hint.textContent =
+      "Tiles always travel to where they land. Slow it down to follow a long turn, " +
+      "or turn it off for instant play.";
   }
 
   gear.addEventListener("click", () => {

@@ -3,7 +3,7 @@
   "checkpoint": "ckpt-037888",
   "elo": 2361.0,
   "games": 37888,
-  "exported_at": "2026-08-16T20:39:05Z",
+  "exported_at": "2026-08-21T10:29:56Z",
   "input_size": 182,
   "action_space": 180,
   "net_config": {
@@ -20,6 +20,7 @@
     "policy_rank": 32,
     "policy_global": true,
     "margin_head": true,
+    "aux_heads": false,
     "version": 2
   },
   "num_params": 1810331,
@@ -29,6 +30,7 @@
     "margin"
   ],
   "has_margin": true,
+  "has_aux": false,
   "opset": 17,
   "onnx_bytes": 7329526,
   "onnx_sha256": "77316466e2de41f35d53d06232e781cc5bd5c592a97bc8967e36f8168510da44",

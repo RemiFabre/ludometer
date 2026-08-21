@@ -46,10 +46,11 @@ export function statsUrl() {
 export function track(name, extra) {
   if (!COUNT_URL) return;
   try {
-    // development and the headless test suite play thousands of games; none of
-    // them are players, and none of them may touch the public tally
+    // development, the headless test suite and any staging copy of the site
+    // play thousands of games; none of them are players, and none of them may
+    // touch the public tally
     const host = location.hostname;
-    if (host === "localhost" || host === "127.0.0.1" || host === "") return;
+    if (host === "localhost" || host === "127.0.0.1" || host === "" || host.includes("staging")) return;
     const page = name === "pageview";
     const path = page ? location.pathname : name;
     const url =

@@ -84,6 +84,16 @@ button, input, select { font: inherit; color: inherit; }
 }
 .field-narrow input { min-width: 78px; width: 88px; }
 .field-narrow select { min-width: 132px; }
+/* the opponent's glaze, as a small tile beside the menu and on its board */
+.bot-pick { display: flex; align-items: center; gap: 7px; }
+.bot-pick select { min-width: 150px; }
+.bot-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 1px 0 rgba(255, 255, 255, .45) inset;
+}
 .check { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; font-size: 14px; }
 .check.coach { padding: 5px 10px 5px 8px; border: 1px solid var(--grout); border-radius: 2px; background: var(--field-bg); }
 .check.coach.off { opacity: .55; }
@@ -148,6 +158,45 @@ button, input, select { font: inherit; color: inherit; }
 .engine-bar.ready .engine-dot { background: var(--c4); box-shadow: 0 0 0 3px var(--c4-wash); animation: none; }
 .engine-bar.failed .engine-dot { background: var(--c2); box-shadow: 0 0 0 3px var(--c2-wash); animation: none; }
 .engine-text { flex: 1 1 auto; min-width: 200px; }
+
+/* what's new: one dismissible line, edged in cobalt so it reads as news */
+.news-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px clamp(14px, 3vw, 34px);
+  background: linear-gradient(var(--plaster-hi), var(--plaster));
+  border-bottom: 1px solid var(--grout);
+  border-left: 4px solid var(--c0);
+  font-family: var(--font-label);
+  font-size: 13px;
+  letter-spacing: .03em;
+  color: var(--ink);
+}
+.news-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c0);
+  color: var(--plaster-hi);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.news-bar[hidden] { display: none; }
+.news-text { flex: 1 1 auto; }
+.news-line { display: block; line-height: 1.55; }
+.news-close {
+  border: 1px solid var(--badge-edge);
+  background: none;
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+.news-close:hover { color: var(--ink); }
 .engine-badge {
   padding: 3px 9px;
   border-radius: 999px;

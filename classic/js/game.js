@@ -50,8 +50,8 @@ export class GameSession {
     this._recordDeal();
     this._logEntry(
       "start",
-      `New game: you are player ${this.humanSeat + 1}, the AI (${this.agentName}) is player ${this.aiSeat + 1}. ` +
-        `${this.humanPlaysFirst ? "You" : "The AI"} start${this.humanPlaysFirst ? "" : "s"}.`
+      `New game: you are player ${this.humanSeat + 1}, ${this.agentName} is player ${this.aiSeat + 1}. ` +
+        `${this.humanPlaysFirst ? "You" : this.agentName} start${this.humanPlaysFirst ? "" : "s"}.`
     );
     if (this.opponentBlurb) this._logEntry("start", this.opponentBlurb);
   }
@@ -67,9 +67,9 @@ export class GameSession {
   get opponentBlurb() {
     const info = this.opponentInfo;
     if (!info || !info.checkpoint) return "";
-    const elo = typeof info.elo === "number" ? `, rated ${info.elo >= 0 ? "+" : ""}${Math.round(info.elo)} on our internal ladder` : "";
+    const elo = typeof info.elo === "number" ? `, rated ${Math.round(info.elo)} on our internal ladder` : "";
     const thinking = this.thinkTimeS ? ` It thinks for ${this.thinkTimeS}s per move, in this tab.` : " It replies from the policy head, with no search.";
-    return `You're facing ${info.checkpoint}${elo}.${thinking}`;
+    return `You're facing ${this.agentName}${elo}.${thinking}`;
   }
 
   /** Snapshot the tiles this round was dealt, with the bag and lid behind it. */
@@ -91,7 +91,7 @@ export class GameSession {
   }
 
   labelOf(player) {
-    return player === this.humanSeat ? "You" : "AI";
+    return player === this.humanSeat ? "You" : this.agentName;
   }
 
   get humanTurn() {
@@ -154,7 +154,7 @@ export class GameSession {
       const sign = (n) => (n >= 0 ? `+${n}` : String(n));
       this._logEntry(
         "round",
-        `End of round ${report.round + 1}: you ${sign(you.delta)} → ${you.score_after}, AI ${sign(ai.delta)} → ${ai.score_after}.`,
+        `End of round ${report.round + 1}: you ${sign(you.delta)} → ${you.score_after}, ${this.agentName} ${sign(ai.delta)} → ${ai.score_after}.`,
         // every entry carries its ply, so the move navigator can show the log as
         // it stood at any point in the game
         { round: report.round, report_n: this.roundReports.length - 1, ply: this.ply }
@@ -162,7 +162,7 @@ export class GameSession {
       // a fresh round was dealt inside `apply`; write it down before it is played
       this._recordDeal();
       if (state.isTerminal) {
-        const final = finalReport(state, this.humanSeat) || {};
+        const final = finalReport(state, this.humanSeat, this.agentName) || {};
         this._logEntry(
           "end",
           `${final.headline || "Game over."} Final score ${state.scores[this.humanSeat]}–${state.scores[this.aiSeat]}.`,
@@ -183,7 +183,7 @@ export class GameSession {
       // sims and the root value ride on the log entry, not just on `move`:
       // `lastAiMoves` only holds the current batch, and the game record needs
       // every move's numbers at the end of the game (see js/record.js)
-      this._logEntry("think", `AI ${move.search_text}.`, {
+      this._logEntry("think", `${this.agentName} ${move.search_text}.`, {
         ply: move.ply,
         sims: search.sims,
         ...(Number.isFinite(search.value) ? { value: search.value } : {}),
@@ -237,7 +237,7 @@ export class GameSession {
       ply: this.ply,
       last_ai_move: this.lastAiMoves.length ? this.lastAiMoves[this.lastAiMoves.length - 1] : null,
       log: this.log,
-      final: finalReport(this.state, this.humanSeat),
+      final: finalReport(this.state, this.humanSeat, this.agentName),
     };
   }
 }

@@ -53,9 +53,23 @@ export const BATCH_BY_BACKEND = {
 };
 
 let ort = null;
-let evaluator = null;
+let evaluator = null; // the OPPONENT's net: the one `search` plays with
+/* The coach's net, when it differs from the opponent's. Advice — the coach,
+ * the analysis head start, and "Suggest a move" — must come from the
+ * strongest net we have, not from whichever weak opponent was chosen: Brick
+ * is there to be beaten, not to teach. Loaded lazily by a "coach" message
+ * the first time advice is asked for while a weaker net is playing; null
+ * means the opponent IS the strongest net, which advises as itself. */
+let coach = null;
+let mainSpec = null; // the runtime/EP the main net settled on; the coach reuses it
 let searchConfig = {};
-let cancelled = false;
+/* Cancellation is a GENERATION, not a flag. A flag had a race: "cancel" then
+ * "search" arrive back to back, the new search resets the flag before the
+ * still-running analysis checks it, and the analysis runs its whole budget
+ * interleaved with the opponent's search — on a phone, at half speed each.
+ * With a generation, each search captures the count at its own start and
+ * stops when any later cancel bumps it; nothing ever un-cancels. */
+let cancelGen = 0;
 const rng = new Rng((Date.now() ^ 0x5eed) >>> 0);
 
 /**
@@ -113,9 +127,13 @@ async function init(msg) {
   // a browser whose worker scope has no WebGPU at all — and skipping the entry
   // here means the 15 MB WebGPU runtime is never even requested.
   const wanted = msg.backends.filter((spec) => spec.ep !== "webgpu" || webgpuLikely());
+  coach = null; // a new opponent net does not invalidate advice, but a fresh
+  // init is the safe moment to drop the old coach session; the page reloads
+  // it lazily if it is still wanted
   for (const spec of wanted) {
     try {
       ort = await loadRuntime(spec);
+      mainSpec = spec;
       evaluator = await OnnxEvaluator.create(ort, bytes, {
         backend: spec.name,
         executionProviders: [spec.ep],
@@ -144,6 +162,26 @@ async function init(msg) {
   };
 }
 
+/** Load (or drop) the separate advice net. `modelUrl: null` frees it. */
+async function coachInit(msg) {
+  if (!msg.modelUrl) {
+    coach = null;
+    return { coach: false };
+  }
+  if (!ort || !mainSpec) throw new Error("the opponent's net must load first");
+  const bytes = await fetchWithProgress(msg.modelUrl, msg.id);
+  coach = await OnnxEvaluator.create(ort, bytes, {
+    backend: mainSpec.name,
+    executionProviders: [mainSpec.ep],
+  });
+  const warm = AzulState.newGame(1, new Rng(1));
+  await coach.evaluate(warm, warm.legalActions());
+  return { coach: true, bytes: bytes.length };
+}
+
+/** Whoever gives advice: the dedicated coach net, or the opponent itself. */
+const adviser = () => coach || evaluator;
+
 /** The search's own timing, so the page can show a real positions/s. */
 let lastRate = null;
 
@@ -163,10 +201,10 @@ async function search(msg) {
   }
 
   const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
-  cancelled = false;
+  const gen = cancelGen;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
-    shouldStop: () => cancelled,
+    shouldStop: () => cancelGen !== gen,
     onProgress: ({ sims, elapsedS }) => {
       self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
     },
@@ -219,9 +257,13 @@ async function rate(msg) {
     return { coach: { ...base, delta: 0, forced: true } };
   }
 
-  const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
+  const mcts = new MCTS(adviser(), searchConfig, new Rng(rng.next()));
+  // honors cancel like every other search: when the human moves, the opponent
+  // gets the worker back and the verdict is read from the tree as it stands
+  const gen = cancelGen;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
+    shouldStop: () => cancelGen !== gen,
     onProgress: ({ sims, elapsedS }) => {
       self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
     },
@@ -271,11 +313,11 @@ async function analyze(msg) {
   const base = { budgetS: msg.budgetS, legal: legal.length, sims: 0, elapsedS: 0 };
   if (legal.length <= 1) return { analysis: { ...base, forced: true, children: [] } };
 
-  const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
-  cancelled = false;
+  const mcts = new MCTS(adviser(), searchConfig, new Rng(rng.next()));
+  const gen = cancelGen;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
-    shouldStop: () => cancelled,
+    shouldStop: () => cancelGen !== gen,
     onProgress: ({ sims, elapsedS }) => {
       self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
     },
@@ -308,7 +350,7 @@ async function policy(msg) {
   const state = AzulState.fromSetup(msg.setup, new Rng(rng.next()));
   const legal = state.legalActions();
   if (!legal.length) throw new Error("no legal actions in the position sent to the worker");
-  const { priors, value } = await evaluator.evaluate(state, legal);
+  const { priors, value } = await adviser().evaluate(state, legal);
   let best = 0;
   for (let i = 1; i < priors.length; i++) if (priors[i] > priors[best]) best = i;
   return { action: legal[best], search: { sims: 0, elapsedS: 0, value, prior: priors[best], forced: false } };
@@ -317,12 +359,13 @@ async function policy(msg) {
 self.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "cancel") {
-    cancelled = true;
+    cancelGen += 1;
     return;
   }
   try {
     let payload;
     if (msg.type === "init") payload = await init(msg);
+    else if (msg.type === "coach") payload = await coachInit(msg);
     else if (msg.type === "search") payload = await search(msg);
     else if (msg.type === "policy") payload = await policy(msg);
     else if (msg.type === "rate") payload = await rate(msg);
