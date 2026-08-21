@@ -1,7 +1,7 @@
 {
   "comment": "The opponents the page offers, weakest first: the ceramics ladder, from raw ground to precious glaze. Each dir holds a model.onnx + model_meta.json (the meta carries the Elo and parameter count the menu shows; run/checkpoint stay internal). Five of the swatch colours are the game's own tile glazes; Sand and Clay are the two raw earths beneath them. scripts/deploy_player.sh ships this whole tree.",
   "reserved_for_future_nets": {
-    "comment": "The next rungs of the ladder, in order, for agents stronger than Cobalt. When a newly trained net beats the current best, export it (scripts: onnx_export --ckpt ... --elo ... --out web/player/model/<id>), name it the NEXT name on this list and add it below with a fitting swatch. The page always defaults to the strongest bot by Elo automatically. Do not rename existing bots.",
+    "comment": "The next rungs of the ladder, in order, for agents stronger than Cobalt. THE FULL SHIPPING PROCEDURE AND THE BAR (at least +150 wall-clock-honest Elo over the current strongest, gated over >=300 games at matched think time) IS IN docs/BOT_DEPLOYMENT.md — follow it; it is self-contained. Do not rename existing bots; the page defaults to the strongest by the elo in model_meta.json automatically.",
     "names": [
       "Porcelain",
       "Lapis Lazuli",
