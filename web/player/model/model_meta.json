@@ -3,7 +3,7 @@
   "checkpoint": "ckpt-037888",
   "elo": 2361.0,
   "games": 37888,
-  "exported_at": "2026-08-20T22:14:53Z",
+  "exported_at": "2026-08-21T10:29:56Z",
   "input_size": 182,
   "action_space": 180,
   "net_config": {
