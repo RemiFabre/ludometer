@@ -48,10 +48,11 @@ export function setSharing(on) {
   }
 }
 
-/** True while the page is somewhere no data should ever be sent from. */
+/** True while the page is somewhere no data should ever be sent from:
+ * local development, the test suites, and any staging copy of the site. */
 function devHost() {
   const host = location.hostname;
-  return host === "localhost" || host === "127.0.0.1" || host === "";
+  return host === "localhost" || host === "127.0.0.1" || host === "" || host.includes("staging");
 }
 
 function readOutbox() {

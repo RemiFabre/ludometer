@@ -522,7 +522,9 @@ async function checkHistory(page, label, errors) {
     errors.push(`${label}: no "viewing move N of M" indicator, got ${JSON.stringify(past.headline)}`);
   }
   if (past.board === live.board) errors.push(`${label}: the board did not change on ←`);
-  if (past.pickable) errors.push(`${label}: tiles are still pickable while browsing the history`);
+  // tiles MAY be pickable while browsing a human-to-move frame: that is the
+  // branching affordance (player page; see checkBranching). Rows never are,
+  // because browsing carries no selection.
   if (past.openRows) errors.push(`${label}: rows are still playable while browsing the history`);
   if (past.logEntries >= live.logEntries) {
     errors.push(`${label}: the log was not rewound with the board`);
@@ -1031,6 +1033,126 @@ async function checkGameRecord(page, label, errors) {
   );
 }
 
+/* Branching: walk back with ← to a position where the human is to move, pick
+ * tiles there, and play a different move. The game must fork silently — no
+ * overlay, no special mode — and everything downstream must hold: the log is
+ * the new line, the game continues, and above all the record still replays
+ * exactly (the harvest depends on that, so it is the check that matters). */
+async function checkBranching(page, label, errors) {
+  if (!(await page.eval("return !!(window.faience && window.faience.record);"))) {
+    console.log(`    ${label}: no branching on this page — skipped`);
+    return;
+  }
+  const key = (k) => page.eval(`
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "${k}", bubbles: true, cancelable: true }));
+    return true;
+  `);
+  const movesNow = () => page.eval("return window.faience.record().moves.length;");
+  const before = await movesNow();
+
+  // walk back until the page offers the branch (a human-to-move frame)
+  let offered = false;
+  for (let i = 0; i < 8 && !offered; i++) {
+    await key("ArrowLeft");
+    await sleep(150);
+    offered = await page.eval(
+      'return document.getElementById("prompt").textContent.includes("differently");'
+    );
+  }
+  if (!offered) {
+    await key("End");
+    return errors.push(`${label}: no browsed frame ever offered the branch`);
+  }
+  const viewPly = await page.eval(
+    'return Number(document.querySelector(".nav-count").textContent.split(" / ")[0]);'
+  );
+  const picked = await page.eval(`
+    const t = document.querySelector("#middle button.tile:not([disabled])");
+    if (!t) return false;
+    t.click();
+    return true;
+  `);
+  if (!picked) {
+    await key("End");
+    return errors.push(`${label}: the branchable frame had no pickable tile`);
+  }
+  await sleep(200);
+  const forkedState = await page.eval(`return {
+    viewing: document.body.classList.contains("viewing"),
+    moves: window.faience.record().moves.length,
+  };`);
+  if (forkedState.viewing) errors.push(`${label}: picking in the past did not leave browsing`);
+  if (forkedState.moves !== viewPly) {
+    errors.push(`${label}: branch kept ${forkedState.moves} moves, expected ${viewPly}`);
+  }
+  // Escape clears the pick but keeps the branch; then one clean move commits it
+  await key("Escape");
+  await sleep(120);
+  const outcome = await page.eval(PLAY_ONE);
+  if (outcome !== "played") {
+    await key("End");
+    return errors.push(`${label}: could not play a move on the branched line (${outcome})`);
+  }
+  await until("the branched turn to finish", () =>
+    page.eval('return !document.body.classList.contains("locked");'), 90000);
+  const after = await movesNow();
+  if (after <= viewPly) errors.push(`${label}: the branched line did not advance (${after} moves)`);
+  console.log(
+    `    ${label}: branched at move ${viewPly} (was ${before}), continued to ${after} — re-verifying the record`
+  );
+  await checkGameRecord(page, `${label} · branched`, errors);
+}
+
+/* The opponent menu (player page only): pick a weaker bot, the page must
+ * download that net, say the new name everywhere, and deal against it. */
+async function checkBotSwitch(page, label, errors) {
+  const has = await page.eval(
+    'const f = document.getElementById("bot-field"); return !!f && !f.hidden;'
+  );
+  if (!has) {
+    console.log(`    ${label}: no opponent menu on this page — skipped`);
+    return;
+  }
+  const options = await page.eval(
+    'return [...document.getElementById("bot").options].map((o) => o.textContent);'
+  );
+  if (options.length < 2) errors.push(`${label}: the opponent menu has ${options.length} options`);
+  if (!options.every((o) => /\d+ Elo/.test(o))) {
+    errors.push(`${label}: menu options lack an Elo — ${options.join(", ")}`);
+  }
+  await page.eval(`
+    const sel = document.getElementById("bot");
+    sel.value = "brick";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  `);
+  await until("the weaker net to be ready", () =>
+    page.eval(`return document.getElementById("engine-bar").classList.contains("ready") &&
+      document.getElementById("engine-text").textContent.includes("Brick");`), 120000);
+  const state = await page.eval(`return {
+    matchup: document.getElementById("matchup").textContent,
+    engine: document.getElementById("engine-text").textContent,
+    dealt: !!document.querySelector("#middle .tile"),
+  };`);
+  if (!state.matchup.includes("Brick")) {
+    errors.push(`${label}: the matchup line does not name the new bot — ${state.matchup}`);
+  }
+  if (/ckpt-|run\d/.test(state.engine)) {
+    errors.push(`${label}: internal run/checkpoint leaked into the engine line — ${state.engine}`);
+  }
+  if (!state.dealt) errors.push(`${label}: no deal after switching opponent`);
+  console.log(`    ${label}: opponent menu → Brick ("${state.engine.split("·")[0].trim()}" et al), dealt`);
+  // back to the strongest, so anything after this check faces the default
+  await page.eval(`
+    const sel = document.getElementById("bot");
+    sel.value = "cobalt";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  `);
+  await until("the default net to return", () =>
+    page.eval('return document.getElementById("engine-bar").classList.contains("ready");'), 120000);
+}
+
 /* ------------------------------------------------------------------- the pages */
 async function checkPage({ name, url, deal, errors, shots }) {
   console.log(`\n== ${name} — ${url}`);
@@ -1099,6 +1221,13 @@ async function checkPage({ name, url, deal, errors, shots }) {
 
     // 4d. The game record: harvestable means replayable.
     await checkGameRecord(page, name, errors);
+
+    // 4e. Branching (player page only): go back, play a different move, and
+    //     the game must continue as one ordinary, still-replayable line.
+    await checkBranching(page, name, errors);
+
+    // 4f. The opponent menu (player page only).
+    await checkBotSwitch(page, name, errors);
 
     // 5. Nothing may cover the board, settings panel included.
     const overlays = await page.eval(`

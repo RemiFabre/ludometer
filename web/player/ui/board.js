@@ -63,7 +63,11 @@ export function createBoard(host, options = {}) {
     const me = state.players[seat];
     const legal = new Set(view.legalActions || []);
     const sel = opts.interactive ? view.selection : null;
-    const open = sel ? destsFor(legal, sel.source, sel.color) : [];
+    let open = sel ? destsFor(legal, sel.source, sel.color) : [];
+    // a suggestion points at ONE row: only that row invites the click, and the
+    // others stay neutral rather than "blocked" (they are legal, just not it)
+    const suggesting = sel && view.openOnly != null;
+    if (suggesting) open = open.filter((r) => r === view.openOnly);
 
     who.textContent = view.title || who.textContent;
     score.textContent = me.score;
@@ -96,6 +100,10 @@ export function createBoard(host, options = {}) {
           row.addEventListener("click", () => {
             if (opts.onPlay) opts.onPlay(actionId(sel.source, sel.color, r), r);
           });
+        } else if (suggesting) {
+          note.textContent = line.count
+            ? line.count + "/" + line.capacity + " " + COLORS[line.color]
+            : line.capacity + (line.capacity === 1 ? " slot" : " slots");
         } else {
           row.classList.add("blocked");
           row.title = blockedReason(state, seat, sel.color, r);

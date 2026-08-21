@@ -67,6 +67,7 @@ import { setSharing, shareOnLeave, shareRecord, sharingOn, warmCollector } from 
 import { createSettings } from "../ui/settings.js";
 import { createStatus } from "../ui/status.js";
 import { analyticsOn, statsUrl, track } from "./analytics.js";
+import { AzulState, Rng } from "./engine.js";
 import { GameSession } from "./game.js";
 import { BACKENDS } from "./net.js";
 import { describeAction } from "./report.js";
@@ -74,6 +75,7 @@ import { describeAction } from "./report.js";
 const el = (id) => document.getElementById(id);
 const ui = {
   matchup: el("matchup"), setup: el("setup"), seed: el("seed"), first: el("first"),
+  bot: el("bot"), botField: el("bot-field"),
   think: el("think"), deal: el("deal"), engineBar: el("engine-bar"),
   engineText: el("engine-text"), aboutMeta: el("about-meta"), middle: el("middle"),
   prompt: el("prompt"), hint: el("hint"), cancel: el("cancel"), fly: el("fly"),
@@ -92,7 +94,12 @@ let S = null;          // its last snapshot, what the page draws from
 let sel = null;        // {source, color} — tiles you are holding
 let suggestion = null; // {source, color, dest} from the policy head
 let busy = false;      // a move is being computed, or is still playing out
-let meta = null;       // model/model_meta.json
+let meta = null;       // the CURRENT bot's model_meta.json
+/* The opponents. model/bots.json lists them weakest first; each carries its
+ * own exported net and meta. The player sees a name, an Elo and a parameter
+ * count; run/checkpoint stay in the record and the About fine print. */
+let bots = [{ id: "cobalt", name: "Cobalt", dir: "model" }]; // fallback: the classic single net
+let bot = null; // the selected entry from `bots`
 let backend = null;    // {name, batch, margin, rate} — what the worker settled on
 let engineReady = false;
 let liveSims = 0;      // positions the current search has visited
@@ -103,6 +110,8 @@ let proposal = null;   // {id, move} — a placed move waiting for "Play this mo
 let committing = null; // the move whose held view stays up while its tiles fly
 let analysis = null;   // the coach reading the position while you think (see below)
 let navToken = 0;      // invalidates a history-step animation when another step lands
+let forked = null;     // the line walked away from by a branch, until the first new move
+let branchCache = { forSession: null, ply: -1, legal: null }; // one replay per browsed ply
 
 initSpeed(); // before anything can animate: the stored speed, or 1×
 const status = createStatus(el("status"));
@@ -214,16 +223,33 @@ worker.onerror = (event) => {
   engineFailed(event.message || "the worker crashed");
 };
 
+/* Requests are SERIALIZED: the worker's onmessage is async, so two searches
+ * sent back to back would otherwise interleave on its one WASM thread and run
+ * at half speed each — on a phone that compounding is what "frozen" feels
+ * like. One request at a time, and `cancelSearches` (which bypasses the
+ * queue on purpose) tells whatever is running to yield first. */
+let workerChain = Promise.resolve();
+
 function ask(message, onProgress) {
-  const id = nextId++;
-  return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject, onProgress });
-    worker.postMessage({ ...message, id });
-  });
+  const send = () =>
+    new Promise((resolve, reject) => {
+      const id = nextId++;
+      pending.set(id, { resolve, reject, onProgress });
+      worker.postMessage({ ...message, id });
+    });
+  const result = workerChain.then(send, send);
+  workerChain = result.catch(() => {});
+  return result;
+}
+
+/** Stop the search in flight (coach or opponent) where it stands. */
+function cancelSearches() {
+  worker.postMessage({ type: "cancel" });
 }
 
 function engineFailed(reason) {
   engineReady = false;
+  ui.bot.disabled = false; // switching to another opponent is a way out
   ui.engineBar.classList.remove("ready");
   ui.engineBar.classList.add("failed");
   ui.engineText.textContent = "The net could not be loaded: " + reason;
@@ -236,13 +262,63 @@ function engineFailed(reason) {
   });
 }
 
+/** Read the roster, seat the menu, then load the remembered (or default) bot. */
 async function bootEngine() {
-  status.set({ headline: "Loading the net", detail: "it runs in this tab, so it downloads once", tone: "idle" });
+  let fallbackId = "cobalt";
   try {
-    meta = await (await fetch("model/model_meta.json", { cache: "no-cache" })).json();
+    const manifest = await (await fetch("model/bots.json", { cache: "no-cache" })).json();
+    if (Array.isArray(manifest.bots) && manifest.bots.length) {
+      bots = manifest.bots;
+      fallbackId = manifest.default || bots[bots.length - 1].id;
+    }
   } catch (err) {
-    meta = null;
+    /* no manifest: the classic single-net layout still works */
   }
+  await Promise.all(
+    bots.map(async (b) => {
+      try {
+        b.meta = await (await fetch(b.dir + "/model_meta.json", { cache: "no-cache" })).json();
+      } catch (err) {
+        b.meta = null;
+      }
+    })
+  );
+  let storedId = null;
+  try {
+    storedId = localStorage.getItem("faience.bot");
+  } catch (err) {
+    /* private mode */
+  }
+  bot = bots.find((b) => b.id === storedId) || bots.find((b) => b.id === fallbackId) || bots[bots.length - 1];
+  if (bots.length > 1) {
+    ui.botField.hidden = false;
+    ui.bot.innerHTML = "";
+    for (const b of bots) {
+      const option = document.createElement("option");
+      option.value = b.id;
+      const elo = b.meta && typeof b.meta.elo === "number" ? ` · ${Math.round(b.meta.elo)} Elo` : "";
+      option.textContent = b.name + elo;
+      ui.bot.appendChild(option);
+    }
+    ui.bot.value = bot.id;
+  }
+  await loadBot(bot);
+}
+
+/** Download one bot's net into the worker and, once ready, deal. */
+async function loadBot(b) {
+  bot = b;
+  try {
+    localStorage.setItem("faience.bot", b.id);
+  } catch (err) {
+    /* private mode */
+  }
+  engineReady = false;
+  ui.deal.disabled = true;
+  ui.bot.disabled = true;
+  ui.engineBar.classList.remove("ready");
+  status.set({ headline: "Loading the net", detail: "it runs in this tab, so it downloads once", tone: "idle" });
+  meta = b.meta;
   describeModel();
   const sizeMB = meta && meta.onnx_bytes ? (meta.onnx_bytes / 1e6).toFixed(1) : "13";
   ui.engineText.textContent = `Downloading the net (${sizeMB} MB, cached after the first visit)…`;
@@ -260,7 +336,7 @@ async function bootEngine() {
           module: new URL(BACKENDS[name].module, import.meta.url).href,
           wasm: new URL(BACKENDS[name].wasm, import.meta.url).href,
         })),
-        modelUrl: new URL("../model/model.onnx", import.meta.url).href,
+        modelUrl: new URL("../" + b.dir + "/model.onnx", import.meta.url).href,
       },
       (msg) => {
         if (msg.type !== "loading") return;
@@ -288,6 +364,7 @@ async function bootEngine() {
   ui.engineText.textContent = engineLine();
   describeModel();
   ui.deal.disabled = false;
+  ui.bot.disabled = false;
   newGame();
 }
 
@@ -300,11 +377,13 @@ function backendLabel() {
 function engineLine() {
   const where = `searching on ${backendLabel()}`;
   if (!meta) return `Net ready: ${where}.`;
-  const elo = typeof meta.elo === "number" ? `${meta.elo >= 0 ? "+" : ""}${Math.round(meta.elo)} Elo` : "unrated";
+  const elo = typeof meta.elo === "number" ? `${Math.round(meta.elo)} Elo` : "unrated";
   const params = meta.num_params ? `${(meta.num_params / 1e6).toFixed(1)}M parameters` : "";
   const rate =
     backend && backend.rate ? ` · ${Math.round(backend.rate).toLocaleString()} positions/s` : "";
-  return `${meta.run}/${meta.checkpoint} · ${elo} on our internal ladder · ${params} · ${where}${rate}`;
+  // the player-facing line: a name, a strength, a size. run/checkpoint live in
+  // the About fine print and the game record, not here.
+  return `${botName()} · ${elo} on our internal ladder · ${params} · ${where}${rate}`;
 }
 
 function describeModel() {
@@ -331,8 +410,13 @@ function describeModel() {
 }
 
 /* ---------------------------------------------------------------- the boards */
+/** The opponent's name, wherever the page speaks about it. */
+function botName() {
+  return (bot && bot.name) || (S && S.agent_name) || "the AI";
+}
+
 function aiLabel() {
-  return S && S.agent_name ? "AI · " + S.agent_name : "AI";
+  return S && S.agent_name ? S.agent_name : botName();
 }
 
 /** Fix the two boards' seats to this game's seating (you are always on the left). */
@@ -372,10 +456,14 @@ function render() {
   const mid = placed ? st : heldInfo ? heldView(heldInfo) : base;
   renderStatus(frame);
   syncBanner();
+  // While browsing, a position with YOU to move is a door, not a photograph:
+  // its dishes are pickable, and the first pick branches the game from there
+  // (see forkToBrowsed). AI-to-move and terminal frames stay pure replay.
+  const branch = !live && !placed ? branchLegal(frame) : null;
   middle.render({
     state: mid,
-    legalActions: live && !placed ? S.human_legal_actions : [],
-    canPick: live && S.your_turn && !base.is_terminal && !busy && !placed,
+    legalActions: live && !placed ? S.human_legal_actions : branch || [],
+    canPick: live ? S.your_turn && !base.is_terminal && !busy && !placed : !!branch,
     selection: null, // the hand tray *is* the selection; dimming forty tiles says less
   });
   renderHand(heldInfo);
@@ -386,6 +474,8 @@ function render() {
     title: "You",
     toMove: live && !base.is_terminal && base.current_player === S.human_seat,
     highlightRow: live && suggestion ? suggestion.dest : undefined,
+    // a hint opens exactly its own destination row; free selections open all
+    openOnly: live && suggestion ? suggestion.dest : undefined,
   });
   if (placed) glowPlacement(placed);
   boards.ai.render({
@@ -422,7 +512,7 @@ function renderStatus(frame) {
   const info = S.opponent_info || {};
   const rating = typeof info.elo === "number" ? " (" + Math.round(info.elo) + " Elo)" : "";
   ui.matchup.textContent = "you versus " + S.agent_name + rating + " · seed " + S.seed;
-  status.setScore(st.scores[S.human_seat], st.scores[S.ai_seat], "You", "AI");
+  status.setScore(st.scores[S.human_seat], st.scores[S.ai_seat], "You", botName());
 
   if (frame) {
     status.set({
@@ -430,14 +520,16 @@ function renderStatus(frame) {
       detail: "← and → step through the game · End, or Latest, returns to play",
       tone: "history",
     });
-    ui.prompt.textContent = "This is a recorded position. The live game is untouched.";
+    ui.prompt.textContent = branchableFrame(frame)
+      ? "A recorded position, yours to move. Pick tiles to play it differently from here."
+      : "This is a recorded position. The live game is untouched.";
     return;
   }
 
   if (st.is_terminal) {
     const mine = st.scores[S.human_seat];
     const theirs = st.scores[S.ai_seat];
-    const verb = mine > theirs ? "You won " : theirs > mine ? "The AI won " : "A draw, ";
+    const verb = mine > theirs ? "You won " : theirs > mine ? botName() + " won " : "A draw, ";
     status.set({
       headline: verb + mine + "–" + theirs,
       detail: "The final scoring is below; the board stays exactly as it ended.",
@@ -467,7 +559,7 @@ function renderStatus(frame) {
       ? "Or press Escape to put them back."
       : "Take every tile of one colour from a factory, or from the middle.";
   } else {
-    status.set({ headline: "The AI is choosing a move", detail: turnDetail(), tone: "ai" });
+    status.set({ headline: botName() + " is choosing a move", detail: turnDetail(), tone: "ai" });
     ui.prompt.textContent = "";
   }
 }
@@ -478,7 +570,7 @@ function turnDetail() {
   const bits = ["Round " + (st.round + 1), st.tiles_left + " tiles left on the table"];
   const last = S.last_ai_move;
   if (last) {
-    bits.push("AI " + last.text);
+    bits.push(botName() + " " + last.text);
     if (last.search_text) bits.push(last.search_text);
   }
   if (notice) bits.push(notice);
@@ -548,14 +640,15 @@ function newGame(event) {
   }
   clearScoring(ui.scoring);
   hideRecord();
+  forked = null; // a branch not moved on yet: its old line was shared at fork
   // dealing over a live game abandons it; an abandoned game is position data
   // worth keeping too, flagged unfinished (docs/HUGGINGFACE.md D5)
   if (session && !session.state.isTerminal) shareRecord(currentRecord());
   session = new GameSession({
     seed,
     humanPlaysFirst: ui.first.checked,
-    agentName: meta ? meta.checkpoint : "the net",
-    opponentInfo: meta ? { checkpoint: meta.checkpoint, elo: meta.elo, run: meta.run } : {},
+    agentName: botName(),
+    opponentInfo: meta ? { checkpoint: meta.checkpoint, elo: meta.elo, run: meta.run, name: botName() } : { name: botName() },
     thinkTimeS: currentThinkTime(),
     think,
   });
@@ -597,7 +690,12 @@ function noteFrames(moves) {
 }
 
 function pick(source, color) {
-  if (busy || !S || !S.your_turn || nav.browsing() || proposal) return;
+  if (busy || !S || proposal) return;
+  if (nav.browsing()) {
+    if (!forkToBrowsed()) return;
+    // the browsed position is the live game now; this same click picks from it
+  }
+  if (!S.your_turn) return;
   suggestion = null;
   if (sel && sel.source === source && sel.color === color) {
     sel = null; // putting tiles back is instant and unambiguous
@@ -836,17 +934,19 @@ async function play(id) {
   clearScoring(ui.scoring);
   try {
     const setupBefore = coachOn ? session.state.toSetup() : null;
-    // the coach's head start covers exactly this position: stop it where it
-    // stands (the opponent needs the worker) and grade from what it read.
-    // Cancelled even if coach mode was switched off meanwhile — a stale
-    // analysis must never keep the opponent waiting.
+    // whatever coach work is in flight — the head-start analysis, or a rating
+    // still being searched — stop it where it stands: the opponent needs the
+    // worker, and a coach verdict is graded from whatever tree had grown.
+    // Cancelled even if coach mode was switched off meanwhile — stale coach
+    // work must never keep the opponent waiting.
     const reading =
       analysis && analysis.forSession === session && analysis.ply === S.ply
         ? analysis
         : null;
-    if (reading) worker.postMessage({ type: "cancel" });
+    cancelSearches();
     const headStart = coachOn ? reading : null;
     const { move: applied, reports } = session.playHuman(id);
+    forked = null; // a move on the new line commits the branch
     const entry = session.log[applied.log_n];
     if (setupBefore && entry) {
       if (headStart) {
@@ -896,15 +996,15 @@ async function runAiTurn() {
   const budget = session.thinkTimeS;
   liveSims = 0;
   const thinking = session.aiReplies();
-  status.set({ headline: "The AI is thinking", detail: turnDetail(), tone: "ai", keepClock: true });
+  status.set({ headline: botName() + " is thinking", detail: turnDetail(), tone: "ai", keepClock: true });
   status.startClock({
     budget,
     label: (spent, cap) => {
       // it is your CPU doing the work, so the band says how much work that is
       const counted = liveSims ? " · " + liveSims.toLocaleString() + " positions" : "";
       return cap
-        ? "AI is thinking: " + spent.toFixed(1) + "s of " + cap + "s" + counted
-        : "AI is picking a move";
+        ? botName() + " is thinking: " + spent.toFixed(1) + "s of " + cap + "s" + counted
+        : botName() + " is picking a move";
     },
   });
   let moves;
@@ -936,7 +1036,7 @@ async function playMoves(moves, board, reports, mover, takeoff) {
     }
     if (mover === "ai") {
       status.set({
-        headline: "AI " + move.text,
+        headline: botName() + " " + move.text,
         detail: move.search_text || turnDetail(),
         tone: "ai",
       });
@@ -990,7 +1090,7 @@ async function settle(moves, board, reports, mover, takeoff) {
     });
   } else if (mover === "ai" && S.last_ai_move) {
     // let the AI's own move stand as the headline for a beat before your turn
-    status.set({ headline: "AI " + S.last_ai_move.text, detail: turnDetail(), tone: "ai" });
+    status.set({ headline: botName() + " " + S.last_ai_move.text, detail: turnDetail(), tone: "ai" });
     await sleep(500);
   }
   render();
@@ -1363,6 +1463,109 @@ function flashWall(report) {
   });
 }
 
+/* ------------------------------------------------------- branching the game */
+/* Going back with the arrows used to be pure replay. It still is — until you
+ * pick tiles in a browsed position where you are to move. That click replays
+ * the moves up to that point in a FRESH session (the seed reproduces every
+ * shuffle, so the replay is exact) and the game simply continues from there.
+ * Nothing downstream has a special case: the branched game has one seed and
+ * one move list, so it records, replays and verifies like any other game.
+ * The line walked away from is shared first (flagged unfinished) if it was
+ * not already finished and shared — no played position is ever lost. */
+
+/** Legal actions of the browsed position, when branching there is possible. */
+function branchLegal(frame) {
+  if (!branchableFrame(frame)) return null;
+  if (branchCache.forSession === session && branchCache.ply === frame.ply) return branchCache.legal;
+  let legal = null;
+  try {
+    const replay = AzulState.newGame(session.seed, new Rng(session.seed));
+    for (const e of session.log) {
+      if (e.kind === "move" && e.ply <= frame.ply) replay.apply(e.action_id);
+    }
+    legal = replay.legalActions();
+  } catch (err) {
+    legal = null;
+  }
+  branchCache = { forSession: session, ply: frame.ply, legal };
+  return legal;
+}
+
+function branchableFrame(frame) {
+  if (!frame || !session || !S || busy || !engineReady) return false;
+  const st = frame.state;
+  return !!st && !st.is_terminal && st.current_player === S.human_seat;
+}
+
+function forkToBrowsed() {
+  const frame = nav.frame();
+  if (!branchableFrame(frame)) return false;
+  return forkTo(frame.ply);
+}
+
+function forkTo(ply) {
+  const prior = session;
+  const prefix = prior.log.filter((e) => e.kind === "move" && e.ply <= ply);
+  const thinks = new Map(
+    prior.log.filter((e) => e.kind === "think" && e.ply <= ply).map((e) => [e.ply, e])
+  );
+  const fresh = new GameSession({
+    seed: prior.seed,
+    humanPlaysFirst: prior.humanPlaysFirst,
+    agentName: prior.agentName,
+    opponentInfo: prior.opponentInfo,
+    thinkTimeS: prior.thinkTimeS,
+    think,
+  });
+  const replayed = [];
+  try {
+    for (const entry of prefix) {
+      replayed.push(fresh._apply(entry.action_id));
+      const t = thinks.get(entry.ply);
+      if (t) {
+        // the kept opponent moves keep their search notes, so the record of
+        // the branched game carries the same sims/value it always would
+        fresh._logEntry("think", t.text, {
+          ply: t.ply,
+          ...(Number.isFinite(t.sims) ? { sims: t.sims } : {}),
+          ...(Number.isFinite(t.value) ? { value: t.value } : {}),
+        });
+      }
+    }
+  } catch (err) {
+    say("this position cannot be branched: " + err.message);
+    return false;
+  }
+  if (fresh.ply !== ply) {
+    say("this position cannot be branched"); // never continue from a mismatch
+    return false;
+  }
+  // the abandoned line is position data worth keeping, like any abandoned game
+  if (!prior.state.isTerminal) {
+    shareRecord(buildRecord(prior, { net: meta || {}, backend: backend ? backend.name : null }));
+  }
+  forked = prior; // Escape before the first new move puts the old line back
+  session = fresh;
+  clearScoring(ui.scoring);
+  hideRecord();
+  adopt({ reseat: true });
+  noteFrames(replayed);
+  say("branched at move " + ply + ". Escape goes back to the old line.");
+  return true;
+}
+
+/** Escape before any new move: the old line comes back as the live game. */
+function unfork() {
+  if (!forked || busy) return false;
+  session = forked;
+  forked = null;
+  sel = null;
+  suggestion = null;
+  adopt({ reseat: true });
+  say("back on the original line");
+  return true;
+}
+
 /* ------------------------------------------------------------- game records */
 /* A finished game is data worth keeping, so the page offers it as a file. It is
  * offered, never sent: see js/record.js for why that distinction is load-bearing.
@@ -1442,6 +1645,16 @@ window.addEventListener("pagehide", () => {
 warmCollector();
 
 ui.setup.addEventListener("submit", newGame);
+ui.bot.addEventListener("change", () => {
+  const chosen = bots.find((b) => b.id === ui.bot.value);
+  if (!chosen || (bot && chosen.id === bot.id)) return;
+  if (busy) {
+    // mid-move is no moment to swap brains; put the menu back
+    ui.bot.value = bot ? bot.id : "";
+    return;
+  }
+  loadBot(chosen); // downloads the new net, then deals a fresh game against it
+});
 ui.think.addEventListener("change", () => {
   if (session) session.thinkTimeS = currentThinkTime();
   if (S) render();
@@ -1482,6 +1695,11 @@ document.addEventListener("keydown", (event) => {
     sel = null;
     suggestion = null;
     render();
+    return;
+  }
+  if (forked && !busy) {
+    unfork();
+    render();
   }
 });
 // ← / → / End walk the game, exactly as they do in a chess client
@@ -1504,6 +1722,33 @@ if (analyticsOn()) {
   const note = el("tally-note");
   if (note) note.remove();
 }
+
+/* One line of news, shown until dismissed. Bump NEWS_VERSION when the line
+ * changes and it comes back exactly once; the dismissal lives in
+ * localStorage, like every other preference on this page (no cookies). */
+const NEWS_VERSION = "2026-08-21";
+const NEWS_TEXT =
+  "New: choose your opponent, and go back with ← to play a move differently.";
+(() => {
+  let seen = null;
+  try {
+    seen = localStorage.getItem("faience.news");
+  } catch (err) {
+    /* private mode: the line just shows every visit */
+  }
+  if (seen === NEWS_VERSION) return;
+  const news = el("news");
+  el("news-text").textContent = NEWS_TEXT;
+  news.hidden = false;
+  el("news-close").addEventListener("click", () => {
+    news.hidden = true;
+    try {
+      localStorage.setItem("faience.news", NEWS_VERSION);
+    } catch (err) {
+      /* nothing to remember it with; it will show again */
+    }
+  });
+})();
 
 syncCoach();
 bootEngine();

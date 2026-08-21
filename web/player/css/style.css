@@ -148,6 +148,33 @@ button, input, select { font: inherit; color: inherit; }
 .engine-bar.ready .engine-dot { background: var(--c4); box-shadow: 0 0 0 3px var(--c4-wash); animation: none; }
 .engine-bar.failed .engine-dot { background: var(--c2); box-shadow: 0 0 0 3px var(--c2-wash); animation: none; }
 .engine-text { flex: 1 1 auto; min-width: 200px; }
+
+/* what's new: one dismissible line in the engine strip's idiom */
+.news-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px clamp(14px, 3vw, 34px);
+  background: var(--badge-bg);
+  border-bottom: 1px solid var(--grout);
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: .04em;
+  color: var(--ink-soft);
+}
+.news-bar[hidden] { display: none; }
+.news-text { flex: 1 1 auto; }
+.news-close {
+  border: 1px solid var(--badge-edge);
+  background: none;
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+.news-close:hover { color: var(--ink); }
 .engine-badge {
   padding: 3px 9px;
   border-radius: 999px;

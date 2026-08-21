@@ -27,6 +27,12 @@
   </div>
 
   <form class="setup" id="setup" autocomplete="off">
+    <!-- the opponents come from model/bots.json; app.js fills the menu with
+         "Name · Elo" and reloads the net when the choice changes -->
+    <label class="field" id="bot-field" hidden>
+      <span class="field-label">Opponent</span>
+      <select id="bot"></select>
+    </label>
     <label class="field field-narrow">
       <span class="field-label">Seed</span>
       <input type="text" id="seed" inputmode="numeric" placeholder="random">
@@ -44,6 +50,14 @@
   <span class="engine-dot" id="engine-dot" aria-hidden="true"></span>
   <span class="engine-text" id="engine-text">Loading the net…</span>
   <span class="engine-badge">runs entirely in your browser</span>
+</div>
+
+<!-- one line of what changed, inline like everything else; ✕ remembers the
+     dismissal in localStorage (no cookies), and a new NEWS_VERSION in app.js
+     brings the line back once -->
+<div class="news-bar" id="news" hidden>
+  <span class="news-text" id="news-text"></span>
+  <button type="button" class="news-close" id="news-close" aria-label="Dismiss">✕</button>
 </div>
 
 <main class="table">

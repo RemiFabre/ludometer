@@ -55,7 +55,13 @@ export const BATCH_BY_BACKEND = {
 let ort = null;
 let evaluator = null;
 let searchConfig = {};
-let cancelled = false;
+/* Cancellation is a GENERATION, not a flag. A flag had a race: "cancel" then
+ * "search" arrive back to back, the new search resets the flag before the
+ * still-running analysis checks it, and the analysis runs its whole budget
+ * interleaved with the opponent's search — on a phone, at half speed each.
+ * With a generation, each search captures the count at its own start and
+ * stops when any later cancel bumps it; nothing ever un-cancels. */
+let cancelGen = 0;
 const rng = new Rng((Date.now() ^ 0x5eed) >>> 0);
 
 /**
@@ -163,10 +169,10 @@ async function search(msg) {
   }
 
   const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
-  cancelled = false;
+  const gen = cancelGen;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
-    shouldStop: () => cancelled,
+    shouldStop: () => cancelGen !== gen,
     onProgress: ({ sims, elapsedS }) => {
       self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
     },
@@ -220,8 +226,12 @@ async function rate(msg) {
   }
 
   const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
+  // honors cancel like every other search: when the human moves, the opponent
+  // gets the worker back and the verdict is read from the tree as it stands
+  const gen = cancelGen;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
+    shouldStop: () => cancelGen !== gen,
     onProgress: ({ sims, elapsedS }) => {
       self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
     },
@@ -272,10 +282,10 @@ async function analyze(msg) {
   if (legal.length <= 1) return { analysis: { ...base, forced: true, children: [] } };
 
   const mcts = new MCTS(evaluator, searchConfig, new Rng(rng.next()));
-  cancelled = false;
+  const gen = cancelGen;
   const result = await mcts.search(state, {
     timeLimitS: msg.budgetS,
-    shouldStop: () => cancelled,
+    shouldStop: () => cancelGen !== gen,
     onProgress: ({ sims, elapsedS }) => {
       self.postMessage({ type: "progress", id: msg.id, sims, elapsedS });
     },
@@ -317,7 +327,7 @@ async function policy(msg) {
 self.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "cancel") {
-    cancelled = true;
+    cancelGen += 1;
     return;
   }
   try {

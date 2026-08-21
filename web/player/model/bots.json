@@ -1,0 +1,10 @@
+{
+  "comment": "The opponents the page offers, weakest first. Each dir holds a model.onnx + model_meta.json (the meta carries the Elo and parameter count the menu shows; run/checkpoint stay internal). The default is the id below; scripts/deploy_player.sh ships this whole tree.",
+  "default": "cobalt",
+  "bots": [
+    { "id": "brick", "name": "Brick", "dir": "model/brick" },
+    { "id": "ochre", "name": "Ochre", "dir": "model/ochre" },
+    { "id": "charcoal", "name": "Charcoal", "dir": "model/charcoal" },
+    { "id": "cobalt", "name": "Cobalt", "dir": "model" }
+  ]
+}

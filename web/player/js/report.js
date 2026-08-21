@@ -180,14 +180,14 @@ function bonusBreakdown(state, player) {
 }
 
 /** End-of-game summary: bonuses per player, winner, why the game stopped. */
-export function finalReport(state, humanSeat) {
+export function finalReport(state, humanSeat, opponent = "The AI") {
   if (!state.isTerminal) return null;
   const outcome = state.outcome() || 0;
   const winner = outcome === 0 ? null : outcome > 0 ? 0 : 1;
   let headline;
   if (winner === null) headline = "A draw: same score, same completed rows.";
   else if (winner === humanSeat) headline = "You win!";
-  else headline = "The AI wins.";
+  else headline = opponent + " wins.";
   return {
     winner,
     winner_side: winner === null ? null : winner === humanSeat ? "human" : "ai",
