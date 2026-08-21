@@ -175,6 +175,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .news-bar[hidden] { display: none; }
 .news-text { flex: 1 1 auto; }
+.news-line { display: block; line-height: 1.55; }
 .news-close {
   border: 1px solid var(--badge-edge);
   background: none;

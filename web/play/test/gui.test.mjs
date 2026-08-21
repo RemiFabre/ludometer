@@ -1141,7 +1141,20 @@ async function checkBotSwitch(page, label, errors) {
     errors.push(`${label}: internal run/checkpoint leaked into the engine line — ${state.engine}`);
   }
   if (!state.dealt) errors.push(`${label}: no deal after switching opponent`);
-  console.log(`    ${label}: opponent menu → Brick ("${state.engine.split("·")[0].trim()}" et al), dealt`);
+  // advice must come from the strongest net even while Brick plays: the hint
+  // downloads the advice net into the worker, then opens EXACTLY one row
+  await page.eval('document.getElementById("hint").click(); return true;');
+  const oneRow = await until("the hint to open its one row", () =>
+    page.eval('return document.querySelectorAll("#board-human .line.open").length;'), 120000
+  ).catch(() => 0);
+  if (oneRow !== 1) {
+    errors.push(`${label}: the hint opened ${oneRow} rows (wanted exactly the suggested one)`);
+  }
+  await page.eval(`
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    return true;
+  `);
+  console.log(`    ${label}: opponent menu → Brick, dealt; hint fetched the advice net and opened one row`);
   // back to the strongest, so anything after this check faces the default
   await page.eval(`
     const sel = document.getElementById("bot");

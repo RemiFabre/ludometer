@@ -100,6 +100,14 @@ let meta = null;       // the CURRENT bot's model_meta.json
  * count; run/checkpoint stay in the record and the About fine print. */
 let bots = [{ id: "cobalt", name: "Cobalt", dir: "model" }]; // fallback: the classic single net
 let bot = null; // the selected entry from `bots`
+/* Advice (coach mode, the analysis head start, Suggest a move) always comes
+ * from the STRONGEST net, not the chosen opponent: Brick is there to be
+ * beaten, not to teach. When a weaker opponent is playing, the strongest
+ * net is downloaded into the worker the first time advice is asked for —
+ * usually free, since it is the default opponent and already in the HTTP
+ * cache. "none" | "loading" | "ready"; reset whenever the opponent changes
+ * (a new init drops the worker's coach session). */
+let adviserState = "none";
 let backend = null;    // {name, batch, margin, rate} — what the worker settled on
 let engineReady = false;
 let liveSims = 0;      // positions the current search has visited
@@ -168,10 +176,11 @@ const nav = createHistory(ui.nav, {
  * moment you click it. It is still kept shorter than the opponent's budget. */
 const COACH_THINK_S = 2;
 const COACH_MAX_THINK_S = 3;
-const COACH_LEGEND =
-  "Coach mode rates your move with the AI's own search: 0.00 = the move it would " +
-  "have played, −1 ≈ a whole win thrown away. The coach reads the position while " +
-  "you think, so the verdict usually lands with your move.";
+const coachLegend = () =>
+  "Coach mode rates your move with " + strongestBot().name + "'s search (our strongest " +
+  "net, whoever you play against): 0.00 = the move it would have played, −1 ≈ a whole " +
+  "win thrown away. The coach reads the position while you think, so the verdict " +
+  "usually lands with your move.";
 
 /* ------------------------------------------------------------------ plumbing */
 /** A passing message. It goes in the status band's detail line — never a pop-up. */
@@ -314,6 +323,7 @@ async function loadBot(b) {
     /* private mode */
   }
   engineReady = false;
+  adviserState = "none"; // the worker's init drops its coach session
   ui.deal.disabled = true;
   ui.bot.disabled = true;
   ui.engineBar.classList.remove("ready");
@@ -410,6 +420,33 @@ function describeModel() {
 }
 
 /* ---------------------------------------------------------------- the boards */
+/** The strongest entry in the roster: the one that gives advice. */
+function strongestBot() {
+  return bots.reduce((a, b) =>
+    ((b.meta && b.meta.elo) || 0) > ((a.meta && a.meta.elo) || 0) ? b : a
+  );
+}
+
+/** Make sure the worker has the advice net. Resolves true when it does. */
+async function ensureAdviser() {
+  const top = strongestBot();
+  if (!bot || bot.id === top.id) return true; // the opponent advises as itself
+  if (adviserState === "ready") return true;
+  if (adviserState === "loading") return false; // one download at a time
+  adviserState = "loading";
+  say("downloading " + top.name + ", the advice net (13 MB, cached after once)");
+  try {
+    await ask({ type: "coach", modelUrl: new URL("../" + top.dir + "/model.onnx", import.meta.url).href });
+    adviserState = "ready";
+    say(top.name + " is ready to advise");
+    return true;
+  } catch (err) {
+    adviserState = "none";
+    say("the advice net could not be loaded: " + err.message);
+    return false;
+  }
+}
+
 /** The opponent's name, wherever the page speaks about it. */
 function botName() {
   return (bot && bot.name) || (S && S.agent_name) || "the AI";
@@ -933,7 +970,8 @@ async function play(id) {
   setBusy(true);
   clearScoring(ui.scoring);
   try {
-    const setupBefore = coachOn ? session.state.toSetup() : null;
+    const canCoach = coachOn && (!bot || bot.id === strongestBot().id || adviserState === "ready");
+    const setupBefore = canCoach ? session.state.toSetup() : null;
     // whatever coach work is in flight — the head-start analysis, or a rating
     // still being searched — stop it where it stands: the opponent needs the
     // worker, and a coach verdict is graded from whatever tree had grown.
@@ -944,7 +982,7 @@ async function play(id) {
         ? analysis
         : null;
     cancelSearches();
-    const headStart = coachOn ? reading : null;
+    const headStart = canCoach ? reading : null;
     const { move: applied, reports } = session.playHuman(id);
     forked = null; // a move on the new line commits the branch
     const entry = session.log[applied.log_n];
@@ -1159,6 +1197,7 @@ const ANALYSIS_MIN_SIMS = 400;
 
 function startAnalysis() {
   if (!coachOn || !engineReady || busy || !session || !S || !S.your_turn) return;
+  if (bot && bot.id !== strongestBot().id && adviserState !== "ready") return;
   if (analysis && analysis.forSession === session && analysis.ply === S.ply) return;
   const job = { forSession: session, ply: S.ply, budgetS: coachBudget() };
   job.promise = ask({ type: "analyze", setup: session.state.toSetup(), budgetS: job.budgetS })
@@ -1209,7 +1248,7 @@ function syncCoach() {
   ui.coach.checked = coachOn;
   ui.coach.disabled = !engineReady;
   ui.coachField.classList.toggle("off", !coachOn);
-  ui.coachLegend.textContent = COACH_LEGEND;
+  ui.coachLegend.textContent = coachLegend();
   ui.coachLegend.hidden = !coachOn;
 }
 
@@ -1219,12 +1258,13 @@ async function askHint() {
   if (!session || !S || !S.your_turn || busy || nav.browsing() || proposal) return;
   setBusy(true);
   try {
+    if (!(await ensureAdviser())) return; // advice only ever comes from the best net
     const reply = await ask({ type: "policy", setup: session.state.toSetup() });
     const move = describeAction(session.state, reply.action);
     suggestion = { source: move.source, color: move.color, dest: move.dest };
     sel = { source: move.source, color: move.color };
     render();
-    say("the policy head would " + move.text);
+    say(strongestBot().name + " would " + move.text);
   } catch (err) {
     say(err.message);
   } finally {
@@ -1684,15 +1724,16 @@ ui.cancel.addEventListener("click", () => {
   suggestion = null;
   render();
 });
-ui.coach.addEventListener("change", () => {
+ui.coach.addEventListener("change", async () => {
   coachOn = ui.coach.checked;
   syncCoach();
-  startAnalysis(); // switched on mid-turn: start reading this position now
-  say(
-    coachOn
-      ? "coach mode on: your moves are scored by the AI's own search"
-      : "coach mode off"
-  );
+  if (coachOn) {
+    await ensureAdviser(); // the coach is always the strongest net
+    startAnalysis(); // switched on mid-turn: start reading this position now
+    say("coach mode on: your moves are scored by " + strongestBot().name + "'s own search");
+  } else {
+    say("coach mode off");
+  }
 });
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
@@ -1740,8 +1781,11 @@ if (analyticsOn()) {
  * changes and it comes back exactly once; the dismissal lives in
  * localStorage, like every other preference on this page (no cookies). */
 const NEWS_VERSION = "2026-08-21";
-const NEWS_TEXT =
-  "Choose your opponent, and go back with ← to play a move differently.";
+// one line per change, so unrelated news never reads as one feature
+const NEWS_LINES = [
+  "Choose your opponent's strength in the top bar.",
+  "Go back with ← and play any of your past moves differently.",
+];
 (() => {
   let seen = null;
   try {
@@ -1751,7 +1795,7 @@ const NEWS_TEXT =
   }
   if (seen === NEWS_VERSION) return;
   const news = el("news");
-  el("news-text").textContent = NEWS_TEXT;
+  NEWS_LINES.forEach((line) => el("news-text").appendChild(node("span", "news-line", line)));
   news.hidden = false;
   el("news-close").addEventListener("click", () => {
     news.hidden = true;
