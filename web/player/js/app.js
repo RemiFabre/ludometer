@@ -273,13 +273,9 @@ function engineFailed(reason) {
 
 /** Read the roster, seat the menu, then load the remembered (or default) bot. */
 async function bootEngine() {
-  let fallbackId = "cobalt";
   try {
     const manifest = await (await fetch("model/bots.json", { cache: "no-cache" })).json();
-    if (Array.isArray(manifest.bots) && manifest.bots.length) {
-      bots = manifest.bots;
-      fallbackId = manifest.default || bots[bots.length - 1].id;
-    }
+    if (Array.isArray(manifest.bots) && manifest.bots.length) bots = manifest.bots;
   } catch (err) {
     /* no manifest: the classic single-net layout still works */
   }
@@ -298,7 +294,9 @@ async function bootEngine() {
   } catch (err) {
     /* private mode */
   }
-  bot = bots.find((b) => b.id === storedId) || bots.find((b) => b.id === fallbackId) || bots[bots.length - 1];
+  // a returning player keeps their chosen opponent; everyone else faces the
+  // strongest net available, whatever it is called by then
+  bot = bots.find((b) => b.id === storedId) || strongestBot();
   if (bots.length > 1) {
     ui.botField.hidden = false;
     ui.bot.innerHTML = "";

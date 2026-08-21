@@ -12,10 +12,11 @@ Ice 2003 · Cobalt 2361** (five of the swatches are the game's own tile glazes).
 The roster lives in `web/player/model/bots.json`, one exported net per directory.
 
 **For the next agent that ships a stronger net:** the names above Cobalt are
-reserved, in order: **Porcelain, then Lapis, then Ultramarine** (also recorded in
-bots.json under `reserved_for_future_nets`, with suggested swatch colours).
-Export with `onnx_export --ckpt ... --elo ... --out web/player/model/<id>`, add
-the entry, make it the default. Never rename an existing bot.
+reserved, in order: **Porcelain, then Lapis Lazuli, then Ultramarine** (also
+recorded in bots.json under `reserved_for_future_nets`, with suggested swatch
+colours). Export with `onnx_export --ckpt ... --elo ... --out
+web/player/model/<id>` and add the entry; the page defaults to the strongest
+bot by Elo automatically. Never rename an existing bot.
 
 ---
 
