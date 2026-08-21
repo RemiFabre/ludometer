@@ -4,6 +4,21 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-08-21 — The opponents ladder, and the names reserved for future nets
+
+The browser player offers seven opponents, the ceramics ladder from raw ground to
+precious glaze: **Sand 340 · Clay 646 · Brick 1014 · Ochre 1412 · Charcoal 1698 ·
+Ice 2003 · Cobalt 2361** (five of the swatches are the game's own tile glazes).
+The roster lives in `web/player/model/bots.json`, one exported net per directory.
+
+**For the next agent that ships a stronger net:** the names above Cobalt are
+reserved, in order: **Porcelain, then Lapis, then Ultramarine** (also recorded in
+bots.json under `reserved_for_future_nets`, with suggested swatch colours).
+Export with `onnx_export --ckpt ... --elo ... --out web/player/model/<id>`, add
+the entry, make it the default. Never rename an existing bot.
+
+---
+
 ## 2026-08-20 — The last measurement disagrees with the second-to-last, and §3 called it
 
 Connect Four's %-optimal walk (2,000 solved positions, ply ≥ 14, evaluated at the same 64

@@ -75,7 +75,7 @@ import { describeAction } from "./report.js";
 const el = (id) => document.getElementById(id);
 const ui = {
   matchup: el("matchup"), setup: el("setup"), seed: el("seed"), first: el("first"),
-  bot: el("bot"), botField: el("bot-field"),
+  bot: el("bot"), botField: el("bot-field"), botChip: el("bot-chip"),
   think: el("think"), deal: el("deal"), engineBar: el("engine-bar"),
   engineText: el("engine-text"), aboutMeta: el("about-meta"), middle: el("middle"),
   prompt: el("prompt"), hint: el("hint"), cancel: el("cancel"), fly: el("fly"),
@@ -310,6 +310,7 @@ async function bootEngine() {
       ui.bot.appendChild(option);
     }
     ui.bot.value = bot.id;
+    syncBotChip();
   }
   await loadBot(bot);
 }
@@ -317,6 +318,7 @@ async function bootEngine() {
 /** Download one bot's net into the worker and, once ready, deal. */
 async function loadBot(b) {
   bot = b;
+  syncBotChip();
   try {
     localStorage.setItem("faience.bot", b.id);
   } catch (err) {
@@ -447,6 +449,11 @@ async function ensureAdviser() {
   }
 }
 
+/** The menu's swatch shows the chosen opponent's glaze. */
+function syncBotChip() {
+  ui.botChip.style.background = (bot && bot.swatch) || "transparent";
+}
+
 /** The opponent's name, wherever the page speaks about it. */
 function botName() {
   return (bot && bot.name) || (S && S.agent_name) || "the AI";
@@ -518,6 +525,7 @@ function render() {
   boards.ai.render({
     state: st,
     title: aiLabel(),
+    chip: bot && bot.swatch,
     toMove: live && !base.is_terminal && base.current_player === S.ai_seat,
   });
   renderCounts(st);

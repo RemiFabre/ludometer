@@ -84,6 +84,16 @@ button, input, select { font: inherit; color: inherit; }
 }
 .field-narrow input { min-width: 78px; width: 88px; }
 .field-narrow select { min-width: 132px; }
+/* the opponent's glaze, as a small tile beside the menu and on its board */
+.bot-pick { display: flex; align-items: center; gap: 7px; }
+.bot-pick select { min-width: 150px; }
+.bot-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 1px 0 rgba(255, 255, 255, .45) inset;
+}
 .check { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; font-size: 14px; }
 .check.coach { padding: 5px 10px 5px 8px; border: 1px solid var(--grout); border-radius: 2px; background: var(--field-bg); }
 .check.coach.off { opacity: .55; }

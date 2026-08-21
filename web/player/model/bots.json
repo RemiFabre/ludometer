@@ -1,10 +1,18 @@
 {
-  "comment": "The opponents the page offers, weakest first. Each dir holds a model.onnx + model_meta.json (the meta carries the Elo and parameter count the menu shows; run/checkpoint stay internal). The default is the id below; scripts/deploy_player.sh ships this whole tree.",
+  "comment": "The opponents the page offers, weakest first: the ceramics ladder, from raw ground to precious glaze. Each dir holds a model.onnx + model_meta.json (the meta carries the Elo and parameter count the menu shows; run/checkpoint stay internal). Five of the swatch colours are the game's own tile glazes; Sand and Clay are the two raw earths beneath them. scripts/deploy_player.sh ships this whole tree.",
+  "reserved_for_future_nets": {
+    "comment": "The next rungs of the ladder, in order, for agents stronger than Cobalt. When a newly trained net beats the current best, export it (scripts: onnx_export --ckpt ... --elo ... --out web/player/model/<id>), name it the NEXT name on this list, add it below with a fitting swatch, and make it the default. Do not rename existing bots.",
+    "names": ["Porcelain", "Lapis", "Ultramarine"],
+    "suggested_swatches": { "Porcelain": "#f4efe4", "Lapis": "#2b3a8f", "Ultramarine": "#1a1f6e" }
+  },
   "default": "cobalt",
   "bots": [
-    { "id": "brick", "name": "Brick", "dir": "model/brick" },
-    { "id": "ochre", "name": "Ochre", "dir": "model/ochre" },
-    { "id": "charcoal", "name": "Charcoal", "dir": "model/charcoal" },
-    { "id": "cobalt", "name": "Cobalt", "dir": "model" }
+    { "id": "sand", "name": "Sand", "dir": "model/sand", "swatch": "#d8c9ae" },
+    { "id": "clay", "name": "Clay", "dir": "model/clay", "swatch": "#a9744f" },
+    { "id": "brick", "name": "Brick", "dir": "model/brick", "swatch": "#b8402c" },
+    { "id": "ochre", "name": "Ochre", "dir": "model/ochre", "swatch": "#e2a41f" },
+    { "id": "charcoal", "name": "Charcoal", "dir": "model/charcoal", "swatch": "#262b31" },
+    { "id": "ice", "name": "Ice", "dir": "model/ice", "swatch": "#4cc3d8" },
+    { "id": "cobalt", "name": "Cobalt", "dir": "model", "swatch": "#16509f" }
   ]
 }

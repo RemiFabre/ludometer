@@ -323,6 +323,15 @@ button.tile:disabled { cursor: default; }
   color: var(--ink-soft);
 }
 .board-score { font-family: var(--font-display); font-size: 30px; line-height: 1; text-align: right; }
+.board-who .bot-chip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 7px;
+  vertical-align: -1px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 1px 0 rgba(255, 255, 255, .45) inset;
+}
 .board-score .score-eqn { color: var(--ink-faint); }
 .board-notes {
   grid-column: 1 / -1;

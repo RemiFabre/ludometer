@@ -70,6 +70,11 @@ export function createBoard(host, options = {}) {
     if (suggesting) open = open.filter((r) => r === view.openOnly);
 
     who.textContent = view.title || who.textContent;
+    if (view.chip) {
+      const chip = node("span", "bot-chip");
+      chip.style.background = view.chip;
+      who.prepend(chip);
+    }
     if (score.dataset.counting !== undefined && score.dataset.counting === String(me.score)) {
       // a scoreCount() is writing this number as arithmetic; let it finish
     } else {
