@@ -149,18 +149,29 @@ button, input, select { font: inherit; color: inherit; }
 .engine-bar.failed .engine-dot { background: var(--c2); box-shadow: 0 0 0 3px var(--c2-wash); animation: none; }
 .engine-text { flex: 1 1 auto; min-width: 200px; }
 
-/* what's new: one dismissible line in the engine strip's idiom */
+/* what's new: one dismissible line, edged in cobalt so it reads as news */
 .news-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px clamp(14px, 3vw, 34px);
-  background: var(--badge-bg);
+  padding: 8px clamp(14px, 3vw, 34px);
+  background: linear-gradient(var(--plaster-hi), var(--plaster));
   border-bottom: 1px solid var(--grout);
+  border-left: 4px solid var(--c0);
   font-family: var(--font-label);
-  font-size: 12px;
-  letter-spacing: .04em;
-  color: var(--ink-soft);
+  font-size: 13px;
+  letter-spacing: .03em;
+  color: var(--ink);
+}
+.news-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c0);
+  color: var(--plaster-hi);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .news-bar[hidden] { display: none; }
 .news-text { flex: 1 1 auto; }

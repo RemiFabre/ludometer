@@ -70,7 +70,12 @@ export function createBoard(host, options = {}) {
     if (suggesting) open = open.filter((r) => r === view.openOnly);
 
     who.textContent = view.title || who.textContent;
-    score.textContent = me.score;
+    if (score.dataset.counting !== undefined && score.dataset.counting === String(me.score)) {
+      // a scoreCount() is writing this number as arithmetic; let it finish
+    } else {
+      delete score.dataset.counting;
+      score.textContent = me.score;
+    }
     const bits = [];
     if (me.floor_penalty) bits.push(me.floor_penalty + " on the floor");
     if (me.completed_rows) {
@@ -215,6 +220,38 @@ export function createBoard(host, options = {}) {
     floorEl: () => floorWrap.querySelector(".floor"),
     floorSlots: () => [].slice.call(floorWrap.querySelectorAll(".floor .slot")),
     floorTiles: () => [].slice.call(floorWrap.querySelectorAll(".floor .tile")),
+    /**
+     * The round's arithmetic, written at the score itself: "10 + 5 = 15",
+     * with the 15 exactly where the score sits (the node is right-aligned),
+     * then the equation fades and only the sum remains. `opts2` is
+     * {hold, fade} in real ms — pass 0/0 for an instant update. The node
+     * guards itself against re-renders of the same final score while the
+     * equation plays; any other render (new game, browsing) replaces it.
+     */
+    scoreCount(before, delta, after, opts2 = {}) {
+      if (!delta) return;
+      const hold = Number(opts2.hold) || 0;
+      const fade = Number(opts2.fade) || 0;
+      if (!hold && !fade) {
+        score.textContent = String(after);
+        return;
+      }
+      const sign = delta > 0 ? " + " : " \u2212 ";
+      const eqn = node("span", "score-eqn", before + sign + Math.abs(delta) + " = ");
+      score.dataset.counting = String(after);
+      score.textContent = "";
+      score.append(eqn, document.createTextNode(String(after)));
+      setTimeout(() => {
+        if (score.dataset.counting !== String(after)) return;
+        eqn.style.transition = "opacity " + fade + "ms ease";
+        eqn.style.opacity = "0";
+        setTimeout(() => {
+          if (score.dataset.counting !== String(after)) return;
+          delete score.dataset.counting;
+          score.textContent = String(after);
+        }, fade + 50);
+      }, hold);
+    },
     wallCell: (r, c) =>
       grid.querySelector('.wall-row[data-wall-row="' + r + '"] [data-col="' + c + '"]'),
     wallTile: (r, c) =>

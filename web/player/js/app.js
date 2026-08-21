@@ -60,7 +60,7 @@ import {
 } from "../ui/dom.js";
 import { bindHistoryKeys, createHistory } from "../ui/history.js";
 import { renderLog } from "../ui/log.js";
-import { popScore } from "../ui/popups.js";
+import { clearPops, popScore } from "../ui/popups.js";
 import { clearScoring, renderFinalPanel, renderRoundPanel } from "../ui/scoring.js";
 import { buildRecord, copyRecord, downloadRecord } from "./record.js";
 import { setSharing, shareOnLeave, shareRecord, sharingOn, warmCollector } from "./upload.js";
@@ -1062,6 +1062,7 @@ async function playMoves(moves, board, reports, mover, takeoff) {
 /** Play out `moves`, then show the position they led to and the round's scoring. */
 async function settle(moves, board, reports, mover, takeoff) {
   await playMoves(moves, board, reports, mover, takeoff);
+  if (reports.length) clearPops(ui.pops); // the round re-render shifts the layout
   adopt({ moves });
   if (reports.length) {
     const last = reports[reports.length - 1];
@@ -1419,8 +1420,10 @@ async function animateTiling(report) {
       const to = board.wallCell(t.row, t.col);
       if (from && to) {
         wall.push({ from, to, color: t.color, hide: false });
-        // a rect, not the element: the pop may outlive this render of the cell
-        pops.push({ at: to.getBoundingClientRect(), text: "+" + t.points });
+        // row/col, not a rect: the cell is looked up again when the pop fires,
+        // so a re-render in between moves the pop WITH the wall instead of
+        // leaving it hanging at stale coordinates
+        pops.push({ row: t.row, col: t.col, text: "+" + t.points });
       }
     });
     const lid = board.floorTiles().map((from) => ({
@@ -1432,7 +1435,7 @@ async function animateTiling(report) {
     const beat = scaled(70);
     pops.forEach((p, i) => {
       setTimeout(
-        () => popScore(ui.pops, p.at, p.text),
+        () => popScore(ui.pops, board.wallCell(p.row, p.col), p.text),
         land ? land + i * beat : beatOffset + i * 240
       );
     });
@@ -1445,6 +1448,16 @@ async function animateTiling(report) {
       lidEl.classList.add("receiving");
       await flyTiles(lid, { layer: ui.fly, duration: 420, stagger: 40 });
       setTimeout(() => lidEl.classList.remove("receiving"), 400);
+    }
+    // the sum, written as the arithmetic the pops just showed: "10 + 5 = 15"
+    // at the score itself, the 15 exactly where it will stay; the equation
+    // then fades while the other player's count begins
+    if (typeof player.delta === "number" && player.delta !== 0) {
+      board.scoreCount(player.score_before, player.delta, player.score_after, {
+        hold: scaled(1300) || 600,
+        fade: scaled(1100) || 500,
+      });
+      await sleep(700); // let the arithmetic be read before the table moves on
     }
   }
 }
@@ -1728,7 +1741,7 @@ if (analyticsOn()) {
  * localStorage, like every other preference on this page (no cookies). */
 const NEWS_VERSION = "2026-08-21";
 const NEWS_TEXT =
-  "New: choose your opponent, and go back with ← to play a move differently.";
+  "Choose your opponent, and go back with ← to play a move differently.";
 (() => {
   let seen = null;
   try {

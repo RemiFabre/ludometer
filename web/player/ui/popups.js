@@ -76,3 +76,14 @@ export function popScore(layer, target, text, kind) {
   layer.appendChild(pop);
   setTimeout(() => pop.remove(), 1400);
 }
+
+/**
+ * Drop every pop still floating. Pops are fixed-position, so a re-render that
+ * moves the table leaves them hanging over whatever now sits at their old
+ * coordinates — a stray "−2" over a pattern row reads as a mystery artifact.
+ * Call this when the layout is about to shift (a round re-render); mid-render
+ * nobody sees a pop vanish.
+ */
+export function clearPops(layer) {
+  if (layer) layer.textContent = "";
+}
