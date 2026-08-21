@@ -1780,7 +1780,7 @@ if (analyticsOn()) {
 /* One line of news, shown until dismissed. Bump NEWS_VERSION when the line
  * changes and it comes back exactly once; the dismissal lives in
  * localStorage, like every other preference on this page (no cookies). */
-const NEWS_VERSION = "2026-08-21";
+const NEWS_VERSION = "2026-08-21b";
 // one line per change, so unrelated news never reads as one feature
 const NEWS_LINES = [
   "Choose your opponent's strength in the top bar.",
