@@ -9,3 +9,4 @@ runs/*/*.pt
 *.pt
 .DS_Store
 media/
+.bga_cookies.txt
