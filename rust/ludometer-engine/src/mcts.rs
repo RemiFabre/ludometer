@@ -413,7 +413,10 @@ impl Tree {
                 }
             }
         }
-        // Swap: the old arena becomes the scratch for next time.
+        // Swap. The old arena is dropped rather than kept as the next scratch:
+        // keeping it doubled a tree's footprint (measured 8 MB per tree at 2048
+        // sims with 512 concurrent games), and re-growing the vectors costs a
+        // few microseconds per move against milliseconds of search.
         let old = Arena {
             nodes: std::mem::take(&mut self.nodes),
             legal: std::mem::take(&mut self.legal),
@@ -432,7 +435,8 @@ impl Tree {
         self.margins = dst.margins;
         self.child = dst.child;
         self.chance = dst.chance;
-        self.scratch = Some(old);
+        drop(old);
+        self.scratch = None;
     }
 
     // ------------------------------------------------------------------ nodes
