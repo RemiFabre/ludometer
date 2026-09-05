@@ -85,6 +85,20 @@ PY
 mkdir -p /work/tree && tar -xzf "/work/src/$RLX_BUNDLE" -C /work/tree
 cd /work/tree
 export PYTHONPATH=/work/tree OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+RLX_ENGINE_ARGS=""
+if [ "${RLX_RUST:-0}" = "1" ]; then
+  # The Rust engine (rust/ludometer-engine -> the ludometer_rs extension): a
+  # toolchain install plus a release build, ~2-3 minutes of an 8-hour job.
+  t_rust=$(date +%s)
+  apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq curl build-essential >/dev/null 2>&1 || true
+  curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal >/dev/null 2>&1
+  . "$HOME/.cargo/env"
+  pip install -q --no-cache-dir maturin >/dev/null
+  (cd rust/ludometer-engine && maturin build --release -o /work/wheels >/dev/null 2>&1) || { echo "[rl-experiment] rust build FAILED"; exit 7; }
+  pip install -q --no-cache-dir /work/wheels/ludometer_rs-*.whl >/dev/null
+  python -c "import ludometer_rs; print('[rl-experiment] ludometer_rs', ludometer_rs.__version__, 'built in', $(date +%s)-$t_rust, 's')"
+  RLX_ENGINE_ARGS="--engine rust"
+fi
 if [ -n "${RLX_ASSET:-}" ]; then
 python - <<'PY'
 import os
@@ -101,7 +115,7 @@ if [ "${RLX_ENTRY:-generator}" = "label" ]; then
     --shards "$RLX_SHARDS" --weights "$RLX_WEIGHTS" --tag "$RLX_TAG" --workers "$RLX_WORKERS" $RLX_EXTRA
 fi
 exec python -m ludometer.cloud.generator --run "$RLX_RUN" --shards "$RLX_SHARDS" \
-  --weights "$RLX_WEIGHTS" --tag "$RLX_TAG" --workers "$RLX_WORKERS" --block "$RLX_BLOCK" $RLX_EXTRA
+  --weights "$RLX_WEIGHTS" --tag "$RLX_TAG" --workers "$RLX_WORKERS" --block "$RLX_BLOCK" $RLX_ENGINE_ARGS $RLX_EXTRA
 """
 
 
@@ -193,6 +207,7 @@ def launch(
     dry_run: bool = False,
     entry: str = "generator",
     asset: str = "",
+    rust: bool = False,
 ) -> list[str]:
     if flavor not in PRICES:
         raise SystemExit(f"unknown flavor {flavor!r} (add its price to PRICES first)")
@@ -230,6 +245,7 @@ def launch(
             "RLX_ENTRY": entry,
             "RLX_ASSET": asset,
             "RLX_CUDA": "1" if flavor in GPU_FLAVORS else "0",
+            "RLX_RUST": "1" if rust else "0",
         }
         if dry_run:
             print(f"[fleet] dry run: {flavor} {timeout} tag {tag} env {env}")
@@ -355,6 +371,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         entry=args.entry,
         asset=args.asset,
+        rust=args.rust,
     )
     return 0
 
@@ -428,6 +445,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--asset",
         default="",
         help="file in the src repo the job downloads (label: positions)",
+    )
+    l.add_argument(
+        "--rust",
+        action="store_true",
+        help="build the Rust engine in the job and run the generator with --engine rust",
     )
     l.set_defaults(func=cmd_launch)
     ps = sub.add_parser("ps")

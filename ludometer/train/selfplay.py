@@ -235,11 +235,17 @@ def pcr_sims(config: SelfPlayConfig, rng: random.Random) -> tuple[int | None, bo
     return config.pcr_cheap_sims, False
 
 
-def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> GameRecord:
-    """Play one full game against itself; never mutates anything shared."""
+def play_selfplay_game(
+    evaluator: Any, seed: int, config: SelfPlayConfig, mcts_cls: Any = MCTS
+) -> GameRecord:
+    """Play one full game against itself; never mutates anything shared.
+
+    ``mcts_cls`` is the search implementation (:class:`~ludometer.train.mcts.MCTS`
+    by default; :class:`ludometer.train.mcts_rs.MCTS` for the Rust tree).
+    """
     started = time.perf_counter()
     state = get_game(config.game).new_game(seed)
-    mcts = MCTS(
+    mcts = mcts_cls(
         evaluator, config.mcts, seed=(seed * 2 + 1) & 0x7FFFFFFF, add_noise=True
     )
     states: list[np.ndarray] = []

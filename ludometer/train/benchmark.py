@@ -45,7 +45,7 @@ from typing import Any
 import torch
 
 from ludometer.azul.engine import AzulState
-from ludometer.train.mcts import MCTSConfig
+from ludometer.train.mcts import MCTS, MCTSConfig
 from ludometer.train.net import NetConfig, NetEvaluator, PolicyValueNet, make_net
 from ludometer.train.selfplay import SelfPlayConfig, play_selfplay_game
 
@@ -94,18 +94,35 @@ def bench_inference(
 
 
 def bench_selfplay(
-    net: Any, sims: int, games: int = 2, reuse: bool = True, seed: int = 1
+    net: Any,
+    sims: int,
+    games: int = 2,
+    reuse: bool = True,
+    seed: int = 1,
+    engine: str = "python",
 ) -> dict[str, float]:
-    """Play ``games`` self-play games and report evals/s, sims/s and s/game."""
+    """Play ``games`` self-play games and report evals/s, sims/s and s/game.
+
+    ``engine="rust"`` runs the same loop on the Rust tree
+    (:mod:`ludometer.train.mcts_rs`): the net is still evaluated one leaf at a
+    time in Python, so this isolates what the tree walk itself costs.
+    """
     torch.set_num_threads(1)
     evaluator = NetEvaluator(net.eval(), device="cpu")
     config = SelfPlayConfig(
         mcts=MCTSConfig(sims=sims, tree_reuse=reuse), temp_moves=6, max_moves=200
     )
+    mcts_cls: Any = MCTS
+    if engine == "rust":
+        from ludometer.train.mcts_rs import MCTS as RustMCTS
+
+        mcts_cls = RustMCTS
+    elif engine != "python":
+        raise ValueError(f"engine must be python or rust, got {engine!r}")
     start = time.perf_counter()
     evals = moves = 0
     for i in range(games):
-        record = play_selfplay_game(evaluator, seed + i, config)
+        record = play_selfplay_game(evaluator, seed + i, config, mcts_cls=mcts_cls)
         evals += record.evals
         moves += record.moves
     elapsed = time.perf_counter() - start
@@ -167,6 +184,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sims", type=int, default=0, help="0 -> take it from config")
     parser.add_argument("--games", type=int, default=0, help="self-play games (0=skip)")
     parser.add_argument(
+        "--engine",
+        default="python",
+        choices=("python", "rust"),
+        help="search implementation for --games (rust = ludometer_rs tree)",
+    )
+    parser.add_argument(
         "--batched",
         action="store_true",
         help="measure batched round-trip latency (the run5 constraint)",
@@ -209,8 +232,13 @@ def main(argv: list[str] | None = None) -> int:
         "inference": bench_inference(net, args.rounds, args.per_round),
     }
     if args.games:
-        out["selfplay_reuse"] = bench_selfplay(net, sims, args.games, reuse=True)
-        out["selfplay_plain"] = bench_selfplay(net, sims, args.games, reuse=False)
+        out["engine"] = args.engine
+        out["selfplay_reuse"] = bench_selfplay(
+            net, sims, args.games, reuse=True, engine=args.engine
+        )
+        out["selfplay_plain"] = bench_selfplay(
+            net, sims, args.games, reuse=False, engine=args.engine
+        )
     if args.batched:
         sizes = [int(x) for x in args.batch_sizes.split(",") if x.strip()]
         out["batched"] = bench_batched(

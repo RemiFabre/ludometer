@@ -16,7 +16,7 @@ from pathlib import Path
 
 __all__ = ["build_bundle", "upload_bundle"]
 
-INCLUDE = ("ludometer", "pyproject.toml", "uv.lock", "configs", "README.md")
+INCLUDE = ("ludometer", "pyproject.toml", "uv.lock", "configs", "README.md", "rust")
 EXCLUDE_PARTS = ("__pycache__", ".pytest_cache")
 
 

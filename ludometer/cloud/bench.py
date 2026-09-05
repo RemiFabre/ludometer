@@ -48,6 +48,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--games", type=int, default=16)
     p.add_argument("--sims", type=int, default=0)
     p.add_argument("--threads", type=int, default=1)
+    p.add_argument(
+        "--engine",
+        default="batched",
+        choices=("batched", "rust", "both"),
+        help="self-play driver to measure (rust = ludometer_rs arena)",
+    )
+    p.add_argument(
+        "--half", action="store_true", help="fp16 net on cuda for the real driver"
+    )
     args = p.parse_args(argv)
 
     import torch
@@ -56,8 +65,10 @@ def main(argv: list[str] | None = None) -> int:
     from ludometer.cloud.hub import fetch_weights, hub_from_spec
     from ludometer.train.net import make_net, net_config_from_dict
     from ludometer.train.net2 import StructuredConfig
-    from ludometer.train.selfplay_batched import BatchedSelfPlay
+    from ludometer.train.selfplay import make_selfplay
     from ludometer.train.trainer import TrainConfig
+
+    engines = ["batched", "rust"] if args.engine == "both" else [args.engine]
 
     print(
         f"[bench] nproc={os.cpu_count()} cpu.max={_read('/sys/fs/cgroup/cpu.max')} "
@@ -142,33 +153,43 @@ def main(argv: list[str] | None = None) -> int:
         policy_rank=8,
         margin_head=True,
     )
-    eng = BatchedSelfPlay(tiny, cfg.selfplay_config(), games=args.games, device="cpu")
-    t0 = time.perf_counter()
-    eng.play(10_000, 1, should_stop=_until(min(30.0, args.seconds / 2)))
-    dt = time.perf_counter() - t0
-    print(
-        f"[bench] search-bound (tiny net, {args.games} games): {eng.positions / dt:,.0f} positions/s  "
-        f"eval {eng.eval_seconds:.1f}s search {eng.search_seconds:.1f}s",
-        flush=True,
-    )
+    for kind in engines:
+        eng = make_selfplay(
+            tiny, cfg.selfplay_config(), 1, kind=kind, games=args.games, device="cpu"
+        )
+        eng.start(None)
+        t0 = time.perf_counter()
+        eng.play(10_000, 1, should_stop=_until(min(30.0, args.seconds / 2)))
+        dt = time.perf_counter() - t0
+        print(
+            f"[bench] search-bound {kind} (tiny net, {args.games} games): {eng.positions / dt:,.0f} positions/s  "
+            f"eval {eng.eval_seconds:.1f}s search {eng.search_seconds:.1f}s",
+            flush=True,
+        )
 
     # 3. the real driver
     for dev in devices:
-        eng = BatchedSelfPlay(
-            net_config_from_dict(net_config),
-            cfg.selfplay_config(),
-            games=args.games,
-            device=dev,
-        )
-        eng.set_weights(weights)
-        t0 = time.perf_counter()
-        eng.play(10_000, 7, should_stop=_until(args.seconds))
-        dt = time.perf_counter() - t0
-        print(
-            f"[bench] one driver on {dev} ({args.games} games, {cfg.sims} sims): {eng.positions / dt:,.0f} positions/s  "
-            f"eval {eng.eval_seconds:.1f}s search {eng.search_seconds:.1f}s batches {eng.batches}",
-            flush=True,
-        )
+        for kind in engines:
+            half = bool(args.half and dev == "cuda")
+            eng = make_selfplay(
+                net_config_from_dict(net_config),
+                cfg.selfplay_config(),
+                1,
+                kind=kind,
+                games=args.games,
+                device=dev,
+                half=half,
+            )
+            eng.set_weights(weights)
+            t0 = time.perf_counter()
+            eng.play(10_000, 7, should_stop=_until(args.seconds))
+            dt = time.perf_counter() - t0
+            print(
+                f"[bench] one {kind} driver on {dev}{' fp16' if half else ''} ({args.games} games, {cfg.sims} sims): "
+                f"{eng.positions / dt:,.0f} positions/s  "
+                f"eval {eng.eval_seconds:.1f}s search {eng.search_seconds:.1f}s batches {eng.batches}",
+                flush=True,
+            )
     return 0
 
 
