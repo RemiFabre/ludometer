@@ -1,4 +1,12 @@
-# The road to Porcelain
+# The road to Porcelain — reached 2026-09-05; the road to Lapis Lazuli starts here
+
+**Porcelain shipped on 2026-09-05** (`runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt`,
+honest 2564, 229-0-71 vs Cobalt over 300 games at matched think time). The recipe that
+got there is in the 2026-09-05 section below and in
+`docs/superpowers/specs/2026-09-05-cloud-selfplay-design.md`. **The next bar is the
+same rule applied to the new strongest: Lapis Lazuli must beat Porcelain by ≥ +150
+wall-clock honest over ≥ 300 games** (~2714). Everything below this line was written
+before the ship and is kept as the record.
 
 *A handoff for the agent whose job is to produce the browser player's next
 top opponent. Written 2026-09-05 by the agent that built the player's bot

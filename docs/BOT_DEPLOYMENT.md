@@ -27,11 +27,13 @@ commit.*
 
 The ladder is ceramics, from raw ground to precious glaze, weakest first:
 
-    Sand · Clay · Brick · Ochre · Charcoal · Ice · Cobalt
+    Sand · Clay · Brick · Ochre · Charcoal · Ice · Cobalt · Porcelain
 
-Reserved for future STRONGER-than-current bots, in this order:
+(Porcelain shipped 2026-09-05: run porc_w-p0905-2038, honest 2564, 229-0-71
+over 300 games vs Cobalt at matched think time.) Reserved for future
+STRONGER-than-current bots, in this order:
 
-    Porcelain  →  Lapis Lazuli  →  Ultramarine
+    Lapis Lazuli  →  Ultramarine
 
 (Also recorded in `web/player/model/bots.json` under
 `reserved_for_future_nets`, with suggested swatch colours.) Rules:

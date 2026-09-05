@@ -4,6 +4,26 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-09-05 — **Porcelain shipped**: 229-0-71 vs Cobalt over 300 games at matched think time
+
+**It is live** on https://remifabre-faience.static.hf.space/ (and the GitHub Pages stub),
+the eighth opponent and the new default, name Porcelain, swatch #f4efe4. Honest Elo
+**2564** (+203 over Cobalt at wall clock, bar was +150; 2496 ± 39 on the fixed-sims ladder).
+Gate file: `runs/gates/porc_w-p0905-2038_wallclock.json`. Staging was checked first, the GUI
+guardrail and the live browser test are green (the live test's game: "Porcelain won 2-80").
+
+What it is: the wide single-layer body W160 (3.9M params, 0.62x Cobalt's speed, so it wins
+on quality per position, not speed), **pretrained for 4 epochs on the teacher corpus and
+nothing else**: 59,792 games of the ft2-4000 teacher (7.04M) playing itself at 1024 sims on
+the cloud fleet plus every position of the 3,795 BGA elite games searched by the same
+teacher; policy target = the search's visit distribution, value target = half game outcome,
+half the search's root value. No self-play polish yet: that is Phase B, running tonight,
+toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
+
+The wall-clock trap is why this works: the teacher is 3.4x too slow to ship, but its
+*searched* opinions can be distilled into a body fast enough to ship. mid1/mid2 distilled
+the teacher's raw outputs and got +17/+52; searched targets at scale got +203.
+
 ## 2026-09-05 — Porcelain push: cloud fleet built, and mid2 was never gated (it wins 57-42)
 
 **The plan you asked for** is in `docs/superpowers/specs/2026-09-05-cloud-selfplay-design.md`

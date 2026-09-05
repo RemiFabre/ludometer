@@ -62,6 +62,15 @@ wall-clock Elo over Cobalt) within this budget, 10-15% for "superhuman" in any
 meaningful sense (nobody has a human-strength anchor for Azul; the BGA elite
 corpus gives an agreement metric, not an Elo). The reasoning is in §2.
 
+## 0b. Outcome (22:05 the same day)
+
+**Porcelain shipped.** The wide body pretrained on the teacher corpus (59,792
+teacher self-play games at 1024 sims + all 3,795 BGA elite games searched by the
+teacher) beat Cobalt **229-0-71 over 300 games at matched think time**, honest
+Elo 2564 (+203; the bar was +150), with no self-play polish at all. Fleet
+spend at ship time about $25. Phase B (on-policy polish, fleet plays the
+student) runs overnight toward Lapis Lazuli, +150 over Porcelain.
+
 ## 1. Where things stand (checked today, not inherited)
 
 - Cobalt = run4/ckpt-037888, 1.81M params, 2361 on the fixed-sims ladder,
