@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "ludometer_rs"
+version = "0.1.0"
+description = "Rust engine for ludometer's Azul self-play (rules, PUCT tree, arena)"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2.0"]
+
+[tool.maturin]
+features = ["python"]
+module-name = "ludometer_rs"

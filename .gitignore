@@ -10,3 +10,6 @@ runs/*/*.pt
 .DS_Store
 media/
 .bga_cookies.txt
+
+# Rust build output
+rust/target/
