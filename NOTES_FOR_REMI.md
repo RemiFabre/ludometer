@@ -79,6 +79,15 @@ teacher; policy target = the search's visit distribution, value target = half ga
 half the search's root value. No self-play polish yet: that is Phase B, running tonight,
 toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
 
+**01:30, Rust engine landed** (ludometer-d1, commits 75bd1a9..bbb862d, `selfplay: "rust"`,
+`--engine rust`, `?engine=rust`). Checked here with Porcelain's net at 2048 sims: on one CPU
+core the search cost vanishes (0.4 s of search in 20 s; the torch forward pass is all that is
+left); on the Mac GPU, loaded by tonight's runs, one Rust driver at 1,024 concurrent games does
+**16.9k positions/s against 2.6k for the Python driver at 128 games** (6x per process, now
+forward-pass-bound). I will move the fleet generators to it once the L4 measurement and the
+Porcelain Rust-vs-Python gauntlet (50 ± 10 at sims=400) come back from that session.
+Polish at 01:10: 2585 ± 30 at 39k games, best screened checkpoint 56-1-43 vs Porcelain.
+
 **Night plan (23:45).** The generation-1 teacher is exhausted: a 6-epoch pretraining on
 its full corpus plays Porcelain 50-3-47, and the best self-play-polished checkpoint
 (10,240 games) plays it 49-4-47; the polish ladder drifts up (2496 → 2542 at 18k games)
