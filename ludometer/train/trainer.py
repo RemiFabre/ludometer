@@ -111,7 +111,9 @@ class TrainConfig:
     # `workers` CPU processes) and stays the default so every old config is
     # untouched; "batched" is run5's (see ludometer.train.selfplay_batched) —
     # `selfplay_games` concurrent trees per driver process, every tree's leaf in
-    # one forward pass on `selfplay_device`, `workers` driver processes.
+    # one forward pass on `selfplay_device`, `workers` driver processes;
+    # "rust" is the same engine with the rules and the tree walk in Rust
+    # (ludometer.train.selfplay_rust, needs the ludometer_rs extension built).
     selfplay: str = "workers"
     selfplay_games: int = 64  # concurrent games per driver process
     selfplay_device: str = "auto"  # auto|mps|cpu|cuda — inference for self-play
@@ -278,9 +280,9 @@ class TrainConfig:
                 "the margin target tanh(diff/20) is Azul's scale; Uno hand "
                 "scores saturate it (tanh(50/20)=0.99) - retune MARGIN_SCALE first"
             )
-        if self.selfplay not in ("workers", "batched", "hub"):
+        if self.selfplay not in ("workers", "batched", "rust", "hub"):
             raise ValueError(
-                f"unknown selfplay engine {self.selfplay!r} (workers | batched | hub)"
+                f"unknown selfplay engine {self.selfplay!r} (workers | batched | rust | hub)"
             )
         if self.selfplay == "hub" and not (self.hub_shards and self.hub_weights):
             raise ValueError("selfplay='hub' needs hub_shards and hub_weights")
@@ -552,9 +554,9 @@ class Trainer:
             )
             if cfg.selfplay == "hub":
                 engine = f"hub({cfg.hub_shards} <- fleet, weights -> {cfg.hub_weights})"
-            elif cfg.selfplay == "batched":
+            elif cfg.selfplay in ("batched", "rust"):
                 engine = (
-                    f"batched({cfg.selfplay_games}x{cfg.workers} on "
+                    f"{cfg.selfplay}({cfg.selfplay_games}x{cfg.workers} on "
                     f"{getattr(self.selfplay, 'device', cfg.selfplay_device)})"
                 )
             else:

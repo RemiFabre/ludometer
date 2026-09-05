@@ -56,7 +56,9 @@ def assert_same(py: AzulState, rust: rs.State, where: str = "") -> None:
     enc_py = py.encode()
     enc_rs = rust.encode()
     assert enc_rs.dtype == np.float32 and enc_rs.shape == (182,)
-    assert np.array_equal(enc_rs, enc_py), f"{where} encode differs at {np.nonzero(enc_rs != enc_py)[0]}"
+    assert np.array_equal(enc_rs, enc_py), (
+        f"{where} encode differs at {np.nonzero(enc_rs != enc_py)[0]}"
+    )
     assert rust.chance_key() == py.chance_key(), where
     assert rust.fingerprint() == py.fingerprint(), where
     assert rust.outcome() == py.outcome(), where
@@ -86,7 +88,7 @@ def random_play(seed: int, max_moves: int = 400) -> tuple[AzulState, rs.State, i
     return py, rust, moves
 
 
-@pytest.mark.parametrize("seed", list(range(0, 60)))
+@pytest.mark.parametrize("seed", list(range(60)))
 def test_random_play_matches_python(seed: int) -> None:
     py, rust, moves = random_play(seed)
     assert py.is_terminal

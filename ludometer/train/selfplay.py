@@ -567,6 +567,9 @@ def make_selfplay(
     config: one game at a time per process, ``workers <= 1`` running in-process.
     ``kind="batched"`` is run5's — ``games`` concurrent trees per driver process,
     all of their leaves evaluated in one forward pass on ``device``.
+    ``kind="rust"`` is the batched engine with the rules, the tree walk and the
+    game loop in Rust (:mod:`ludometer.train.selfplay_rust`); same interface,
+    same records, ~20x less CPU per simulation.
     """
     if kind == "batched":
         from ludometer.train.selfplay_batched import (  # lazy: torch/MPS at import
@@ -592,8 +595,32 @@ def make_selfplay(
             max_batch=max_batch,
             half=half,
         )
+    if kind == "rust":
+        from ludometer.train.selfplay_rust import (  # lazy: torch + ludometer_rs
+            RustSelfPlay,
+            RustSelfPlayPool,
+        )
+
+        if workers <= 1:
+            return RustSelfPlay(
+                net_config,
+                config,
+                games=games,
+                device=device,
+                max_batch=max_batch,
+                half=half,
+            )
+        return RustSelfPlayPool(
+            net_config,
+            config,
+            workers=workers,
+            games=games,
+            device=device,
+            max_batch=max_batch,
+            half=half,
+        )
     if kind != "workers":
-        raise ValueError(f"unknown selfplay engine {kind!r} (workers | batched)")
+        raise ValueError(f"unknown selfplay engine {kind!r} (workers | batched | rust)")
     if workers <= 1:
         return InlineSelfPlay(net_config, config)
     return SelfPlayPool(net_config, config, workers=workers)

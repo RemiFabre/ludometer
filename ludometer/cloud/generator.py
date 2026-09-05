@@ -104,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--half", action="store_true", help="fp16 net on the device (MPS/CUDA)"
     )
+    p.add_argument(
+        "--engine",
+        default="batched",
+        choices=("batched", "rust"),
+        help="self-play engine: the Python batched driver or the Rust arena",
+    )
     return p
 
 
@@ -151,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         args.block = full_block
     _log(
-        f"run {args.run} tag {tag}: {workers} drivers x {cfg.selfplay_games} games, "
+        f"run {args.run} tag {tag}: {workers} {args.engine} drivers x {cfg.selfplay_games} games, "
         f"sims {cfg.sims}, shards -> {shards.describe()}, weights <- {weights_hub.describe()}"
     )
 
@@ -177,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             nc,
             cfg.selfplay_config(),
             workers,
-            kind="batched",
+            kind=args.engine,
             games=cfg.selfplay_games,
             device=args.device,
             max_batch=cfg.selfplay_max_batch,

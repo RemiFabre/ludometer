@@ -67,6 +67,7 @@ class MCTSAgent(Agent):
         config: MCTSConfig | None = None,
         stall_rounds: int = STALL_ROUNDS,
         time_limit_s: float | None = None,
+        engine: str | None = None,
     ) -> None:
         if net is None and evaluator is None:
             raise ValueError("MCTSAgent needs either a net or an evaluator")
@@ -76,9 +77,26 @@ class MCTSAgent(Agent):
         self.stall_rounds = int(stall_rounds)
         cfg = config or MCTSConfig(sims=sims, c_puct=c_puct)
         self.evaluator = evaluator or NetEvaluator(net, device=device)
-        self.mcts = MCTS(
-            self.evaluator, cfg, seed=0 if seed is None else seed, add_noise=add_noise
-        )
+        # "python" is ludometer.train.mcts (the reference); "rust" is the same
+        # search on the ludometer_rs tree (ludometer.train.mcts_rs), picked per
+        # agent (`?engine=rust` in a spec) or process-wide by LUDOMETER_ENGINE.
+        if engine is None:
+            from ludometer.train.mcts_rs import default_engine
+
+            engine = default_engine()
+        if engine not in ("python", "rust"):
+            raise ValueError(f"engine must be python or rust, got {engine!r}")
+        self.engine = engine
+        if engine == "rust":
+            from ludometer.train.mcts_rs import MCTS as RustMCTS
+
+            self.mcts: Any = RustMCTS(
+                self.evaluator, cfg, seed=0 if seed is None else seed, add_noise=add_noise
+            )
+        else:
+            self.mcts = MCTS(
+                self.evaluator, cfg, seed=0 if seed is None else seed, add_noise=add_noise
+            )
         self._rng_seed = 0 if seed is None else seed
         # None = run exactly `sims` simulations (training, arena, eval)
         self.time_limit_s: float | None = None
@@ -161,7 +179,7 @@ class MCTSAgent(Agent):
         )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"<MCTSAgent {self.name} sims={self.mcts.config.sims}>"
+        return f"<MCTSAgent {self.name} sims={self.mcts.config.sims} engine={self.engine}>"
 
 
 @dataclass(frozen=True)

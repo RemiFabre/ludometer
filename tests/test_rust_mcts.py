@@ -48,7 +48,11 @@ class MarginEvaluator(ScoreEvaluator):
     def __call__(self, state, legal):
         priors, value = super().__call__(state, legal)
         me = state.current_player
-        return priors, value, math.tanh((state.scores[me] - state.scores[1 - me]) / 20.0)
+        return (
+            priors,
+            value,
+            math.tanh((state.scores[me] - state.scores[1 - me]) / 20.0),
+        )
 
 
 class SkewedEvaluator:
@@ -109,13 +113,20 @@ def assert_same_result(got: dict, want, where: str = "") -> None:
         (SkewedEvaluator(), 4),
     ],
 )
-def test_search_matches_python_on_isolated_positions(evaluator, chance_children) -> None:
+def test_search_matches_python_on_isolated_positions(
+    evaluator, chance_children
+) -> None:
     config = MCTSConfig(sims=96, chance_children=chance_children)
     checked = 0
     for seed in range(4):
         for k, (py, rust) in enumerate(twin_positions(seed, 12)):
             ref = MCTS(evaluator, config, seed=seed * 31 + k, add_noise=False)
-            tree = rs.Tree(cfg_dict(config), has_margin=getattr(evaluator, "has_margin", False), seed=seed * 31 + k, rng="python")
+            tree = rs.Tree(
+                cfg_dict(config),
+                has_margin=getattr(evaluator, "has_margin", False),
+                seed=seed * 31 + k,
+                rng="python",
+            )
             want = ref.search(py)
             got = tree.search(rust, evaluator)
             assert_same_result(got, want, f"seed {seed} pos {k}")
@@ -197,7 +208,11 @@ def drive_rust(tree: rs.Tree, state, evaluator, max_leaves: int = 0) -> dict:
 def test_leaf_protocol_matches_python_pumped_search(reuse: bool, batch: int) -> None:
     evaluator = MarginEvaluator()
     config = MCTSConfig(
-        sims=120, tree_reuse=reuse, search_batch=batch, search_batch_ramp=4, virtual_loss=1.0
+        sims=120,
+        tree_reuse=reuse,
+        search_batch=batch,
+        search_batch_ramp=4,
+        virtual_loss=1.0,
     )
     py = AzulState.new_game(5)
     rust = rs.State.new_game(5, rng="python")
@@ -267,11 +282,27 @@ def test_forced_root_returns_without_simulating() -> None:
     py.recount()
     assert py.legal_actions() == [5]  # factory 0, blue, floor
     rust = rs.State.from_dict(
-        {k: getattr(py, k) for k in (
-            "factories", "center", "marker_in_center", "bag", "lid", "walls", "pl_color",
-            "pl_count", "floor", "floor_marker", "scores", "current_player", "first_player",
-            "round_index", "is_terminal", "exhausted",
-        )},
+        {
+            k: getattr(py, k)
+            for k in (
+                "factories",
+                "center",
+                "marker_in_center",
+                "bag",
+                "lid",
+                "walls",
+                "pl_color",
+                "pl_count",
+                "floor",
+                "floor_marker",
+                "scores",
+                "current_player",
+                "first_player",
+                "round_index",
+                "is_terminal",
+                "exhausted",
+            )
+        },
         rng="python",
     )
     ref = MCTS(UniformEvaluator(), MCTSConfig(sims=20), seed=1)
@@ -293,18 +324,37 @@ def test_time_budget_caps_the_simulations() -> None:
 
 def test_noise_changes_the_policy_and_only_at_a_real_root() -> None:
     _, rust = twin_positions(6, 1)[0]
-    plain = rs.Tree({"sims": 40}, seed=2, add_noise=False).search(rust, UniformEvaluator())
-    noisy = rs.Tree({"sims": 40}, seed=2, add_noise=True).search(rust, UniformEvaluator())
+    plain = rs.Tree({"sims": 40}, seed=2, add_noise=False).search(
+        rust, UniformEvaluator()
+    )
+    noisy = rs.Tree({"sims": 40}, seed=2, add_noise=True).search(
+        rust, UniformEvaluator()
+    )
     assert not np.array_equal(plain["policy"], noisy["policy"])
     assert noisy["policy"].sum() == pytest.approx(1.0, abs=1e-5)
-    again = rs.Tree({"sims": 40}, seed=2, add_noise=True).search(rust, UniformEvaluator())
+    again = rs.Tree({"sims": 40}, seed=2, add_noise=True).search(
+        rust, UniformEvaluator()
+    )
     assert np.array_equal(noisy["policy"], again["policy"])  # seeded
 
 
 # --------------------------------------------------------- driver-side helpers
 def test_numpy_sum_is_bit_exact() -> None:
     rng = np.random.default_rng(1)
-    for n in list(range(1, 40)) + [63, 64, 65, 127, 128, 129, 180, 255, 256, 257, 300, 1000]:
+    for n in list(range(1, 40)) + [
+        63,
+        64,
+        65,
+        127,
+        128,
+        129,
+        180,
+        255,
+        256,
+        257,
+        300,
+        1000,
+    ]:
         a = rng.random(n) * rng.integers(1, 1000)
         assert rs.numpy_sum(list(a)) == float(a.sum()), n
 
@@ -313,7 +363,9 @@ def test_tree_rng_matches_python_random() -> None:
     tree = rs.Tree({}, seed=12345, rng="python")
     ref = random.Random(12345)
     assert tree.rng_random() == ref.random()
-    assert [tree.rng_randrange(7) for _ in range(20)] == [ref.randrange(7) for _ in range(20)]
+    assert [tree.rng_randrange(7) for _ in range(20)] == [
+        ref.randrange(7) for _ in range(20)
+    ]
     assert tree.rng_random() == ref.random()
 
 

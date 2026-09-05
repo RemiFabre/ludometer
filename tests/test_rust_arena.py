@@ -26,8 +26,15 @@ from ludometer.train.selfplay_batched import BatchedSelfPlay
 rs = pytest.importorskip("ludometer_rs")
 
 TINY = StructuredConfig(
-    embed=32, layers=1, heads=4, ffn_mult=2, body=48, body_blocks=1,
-    value_hidden=16, policy_rank=8, margin_head=True,
+    embed=32,
+    layers=1,
+    heads=4,
+    ffn_mult=2,
+    body=48,
+    body_blocks=1,
+    value_hidden=16,
+    policy_rank=8,
+    margin_head=True,
 )
 
 
@@ -39,7 +46,9 @@ def tiny_net(seed: int = 0):
 
 
 def selfplay_config(**kwargs) -> SelfPlayConfig:
-    mcts_keys = {k: kwargs.pop(k) for k in list(kwargs) if k in MCTSConfig.__dataclass_fields__}
+    mcts_keys = {
+        k: kwargs.pop(k) for k in list(kwargs) if k in MCTSConfig.__dataclass_fields__
+    }
     mcts_keys.setdefault("sims", 24)
     mcts_keys.setdefault("tree_reuse", True)
     mcts_keys.setdefault("chance_children", 2)
@@ -52,8 +61,16 @@ def selfplay_config(**kwargs) -> SelfPlayConfig:
 
 def flat_config(config: SelfPlayConfig) -> dict:
     d = {k: getattr(config.mcts, k) for k in MCTSConfig.__dataclass_fields__}
-    for k in ("temp_moves", "temperature", "stall_rounds", "max_moves", "value_score_weight",
-              "pcr_full_sims", "pcr_cheap_sims", "pcr_full_prob"):
+    for k in (
+        "temp_moves",
+        "temperature",
+        "stall_rounds",
+        "max_moves",
+        "value_score_weight",
+        "pcr_full_sims",
+        "pcr_cheap_sims",
+        "pcr_full_prob",
+    ):
         d[k] = getattr(config, k)
     return d
 
@@ -66,8 +83,15 @@ def softmax_legal(logits: np.ndarray, legal: list[int]) -> np.ndarray:
     return sel / sel.sum()
 
 
-def play_rust(net, config: SelfPlayConfig, n_games: int, seed_start: int, games: int = 1,
-              rng: str = "python", exact: bool = True) -> list[dict]:
+def play_rust(
+    net,
+    config: SelfPlayConfig,
+    n_games: int,
+    seed_start: int,
+    games: int = 1,
+    rng: str = "python",
+    exact: bool = True,
+) -> list[dict]:
     """Drive the arena with the net on CPU; `exact` softmaxes in numpy like Python."""
     arena = rs.Arena(flat_config(config), has_margin=True, games=games, rng=rng)
     arena.begin(n_games, seed_start)
@@ -82,8 +106,12 @@ def play_rust(net, config: SelfPlayConfig, n_games: int, seed_start: int, games:
                 margins = margin.numpy().astype(np.float32)
                 if exact:
                     legal = arena.pending_legal()
-                    priors = [softmax_legal(logits[i], legal[i]) for i in range(len(legal))]
-                    arena.apply_leaves(priors, [float(v) for v in values], [float(m) for m in margins])
+                    priors = [
+                        softmax_legal(logits[i], legal[i]) for i in range(len(legal))
+                    ]
+                    arena.apply_leaves(
+                        priors, [float(v) for v in values], [float(m) for m in margins]
+                    )
                 else:
                     arena.apply_logits(np.ascontiguousarray(logits), values, margins)
             out.extend(arena.drain())
@@ -99,7 +127,9 @@ def assert_same_record(got: dict, want) -> None:
     assert got["truncated"] == want.truncated
     assert got["decisions"] == want.decisions
     assert got["evals"] == want.evals
-    assert got["states"].dtype == np.float32 and got["states"].shape == want.states.shape
+    assert (
+        got["states"].dtype == np.float32 and got["states"].shape == want.states.shape
+    )
     assert np.array_equal(got["states"], want.states)
     assert np.array_equal(got["policies"], want.policies)
     assert np.array_equal(got["values"], want.values)
@@ -121,7 +151,9 @@ def assert_same_record(got: dict, want) -> None:
         {"tree_reuse": False},
     ],
 )
-def test_arena_reproduces_batched_selfplay_given_identical_evaluations(extra: dict) -> None:
+def test_arena_reproduces_batched_selfplay_given_identical_evaluations(
+    extra: dict,
+) -> None:
     net = tiny_net(1)
     config = selfplay_config(**extra)
     engine = BatchedSelfPlay(TINY, config, games=1, device="cpu")

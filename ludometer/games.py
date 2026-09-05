@@ -13,6 +13,7 @@ Baseline agent specs are game-qualified strings (``"uno:greedy"``), which keeps
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -123,9 +124,39 @@ GAMES: dict[str, GameSpec] = {
 }
 
 
+def _rust_azul() -> GameSpec | None:
+    """Azul on the Rust rules when ``LUDOMETER_ENGINE=rust`` and the module is built."""
+    if os.environ.get("LUDOMETER_ENGINE", "").strip().lower() != "rust":
+        return None
+    try:
+        from ludometer.azul import engine_rs
+    except ImportError:  # pragma: no cover - depends on the build
+        return None
+    if not engine_rs.available():
+        return None
+    base = GAMES["azul"]
+    return GameSpec(
+        name=base.name,
+        encoded_size=base.encoded_size,
+        action_space=base.action_space,
+        baselines=base.baselines,
+        max_moves=base.max_moves,
+        state_cls=engine_rs.AzulState,
+    )
+
+
 def get_game(name: str | None) -> GameSpec:
-    """The spec for ``name`` (``None``/empty means Azul)."""
+    """The spec for ``name`` (``None``/empty means Azul).
+
+    ``LUDOMETER_ENGINE=rust`` swaps Azul's rules for the Rust engine
+    (:mod:`ludometer.azul.engine_rs`); every other game and the default are
+    untouched.
+    """
     key = (name or DEFAULT_GAME).lower()
+    if key == "azul":
+        rust = _rust_azul()
+        if rust is not None:
+            return rust
     try:
         return GAMES[key]
     except KeyError:

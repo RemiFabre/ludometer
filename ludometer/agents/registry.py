@@ -124,8 +124,17 @@ def _parse_options(query: str, default_sims: int) -> tuple[int, float | None]:
     ``think`` is the GUI's per-move time budget: with it set the search runs
     until the clock is spent and ``sims`` is only an upper bound.
     """
+    sims, think, _engine = _parse_options_engine(query, default_sims)
+    return sims, think
+
+
+def _parse_options_engine(
+    query: str, default_sims: int
+) -> tuple[int, float | None, str | None]:
+    """``_parse_options`` plus ``engine=python|rust`` (the search implementation)."""
     sims = default_sims
     think: float | None = None
+    engine: str | None = None
     for part in query.split("&"):
         if not part:
             continue
@@ -144,11 +153,15 @@ def _parse_options(query: str, default_sims: int) -> tuple[int, float | None]:
                 raise ValueError(f"think must be a number, got {value!r}") from None
             if think < 0:
                 raise ValueError(f"think must be >= 0, got {think}")
+        elif key == "engine":
+            if value not in ("python", "rust"):
+                raise ValueError(f"engine must be python or rust, got {value!r}")
+            engine = value
         else:
             raise ValueError(
-                f"unknown option {key!r} (only sims= and think= are supported)"
+                f"unknown option {key!r} (only sims=, think= and engine= are supported)"
             )
-    return sims, think
+    return sims, think, engine
 
 
 def _parse_sims(query: str, default: int) -> int:
@@ -195,10 +208,11 @@ def load_agent(spec: str, seed: int | None = None):
         path, _, query = rest.partition("?")
         if not path:
             raise ValueError("mcts spec needs a checkpoint path: mcts:<path>?sims=<n>")
-        sims, think = _parse_options(query, DEFAULT_SIMS)
+        sims, think, engine = _parse_options_engine(query, DEFAULT_SIMS)
         from ludometer.train.mcts_agent import MCTSAgent  # lazy: needs torch
 
-        agent = MCTSAgent.from_checkpoint(path, sims=sims, seed=seed)
+        extra = {} if engine is None else {"engine": engine}
+        agent = MCTSAgent.from_checkpoint(path, sims=sims, seed=seed, **extra)
         agent.set_time_budget(think)
         agent.spec_info = {
             "kind": "mcts",
@@ -208,6 +222,7 @@ def load_agent(spec: str, seed: int | None = None):
             "checkpoint": Path(path).stem,
             "sims": sims,
             "think_s": think,
+            "engine": agent.engine,
         }
         return agent
     raise ValueError(
