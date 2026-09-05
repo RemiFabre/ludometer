@@ -20,6 +20,17 @@ teacher; policy target = the search's visit distribution, value target = half ga
 half the search's root value. No self-play polish yet: that is Phase B, running tonight,
 toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
 
+**Night plan (23:45).** The generation-1 teacher is exhausted: a 6-epoch pretraining on
+its full corpus plays Porcelain 50-3-47, and the best self-play-polished checkpoint
+(10,240 games) plays it 49-4-47; the polish ladder drifts up (2496 → 2542 at 18k games)
+but has not converted into wall-clock wins. Running overnight: (1) the porc_w polish
+continues (4 L4 jobs, screener every 40 min); (2) **Porcelain is the generation-2
+teacher**, playing itself at 2048 sims on 4 L4 jobs (`configs/rlx_teacher2.json`, shards
+under `rlx_teacher2/`); (3) a **19.5M-parameter teacher seed** (`configs/big_t.json`) is
+pretraining on the full generation-1 corpus, to be polished on the fleet and distilled
+into the next browser-sized student. Generation-1 jobs cancelled. Lapis Lazuli's bar:
++150 over Porcelain, gate against `runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt`.
+
 The wall-clock trap is why this works: the teacher is 3.4x too slow to ship, but its
 *searched* opinions can be distilled into a body fast enough to ship. mid1/mid2 distilled
 the teacher's raw outputs and got +17/+52; searched targets at scale got +203.
