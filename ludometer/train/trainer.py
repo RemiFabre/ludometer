@@ -133,6 +133,7 @@ class TrainConfig:
     hub_max_lag: int = (
         3  # shards from weights older than this many versions are dropped
     )
+    hub_delete_consumed: bool = False  # remove a shard from the hub once it is read
     search_min_batch: int = 1
     virtual_loss: float = 1.0
 
@@ -429,6 +430,7 @@ class Trainer:
                 max_lag=config.hub_max_lag,
                 token=os.environ.get("HF_TOKEN"),
                 log=self._log,
+                delete_consumed=config.hub_delete_consumed,
             )
         else:
             self.selfplay = make_selfplay(
@@ -748,6 +750,7 @@ class Trainer:
             return cfg.pretrain_lr_min + 0.5 * (lr - cfg.pretrain_lr_min) * (
                 1.0 + math.cos(math.pi * frac)
             )
+
         t_start = time.monotonic()
         for epoch in range(1, epochs + 1):
             net.train()

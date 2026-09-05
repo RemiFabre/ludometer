@@ -170,6 +170,27 @@ def test_generator_feeds_hub_selfplay(tmp_path: Path) -> None:
 
     got = engine.play(3, seed_start=0)
     assert len(got) == 3
+    assert len(shards.list("r/")) == 2  # kept by default
+
+    # a learner that deletes what it consumed leaves the hub empty behind it
+    write_shard(tmp_path / "x.npz", _records(1), {"weights_version": 1})
+    shards.put(tmp_path / "x.npz", "r/v00001-jobX-00000.npz")
+    eater = HubSelfPlay(
+        cfg.net_config(),
+        cfg.selfplay_config(),
+        run="r",
+        shards=shards,
+        weights=weights,
+        state_dir=tmp_path / "eater",
+        publish_s=0.0,
+        poll_s=0.05,
+        max_lag=100,
+        log=None,
+        delete_consumed=True,
+    )
+    eater.version = 1
+    assert len(eater.play(4, 0, should_stop=lambda: True)) == 4
+    assert shards.list("r/") == []
     assert engine.lag_hist == {0: 4}
     seeds = {r.seed for r in got}
     assert seeds <= {gen.seed_base("jobA") + i for i in range(4)}

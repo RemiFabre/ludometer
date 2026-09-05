@@ -54,6 +54,7 @@ class HubSelfPlay:
         max_lag: int = 3,
         token: str | None = None,
         log: Any = print,
+        delete_consumed: bool = False,
     ) -> None:
         self.net_config = net_config
         self.config = config
@@ -70,6 +71,10 @@ class HubSelfPlay:
         self.publish_s = float(publish_s)
         self.poll_s = float(poll_s)
         self.max_lag = int(max_lag)
+        # A polish stream is not a corpus anyone keeps: with the Rust engine a
+        # generator job pushes ~0.6 GB/hour of shards, so the learner can
+        # remove each one from the hub once it has been read (opt-in).
+        self.delete_consumed = bool(delete_consumed)
         self._log = log or (lambda _m: None)
         self.workers = 0
         self.device = "hub"
@@ -158,6 +163,11 @@ class HubSelfPlay:
             lag = self.version - version
             self.lag_hist[lag] = self.lag_hist.get(lag, 0) + len(records)
             self._consumed.add(name)
+            if self.delete_consumed:
+                try:
+                    self.shards.delete(name)
+                except Exception as exc:  # noqa: BLE001 - housekeeping only
+                    self._log(f"[hub] could not delete {name}: {exc}")
             if lag > self.max_lag:
                 self.skipped += len(records)
                 local.unlink(missing_ok=True)
