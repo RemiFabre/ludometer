@@ -4,12 +4,13 @@
 //! `encode()`), `Tree` mirrors `ludometer.train.mcts.MCTS` through the leaf
 //! protocol, `Arena` runs many games for `ludometer.train.selfplay_rust`.
 
-use numpy::PyArray1;
-use pyo3::exceptions::PyValueError;
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 
 use crate::azul::{self, State as RsState, ACTION_SPACE, ENCODED_SIZE, NUM_COLORS, NUM_FACTORIES};
+use crate::mcts::{self, MctsConfig, SearchResult, Tree as RsTree};
 use crate::rng::RngKind;
 
 fn rng_kind(name: &str) -> PyResult<RngKind> {
@@ -357,6 +358,370 @@ impl PyState {
     }
 }
 
+
+// ------------------------------------------------------------------- Tree
+/// `MCTSConfig.from_dict` for the Rust config.
+pub fn config_from_dict(data: Option<&Bound<'_, PyDict>>) -> PyResult<MctsConfig> {
+    let mut cfg = MctsConfig::default();
+    if let Some(d) = data {
+        macro_rules! get {
+            ($key:literal, $field:ident, $ty:ty) => {
+                if let Some(v) = d.get_item($key)? {
+                    cfg.$field = v.extract::<$ty>()?;
+                }
+            };
+        }
+        get!("sims", sims, u32);
+        get!("c_puct", c_puct, f64);
+        get!("dirichlet_alpha_scale", dirichlet_alpha_scale, f64);
+        get!("dirichlet_eps", dirichlet_eps, f64);
+        get!("chance_children", chance_children, usize);
+        get!("fpu", fpu, f64);
+        get!("tree_reuse", tree_reuse, bool);
+        get!("decisive_eps", decisive_eps, f64);
+        get!("decisive_min_visit_frac", decisive_min_visit_frac, f64);
+        get!("search_batch", search_batch, u32);
+        get!("search_batch_ramp", search_batch_ramp, u32);
+        get!("search_min_batch", search_min_batch, u32);
+        get!("virtual_loss", virtual_loss, f64);
+        if let Some(v) = d.get_item("chance_backup")? {
+            let name: String = v.extract()?;
+            if name != "mean" {
+                return Err(PyValueError::new_err(format!(
+                    "unknown chance_backup {name:?} (only 'mean' exists)"
+                )));
+            }
+        }
+    }
+    cfg.validate().map_err(PyValueError::new_err)?;
+    Ok(cfg)
+}
+
+pub fn config_to_dict<'py>(py: Python<'py>, cfg: &MctsConfig) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("sims", cfg.sims)?;
+    d.set_item("c_puct", cfg.c_puct)?;
+    d.set_item("dirichlet_alpha_scale", cfg.dirichlet_alpha_scale)?;
+    d.set_item("dirichlet_eps", cfg.dirichlet_eps)?;
+    d.set_item("chance_children", cfg.chance_children)?;
+    d.set_item("chance_backup", "mean")?;
+    d.set_item("fpu", cfg.fpu)?;
+    d.set_item("tree_reuse", cfg.tree_reuse)?;
+    d.set_item("decisive_eps", cfg.decisive_eps)?;
+    d.set_item("decisive_min_visit_frac", cfg.decisive_min_visit_frac)?;
+    d.set_item("search_batch", cfg.search_batch)?;
+    d.set_item("search_batch_ramp", cfg.search_batch_ramp)?;
+    d.set_item("search_min_batch", cfg.search_min_batch)?;
+    d.set_item("virtual_loss", cfg.virtual_loss)?;
+    Ok(d)
+}
+
+/// A `SearchResult` as the dict `ludometer.train.mcts_rs` turns into the dataclass.
+pub fn result_to_dict<'py>(py: Python<'py>, r: &SearchResult) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("policy", PyArray1::from_slice(py, &r.policy))?;
+    d.set_item("value", r.value)?;
+    let visits = PyDict::new(py);
+    for &(a, n) in &r.visits {
+        visits.set_item(a as i64, n)?;
+    }
+    d.set_item("visits", visits)?;
+    d.set_item("sims", r.sims)?;
+    d.set_item("elapsed_s", r.elapsed_s)?;
+    d.set_item("has_margin", r.has_margin)?;
+    let q = PyDict::new(py);
+    for &(a, v) in &r.q {
+        q.set_item(a as i64, v)?;
+    }
+    d.set_item("q", q)?;
+    let m = PyDict::new(py);
+    for &(a, v) in &r.margins {
+        m.set_item(a as i64, v)?;
+    }
+    d.set_item("margins", m)?;
+    d.set_item("margin", r.margin)?;
+    Ok(d)
+}
+
+/// Unpack an evaluator's `(priors, value)` or `(priors, value, margin)`.
+fn unpack_eval(out: &Bound<'_, PyAny>) -> PyResult<(Vec<f32>, f64, f64)> {
+    let tuple = out.cast::<PyTuple>().map_err(|_| PyValueError::new_err("evaluator must return a tuple"))?;
+    let n = tuple.len();
+    if n != 2 && n != 3 {
+        return Err(PyValueError::new_err("evaluator must return (priors, value[, margin])"));
+    }
+    let priors_obj = tuple.get_item(0)?;
+    let priors: Vec<f32> = match priors_obj.extract::<PyReadonlyArray1<f32>>() {
+        Ok(arr) => {
+            let sl: &[f32] = arr.as_slice()?;
+            sl.to_vec()
+        }
+        Err(_) => priors_obj.extract::<Vec<f64>>()?.into_iter().map(|x| x as f32).collect(),
+    };
+    let value: f64 = tuple.get_item(1)?.extract()?;
+    let margin: f64 = if n == 3 { tuple.get_item(2)?.extract()? } else { 0.0 };
+    Ok((priors, value, margin))
+}
+
+/// A PUCT search tree (see `ludometer.train.mcts.MCTS`).
+#[pyclass(name = "Tree", module = "ludometer_rs", unsendable)]
+pub struct PyTree {
+    pub inner: RsTree,
+}
+
+#[pymethods]
+impl PyTree {
+    #[new]
+    #[pyo3(signature = (config = None, has_margin = false, seed = 0, add_noise = false, rng = "fast"))]
+    fn new(config: Option<&Bound<'_, PyDict>>, has_margin: bool, seed: i64, add_noise: bool, rng: &str) -> PyResult<Self> {
+        let cfg = config_from_dict(config)?;
+        Ok(PyTree { inner: RsTree::new(cfg, has_margin, seed as u64, add_noise, rng_kind(rng)?) })
+    }
+
+    fn seed(&mut self, n: i64) {
+        self.inner.seed(n as u64);
+    }
+
+    fn reset_tree(&mut self) {
+        self.inner.reset_tree();
+    }
+
+    fn advance(&mut self, action: i64) -> PyResult<bool> {
+        Ok(self.inner.advance(to_u8_action(action)?))
+    }
+
+    #[getter]
+    fn config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        config_to_dict(py, &self.inner.config)
+    }
+
+    #[setter]
+    fn set_config(&mut self, config: &Bound<'_, PyDict>) -> PyResult<()> {
+        self.inner.config = config_from_dict(Some(config))?;
+        Ok(())
+    }
+
+    #[getter]
+    fn has_margin(&self) -> bool {
+        self.inner.has_margin
+    }
+    #[getter]
+    fn add_noise(&self) -> bool {
+        self.inner.add_noise
+    }
+    #[setter]
+    fn set_add_noise(&mut self, v: bool) {
+        self.inner.add_noise = v;
+    }
+    #[getter]
+    fn evals(&self) -> u64 {
+        self.inner.evals
+    }
+    #[setter]
+    fn set_evals(&mut self, v: u64) {
+        self.inner.evals = v;
+    }
+    #[getter]
+    fn nodes_created(&self) -> u64 {
+        self.inner.nodes_created
+    }
+    #[getter]
+    fn reused_visits(&self) -> u32 {
+        self.inner.reused_visits
+    }
+    #[getter]
+    fn node_count(&self) -> usize {
+        self.inner.node_count()
+    }
+    #[getter]
+    fn rng_kind(&self) -> &'static str {
+        rng_name(self.inner.rng_kind)
+    }
+
+    /// The search's own RNG: `random.random()` / `random.randrange(n)`.
+    fn rng_random(&mut self) -> f64 {
+        self.inner.rng.random()
+    }
+    fn rng_randrange(&mut self, n: i64) -> PyResult<i64> {
+        if n < 1 {
+            return Err(PyValueError::new_err("empty range for randrange()"));
+        }
+        Ok(self.inner.rng.randrange(n as u64) as i64)
+    }
+
+    /// `select_action(policy, temperature, self.rng)` from `ludometer.train.mcts`.
+    fn select_action(&mut self, policy: PyReadonlyArray1<f32>, temperature: f64) -> PyResult<i64> {
+        let sl = policy.as_slice()?;
+        if sl.len() != ACTION_SPACE {
+            return Err(PyValueError::new_err("policy must have 180 entries"));
+        }
+        let mut arr = [0.0f32; ACTION_SPACE];
+        arr.copy_from_slice(sl);
+        Ok(mcts::select_action(&arr, temperature, &mut self.inner.rng) as i64)
+    }
+
+    /// The blocking search: `evaluator(state, legal) -> (priors, value[, margin])`.
+    #[pyo3(signature = (state, evaluator, add_noise = None, time_limit_s = None, sims = None))]
+    fn search<'py>(
+        &mut self,
+        py: Python<'py>,
+        state: &PyState,
+        evaluator: &Bound<'py, PyAny>,
+        add_noise: Option<bool>,
+        time_limit_s: Option<f64>,
+        sims: Option<u32>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let mut err: Option<PyErr> = None;
+        let result = {
+            let eval = |st: &RsState, legal: &[u8]| -> (Vec<f32>, f64, f64) {
+                if err.is_some() {
+                    return (vec![0.0; legal.len()], 0.0, 0.0);
+                }
+                let legal_py: Vec<i64> = legal.iter().map(|&a| a as i64).collect();
+                let call = || -> PyResult<(Vec<f32>, f64, f64)> {
+                    let ps = Py::new(py, PyState { inner: *st })?;
+                    let out = evaluator.call1((ps, legal_py))?;
+                    let (priors, v, m) = unpack_eval(&out)?;
+                    if priors.len() != legal.len() {
+                        return Err(PyValueError::new_err(format!(
+                            "evaluator returned {} priors for {} legal actions",
+                            priors.len(),
+                            legal.len()
+                        )));
+                    }
+                    Ok((priors, v, m))
+                };
+                match call() {
+                    Ok(x) => x,
+                    Err(e) => {
+                        err = Some(e);
+                        (vec![0.0; legal.len()], 0.0, 0.0)
+                    }
+                }
+            };
+            self.inner.search(&state.inner, eval, add_noise, time_limit_s, sims)
+        };
+        if let Some(e) = err {
+            return Err(e);
+        }
+        let r = result.map_err(PyValueError::new_err)?;
+        result_to_dict(py, &r)
+    }
+
+    // --------------------------------------------------------- leaf protocol
+    #[pyo3(signature = (state, add_noise = None, sims = None))]
+    fn start_search(&mut self, state: &PyState, add_noise: Option<bool>, sims: Option<u32>) -> PyResult<()> {
+        self.inner.start_search(&state.inner, add_noise, sims).map_err(PyRuntimeError::new_err)
+    }
+
+    fn search_done(&self) -> bool {
+        self.inner.search_done()
+    }
+
+    /// Gather leaves: `(obs [n, 182] float32, legal: list[list[int]])`.
+    #[pyo3(signature = (max_leaves = 0))]
+    fn leaf_requests<'py>(&mut self, py: Python<'py>, max_leaves: u32) -> PyResult<(Bound<'py, PyArray2<f32>>, Bound<'py, PyList>)> {
+        let n = self.inner.leaf_requests(max_leaves).map_err(PyRuntimeError::new_err)?.len();
+        let obs = PyArray2::<f32>::zeros(py, [n, ENCODED_SIZE], false);
+        let legal = PyList::empty(py);
+        {
+            let view = unsafe { obs.as_slice_mut()? };
+            for (k, req) in self.inner.queue().iter().enumerate() {
+                let st = self.inner.node_state(req.node);
+                let row: &mut [f32; ENCODED_SIZE] = (&mut view[k * ENCODED_SIZE..(k + 1) * ENCODED_SIZE]).try_into().unwrap();
+                st.encode(row);
+                let l: Vec<i64> = self.inner.node_legal(req.node).iter().map(|&a| a as i64).collect();
+                legal.append(l)?;
+            }
+        }
+        Ok((obs, legal))
+    }
+
+    /// The pending leaves as `State` objects (for evaluators that need them).
+    fn leaf_states(&self) -> Vec<PyState> {
+        self.inner.queue().iter().map(|r| PyState { inner: *self.inner.node_state(r.node) }).collect()
+    }
+
+    /// Evaluations for the pending leaves: one `priors` array per leaf (aligned
+    /// with its legal list), plus values and optional margins.
+    #[pyo3(signature = (priors, values, margins = None))]
+    fn apply_leaves(&mut self, priors: Vec<PyReadonlyArray1<f32>>, values: Vec<f64>, margins: Option<Vec<f64>>) -> PyResult<()> {
+        let n = priors.len();
+        if values.len() != n || margins.as_ref().map(|m| m.len() != n).unwrap_or(false) {
+            return Err(PyValueError::new_err("priors, values and margins must have one entry per leaf"));
+        }
+        let mut slices: Vec<&[f32]> = Vec::with_capacity(n);
+        for p in &priors {
+            slices.push(p.as_slice()?);
+        }
+        let results: Vec<(&[f32], f64, f64)> = (0..n)
+            .map(|i| (slices[i], values[i], margins.as_ref().map(|m| m[i]).unwrap_or(0.0)))
+            .collect();
+        self.inner.apply_leaves(&results).map_err(PyValueError::new_err)
+    }
+
+    /// Raw net outputs for the pending leaves: `logits [n, 180]`, `values [n]`,
+    /// `margins [n]` (or None); the softmax over each leaf's legal actions is
+    /// done here, in float32 like the Python evaluator.
+    #[pyo3(signature = (logits, values, margins = None))]
+    fn apply_logits(&mut self, logits: PyReadonlyArray2<f32>, values: PyReadonlyArray1<f32>, margins: Option<PyReadonlyArray1<f32>>) -> PyResult<()> {
+        let n = self.inner.queue().len();
+        if logits.shape() != [n, ACTION_SPACE] || values.len() != n {
+            return Err(PyValueError::new_err(format!("expected logits [{n}, 180] and values [{n}]")));
+        }
+        let lg = logits.as_slice()?;
+        let vs = values.as_slice()?;
+        let ms = match &margins {
+            Some(m) => Some(m.as_slice()?),
+            None => None,
+        };
+        let mut priors: Vec<Vec<f32>> = Vec::with_capacity(n);
+        for (k, req) in self.inner.queue().iter().enumerate() {
+            let legal = self.inner.node_legal(req.node);
+            let row = &lg[k * ACTION_SPACE..(k + 1) * ACTION_SPACE];
+            priors.push(softmax_over(row, legal));
+        }
+        let results: Vec<(&[f32], f64, f64)> = (0..n)
+            .map(|i| (priors[i].as_slice(), vs[i] as f64, ms.map(|m| m[i] as f64).unwrap_or(0.0)))
+            .collect();
+        self.inner.apply_leaves(&results).map_err(PyValueError::new_err)
+    }
+
+    fn finish_search<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let r = self.inner.finish_search().map_err(PyRuntimeError::new_err)?;
+        result_to_dict(py, &r)
+    }
+
+    fn root_state(&self) -> Option<PyState> {
+        self.inner.root_state().map(|s| PyState { inner: *s })
+    }
+}
+
+/// Softmax over the legal logits only, in float32 (numpy's arithmetic order:
+/// subtract the max, exp, divide by the sum).
+pub fn softmax_over(row: &[f32], legal: &[u8]) -> Vec<f32> {
+    let mut sel: Vec<f32> = legal.iter().map(|&a| row[a as usize]).collect();
+    if sel.is_empty() {
+        return sel;
+    }
+    let mx = sel.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let mut sum = 0.0f32;
+    for x in sel.iter_mut() {
+        *x = (*x - mx).exp();
+        sum += *x;
+    }
+    for x in sel.iter_mut() {
+        *x /= sum;
+    }
+    sel
+}
+
+/// numpy's pairwise `sum()` of a float64 array (exposed for the parity test).
+#[pyfunction]
+fn numpy_sum(values: Vec<f64>) -> f64 {
+    mcts::numpy_sum(&values)
+}
+
 #[pyfunction]
 fn encode_action(source: usize, color: usize, dest: usize) -> u8 {
     azul::encode_action(source, color, dest)
@@ -370,6 +735,8 @@ fn decode_action(action: i64) -> PyResult<(usize, usize, usize)> {
 #[pymodule]
 fn ludometer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyState>()?;
+    m.add_class::<PyTree>()?;
+    m.add_function(wrap_pyfunction!(numpy_sum, m)?)?;
     m.add_function(wrap_pyfunction!(encode_action, m)?)?;
     m.add_function(wrap_pyfunction!(decode_action, m)?)?;
     m.add("ACTION_SPACE", ACTION_SPACE)?;

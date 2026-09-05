@@ -6,6 +6,7 @@
 //! The `python` feature adds the PyO3 module `ludometer_rs`.
 
 pub mod azul;
+pub mod mcts;
 pub mod rng;
 
 #[cfg(feature = "python")]
