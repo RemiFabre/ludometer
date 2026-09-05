@@ -46,7 +46,7 @@
   "replay_capacity": 3000000,
   "save_buffer": true,
   "pretrain": "data/cloud/porcelain_corpus.npz",
-  "pretrain_epochs": 3,
+  "pretrain_epochs": 4,
   "pretrain_lr": 0.001,
   "pretrain_keep_buffer": true,
   "pretrain_unblend": 0.0,
@@ -84,5 +84,6 @@
   "body_blocks": 1,
   "value_hidden": 160,
   "policy_rank": 40,
-  "hub_run": "porc_w"
+  "hub_run": "porc_w",
+  "pretrain_lr_min": 0.0001
 }

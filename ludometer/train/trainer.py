@@ -210,6 +210,10 @@ class TrainConfig:
     pretrain: str = ""  # path to a replay.npz, "" = off
     pretrain_epochs: int = 0
     pretrain_lr: float = 0.0  # 0 -> use `lr`
+    # 2026-09-05: cosine-decay the pretraining rate to this floor over the whole
+    # pretraining budget (0 = the historical constant rate). A big corpus at a
+    # constant 1e-3 leaves the net at the top of its noise ball.
+    pretrain_lr_min: float = 0.0
     pretrain_keep_buffer: bool = True  # keep the loaded positions for self-play
     # The `value_score_weight` the pretraining buffer was written with, so its
     # blended value can be split back into (outcome, margin). 0 = leave it alone
@@ -733,6 +737,15 @@ class Trainer:
         net = self.net
         rng = np.random.default_rng(cfg.seed ^ 0xB00C)
         steps_per_epoch = n // cfg.batch_size
+        total_steps = max(1, steps_per_epoch * epochs)
+
+        def lr_at(step: int) -> float:
+            if cfg.pretrain_lr_min <= 0.0:
+                return lr
+            frac = min(1.0, step / total_steps)
+            return cfg.pretrain_lr_min + 0.5 * (lr - cfg.pretrain_lr_min) * (
+                1.0 + math.cos(math.pi * frac)
+            )
         t_start = time.monotonic()
         for epoch in range(1, epochs + 1):
             net.train()
@@ -754,7 +767,7 @@ class Trainer:
                 )
                 loss = self._total_loss(loss_p, loss_v, loss_m, loss_a)
                 for group in self.optimizer.param_groups:
-                    group["lr"] = lr
+                    group["lr"] = lr_at(self.pretrain_steps)
                 self.optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 if cfg.grad_clip > 0:
