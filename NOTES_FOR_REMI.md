@@ -69,8 +69,8 @@ Python job did (~24k/s). The forward pass at batch 256 costs 1.09 ms on the L4 a
 from batch 16 up (235k positions/s at 256), so the remaining time is per-round overhead:
 ~1.1 ms of Python + Rust bookkeeping per round of 256 positions. Recommendation for the
 fleet: **2-3 drivers x 512 games** per l4x1 job (`--workers 2 --games 512`), which should
-land near the GPU's ~250k positions/s ceiling; memory is ~4 MB per tree at 2048 sims, so
-512 games is ~2 GB per driver. The crate built in 35 s in the job.
+land near the GPU's ~250k positions/s ceiling; memory measured at **7.2 MB per tree at 2048
+sims** (3.7 GB RSS for a 512-game driver), so budget ~4 GB per driver. The crate built in 35 s in the job.
 
 **Pending / not done.** (1) Porcelain Rust-vs-Python gauntlet at sims=400, 100 games, running
 niced on 3 workers -> `runs/gates/rust_vs_python_porcelain_sims400.json`; the bar is 50 ± 10.
