@@ -48,6 +48,28 @@ def seed_base(tag: str) -> int:
     return (zlib.crc32(tag.encode("utf-8")) % 100_000) * 20_000
 
 
+class _BlockNote:
+    """Once a minute, the positions/s of the block in flight (see the pool's ticks)."""
+
+    def __init__(self, engine: Any, t_block: float) -> None:
+        self.engine = engine
+        self.t_block = t_block
+        self.last = time.monotonic()
+        self.base = sum(getattr(engine, "worker_positions", {}).values())
+
+    def __call__(self, done: int, total: int) -> None:
+        now = time.monotonic()
+        if now - self.last < 60.0:
+            return
+        self.last = now
+        pos = sum(getattr(self.engine, "worker_positions", {}).values()) - self.base
+        rate = pos / max(1e-9, now - self.t_block)
+        _log(
+            f"  ... {done}/{total} games done, {pos:,} positions this block, "
+            f"{rate:,.0f} positions/s"
+        )
+
+
 def _log(msg: str) -> None:
     print(f"[rl-experiment {time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -168,7 +190,8 @@ def main(argv: list[str] | None = None) -> int:
             while not args.max_blocks or block < args.max_blocks:
                 seed_start = base + block * args.block
                 t_block = time.monotonic()
-                records = engine.play(args.block, seed_start)
+                note = _BlockNote(engine, t_block)
+                records = engine.play(args.block, seed_start, progress=note)
                 dt = time.monotonic() - t_block
                 if not records:
                     _log("engine returned no games; stopping")

@@ -79,6 +79,18 @@ PY
 mkdir -p /work/tree && tar -xzf "/work/src/$RLX_BUNDLE" -C /work/tree
 cd /work/tree
 export PYTHONPATH=/work/tree OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+if [ -n "${RLX_ASSET:-}" ]; then
+python - <<'PY'
+import os
+from huggingface_hub import hf_hub_download
+p = hf_hub_download(os.environ["RLX_SRC_REPO"], os.environ["RLX_ASSET"], repo_type="dataset", local_dir="/work/assets")
+print("[rl-experiment] asset", p)
+PY
+fi
+if [ "${RLX_ENTRY:-generator}" = "label" ]; then
+  exec python -m ludometer.cloud.label run --positions "/work/assets/$RLX_ASSET" --run "$RLX_RUN" \
+    --shards "$RLX_SHARDS" --weights "$RLX_WEIGHTS" --tag "$RLX_TAG" --workers "$RLX_WORKERS" $RLX_EXTRA
+fi
 exec python -m ludometer.cloud.generator --run "$RLX_RUN" --shards "$RLX_SHARDS" \
   --weights "$RLX_WEIGHTS" --tag "$RLX_TAG" --workers "$RLX_WORKERS" --block "$RLX_BLOCK" $RLX_EXTRA
 """
@@ -170,6 +182,8 @@ def launch(
     namespace: str = NAMESPACE,
     cap: float = CAP_USD,
     dry_run: bool = False,
+    entry: str = "generator",
+    asset: str = "",
 ) -> list[str]:
     if flavor not in PRICES:
         raise SystemExit(f"unknown flavor {flavor!r} (add its price to PRICES first)")
@@ -204,6 +218,8 @@ def launch(
             "RLX_WORKERS": str(workers or VCPUS.get(flavor, 0)),
             "RLX_BLOCK": str(block),
             "RLX_EXTRA": extra,
+            "RLX_ENTRY": entry,
+            "RLX_ASSET": asset,
         }
         if dry_run:
             print(f"[fleet] dry run: {flavor} {timeout} tag {tag} env {env}")
@@ -327,6 +343,8 @@ def cmd_launch(args: argparse.Namespace) -> int:
         extra=args.extra,
         namespace=args.namespace,
         dry_run=args.dry_run,
+        entry=args.entry,
+        asset=args.asset,
     )
     return 0
 
@@ -393,6 +411,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--extra", default="", help="extra generator args, e.g. '--sims 1024'"
     )
     l.add_argument("--dry-run", action="store_true")
+    l.add_argument("--entry", default="generator", choices=["generator", "label"])
+    l.add_argument(
+        "--asset",
+        default="",
+        help="file in the src repo the job downloads (label: positions)",
+    )
     l.set_defaults(func=cmd_launch)
     ps = sub.add_parser("ps")
     ps.add_argument("--all", action="store_true")

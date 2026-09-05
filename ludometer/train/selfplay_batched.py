@@ -572,7 +572,15 @@ def _batched_worker_loop(
                 # Seeds are contiguous per worker, so one `play` call covers the
                 # whole block and every record is streamed back as it finishes.
                 engine.play(
-                    len(seeds), seeds[0], on_record=lambda rec: result_q.put(rec)
+                    len(seeds),
+                    seeds[0],
+                    on_record=lambda rec: result_q.put(rec),
+                    # A batched block finishes all at once near its end, so the
+                    # parent hears nothing for minutes; the tick carries the
+                    # evaluated-position count instead (see SelfPlayPool.play).
+                    progress=lambda _d, _t: result_q.put(
+                        ("progress", worker_id, engine.positions)
+                    ),
                 )
             except Exception as exc:  # noqa: BLE001 - reported to the parent
                 result_q.put(("error", worker_id, f"{type(exc).__name__}: {exc}"))

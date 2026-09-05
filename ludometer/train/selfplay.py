@@ -430,6 +430,9 @@ class SelfPlayPool:
         self._cmd_qs: list[Any] = []
         self._result_q: Any = None
         self._procs: list[Any] = []
+        #: positions evaluated so far by each worker in the current/last block
+        #: (batched workers report it on their tick; sequential ones never do)
+        self.worker_positions: dict[int, int] = {}
 
     # ------------------------------------------------------------------ setup
     def start(self, weights: dict[str, np.ndarray] | None = None) -> None:
@@ -492,8 +495,13 @@ class SelfPlayPool:
                 if should_stop is not None and should_stop():
                     break
                 continue
-            if isinstance(item, tuple):  # ("error", worker_id, detail)
-                raise RuntimeError(  # noqa: TRY004 - a report, not a type problem
+            if isinstance(item, tuple):
+                if item[0] == "progress":  # ("progress", worker_id, positions)
+                    self.worker_positions[int(item[1])] = int(item[2])
+                    if progress is not None:
+                        progress(len(out), n_games)
+                    continue
+                raise RuntimeError(
                     f"self-play worker {item[1]} failed: {item[2]}"
                 )
             out.append(item)
