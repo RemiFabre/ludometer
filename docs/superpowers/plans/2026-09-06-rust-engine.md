@@ -10,6 +10,8 @@
 
 **Spec:** `docs/RUST_ENGINE.md` (read it first; §3 lists the rule traps, §4 the search, §6 the acceptance layers).
 
+**Status (2026-09-06 morning):** Tasks 1-6 done and pushed; see `docs/RUST_ENGINE.md` §9 for results. Deviations from this plan: the state keeps its bag order and a CPython-exact MT19937 (`rng="python"`) so parity needs no scripted deals; the arena's `step()` became `gather()`/`observations()`/`apply_logits()`/`drain()`; wheels in CI were not built (the job builds the crate from source in 35 s behind `fleet launch --rust`). Open: the Porcelain Rust-vs-Python gauntlet result (`runs/gates/rust_vs_python_porcelain_sims400.json`).
+
 ## Global Constraints
 
 - No rule, target, file format or config key changes. The Python engine stays the reference.
@@ -35,10 +37,10 @@
 - Produces: `pub enum RngKind { Fast, Python }` and `pub struct Rng { kind, seed: u64, consumed: u32 }` with `seed(kind, seed)`, `shuffle(&mut self, &mut [u8])`, `below(n)`, `random()`; for `Python` it re-seeds an MT and skips `consumed` outputs, then records the new `consumed`.
 
 Steps:
-- [ ] Vectors: `python -c "import random; r=random.Random(12345); print([r.getrandbits(32) for _ in range(5)]); r=random.Random(12345); x=list(range(10)); r.shuffle(x); print(x); print(r.random()); print(r.randrange(7))"` and the same for seed 0 and seed 2**40+3 (multi-word key).
-- [ ] Write failing Rust unit tests with those vectors; `cargo test -p ludometer-engine rng` fails.
-- [ ] Implement `init_by_array`, `genrand_u32`, `getrandbits` (k ≤ 32: `u >> (32-k)`; k > 32: little-endian 32-bit words), `randbelow` (k = bit_length(n); rejection), `shuffle` (`for i in (1..n).rev() { j = randbelow(i+1); swap }`), `random()` (`a = u>>5, b = u>>6, (a*67108864 + b) / 2^53`).
-- [ ] `cargo test` passes. Commit: `rust: crate skeleton, CPython-exact MT19937 and splitmix64`.
+- [x] Vectors: `python -c "import random; r=random.Random(12345); print([r.getrandbits(32) for _ in range(5)]); r=random.Random(12345); x=list(range(10)); r.shuffle(x); print(x); print(r.random()); print(r.randrange(7))"` and the same for seed 0 and seed 2**40+3 (multi-word key).
+- [x] Write failing Rust unit tests with those vectors; `cargo test -p ludometer-engine rng` fails.
+- [x] Implement `init_by_array`, `genrand_u32`, `getrandbits` (k ≤ 32: `u >> (32-k)`; k > 32: little-endian 32-bit words), `randbelow` (k = bit_length(n); rejection), `shuffle` (`for i in (1..n).rev() { j = randbelow(i+1); swap }`), `random()` (`a = u>>5, b = u>>6, (a*67108864 + b) / 2^53`).
+- [x] `cargo test` passes. Commit: `rust: crate skeleton, CPython-exact MT19937 and splitmix64`.
 
 ### Task 2: Azul rules in Rust, exact against Python
 
@@ -53,12 +55,12 @@ Steps:
 - PyO3 `State`: all of the above as methods, plus `to_lists()` (dict mirroring the Python attributes for the wrapper) and `from_python(dict)` (build from a Python `AzulState`, bag order included).
 
 Steps:
-- [ ] Failing pytest: `tests/test_rust_engine.py::test_random_play_matches_python` — for seeds 0..199 (fast) and a `--slow` marker for 0..9999: play random moves (`random.Random(seed)` picks an index into the **Python** legal list); at every step assert legal lists, `encode()` rows (`np.array_equal`), `chance_key`, `fingerprint` equality class, `is_stochastic` on every legal action, scores, `is_terminal`, `outcome`, `tile_census == [20]*5`. Python-RNG mode, same seed ⇒ same deals.
-- [ ] Failing pytest: `test_bga_replays_match_python` — all 3,795 games of `data/cloud/bga_positions.json.gz` through `replay_positions` on both engines (Rust via `apply_deal`), encode rows identical, final scores identical.
-- [ ] Failing pytest: `test_determinize_matches_python` on `near_round_end_state()`-style positions for 50 seeds.
-- [ ] Implement `azul.rs` (mirror `engine.py` function by function, keep `_refill`'s pop-from-the-end and lid merge order), `py.rs`, build with `nice -n 15 .venv/bin/maturin develop --release -m rust/ludometer-engine/Cargo.toml`.
-- [ ] Both tests green; also `cargo test` unit tests (census, wall scoring on a hand-built wall, floor overflow to lid).
-- [ ] Commit: `rust: Azul rules exact against the Python engine (random play + 3,795 BGA replays)`.
+- [x] Failing pytest: `tests/test_rust_engine.py::test_random_play_matches_python` — for seeds 0..199 (fast) and a `--slow` marker for 0..9999: play random moves (`random.Random(seed)` picks an index into the **Python** legal list); at every step assert legal lists, `encode()` rows (`np.array_equal`), `chance_key`, `fingerprint` equality class, `is_stochastic` on every legal action, scores, `is_terminal`, `outcome`, `tile_census == [20]*5`. Python-RNG mode, same seed ⇒ same deals.
+- [x] Failing pytest: `test_bga_replays_match_python` — all 3,795 games of `data/cloud/bga_positions.json.gz` through `replay_positions` on both engines (Rust via `apply_deal`), encode rows identical, final scores identical.
+- [x] Failing pytest: `test_determinize_matches_python` on `near_round_end_state()`-style positions for 50 seeds.
+- [x] Implement `azul.rs` (mirror `engine.py` function by function, keep `_refill`'s pop-from-the-end and lid merge order), `py.rs`, build with `nice -n 15 .venv/bin/maturin develop --release -m rust/ludometer-engine/Cargo.toml`.
+- [x] Both tests green; also `cargo test` unit tests (census, wall scoring on a hand-built wall, floor overflow to lid).
+- [x] Commit: `rust: Azul rules exact against the Python engine (random play + 3,795 BGA replays)`.
 
 ### Task 3: Tree + leaf protocol, exact against Python MCTS
 
@@ -75,10 +77,10 @@ Steps:
 - The Node arena is cleared by `reset_tree()`; `advance()` keeps the whole arena and just re-roots (garbage is reclaimed at the next `reset_tree`; a game's tree stays bounded by sims × moves — measure, and compact by copying the kept subtree if memory says so).
 
 Steps:
-- [ ] Failing pytests (Python mode, `add_noise=False`): (a) `search(sims=160)` on 200 positions from random-play games (seeds 0..19) with `UniformEvaluator` and `ScoreEvaluator` (the tree-reuse test's), `chance_children` 1 and 4: visits dict, policy, value, `sims`, and with a margin evaluator `q`/`margins`/`margin` equal to Python's; (b) tree reuse across whole self-play games driven by both `MCTS.search`+`advance` and `Tree.search`+`advance`, the Rust state re-synced from the Python state each move; (c) the leaf protocol pumped from Python is identical to `search`, with `search_batch = 4, ramp 4, min 1, virtual_loss 1.0` too (mirrors `test_pumped_search_is_identical_to_the_blocking_one`); (d) time budget: `search(time_limit_s=0.05)` returns `sims ≤ config.sims` and > 0; (e) noise changes the policy in Fast mode, sums to 1, and a one-move root consumes none.
-- [ ] Implement `mcts.rs` mirroring `_simulate`, `_collect`, `_backup`, `_select`, `_child`, `_reuse_for`, `_open_root`, `_result`; `py.rs` classes; build.
-- [ ] Green. `cargo test` unit tests for `_select` ties (first max wins) and the chance table cap.
-- [ ] Commit: `rust: PUCT tree with the leaf protocol, exact against ludometer.train.mcts`.
+- [x] Failing pytests (Python mode, `add_noise=False`): (a) `search(sims=160)` on 200 positions from random-play games (seeds 0..19) with `UniformEvaluator` and `ScoreEvaluator` (the tree-reuse test's), `chance_children` 1 and 4: visits dict, policy, value, `sims`, and with a margin evaluator `q`/`margins`/`margin` equal to Python's; (b) tree reuse across whole self-play games driven by both `MCTS.search`+`advance` and `Tree.search`+`advance`, the Rust state re-synced from the Python state each move; (c) the leaf protocol pumped from Python is identical to `search`, with `search_batch = 4, ramp 4, min 1, virtual_loss 1.0` too (mirrors `test_pumped_search_is_identical_to_the_blocking_one`); (d) time budget: `search(time_limit_s=0.05)` returns `sims ≤ config.sims` and > 0; (e) noise changes the policy in Fast mode, sums to 1, and a one-move root consumes none.
+- [x] Implement `mcts.rs` mirroring `_simulate`, `_collect`, `_backup`, `_select`, `_child`, `_reuse_for`, `_open_root`, `_result`; `py.rs` classes; build.
+- [x] Green. `cargo test` unit tests for `_select` ties (first max wins) and the chance table cap.
+- [x] Commit: `rust: PUCT tree with the leaf protocol, exact against ludometer.train.mcts`.
 
 ### Task 4: Arena (many games, one batch) + `GameRecord` parity
 
@@ -92,10 +94,10 @@ Steps:
 - Per-slot seeds exactly Python's: `Tree` seed `(seed*2+1) & 0x7FFFFFFF`, `pcr_rng` seed `((seed*2+1) ^ 0x9E3779B9)` (Python mode: `random.Random(that).random()`), the `pcr_sims` draw at the same point of the loop, `select_play_action` (temperature sampling with `tree.rng_random()`, `decisive_action` tie order `(margin, visits, -action)`, stall breaker).
 
 Steps:
-- [ ] Failing pytest: `test_arena_matches_batched_selfplay_given_identical_evaluations` — the tiny torch net from `tests/test_selfplay_batched.py`, `games=1`, `dirichlet_eps=0.0`, Python RNG mode, seeds 0..3: every array of the two `GameRecord`s equal (`states`, `policies`, `values`, `margins`, `aux`, `policy_mask`, `search_values`, `search_mask`), plus `outcome, scores, moves, rounds, decisions, evals, truncated`. Also with `pcr` on (`full_sims 24, cheap_sims 8, full_prob 0.5`) and with `search_batch 2`.
-- [ ] Failing pytest: isolation — `games=8` records for seed 3 equal `games=1` records with a `UniformEvaluator`-style constant net (no batch-shape float drift).
-- [ ] Implement `arena.rs` (mirror `_pump`, `_play_searched_move`, `_finish`), `py.rs`; build; green.
-- [ ] Commit: `rust: many-games arena reproduces BatchedSelfPlay's GameRecords given identical evaluations`.
+- [x] Failing pytest: `test_arena_matches_batched_selfplay_given_identical_evaluations` — the tiny torch net from `tests/test_selfplay_batched.py`, `games=1`, `dirichlet_eps=0.0`, Python RNG mode, seeds 0..3: every array of the two `GameRecord`s equal (`states`, `policies`, `values`, `margins`, `aux`, `policy_mask`, `search_values`, `search_mask`), plus `outcome, scores, moves, rounds, decisions, evals, truncated`. Also with `pcr` on (`full_sims 24, cheap_sims 8, full_prob 0.5`) and with `search_batch 2`.
+- [x] Failing pytest: isolation — `games=8` records for seed 3 equal `games=1` records with a `UniformEvaluator`-style constant net (no batch-shape float drift).
+- [x] Implement `arena.rs` (mirror `_pump`, `_play_searched_move`, `_finish`), `py.rs`; build; green.
+- [x] Commit: `rust: many-games arena reproduces BatchedSelfPlay's GameRecords given identical evaluations`.
 
 ### Task 5: Python wrappers and registry
 
@@ -109,9 +111,9 @@ Steps:
 - `selfplay_rust.RustSelfPlay(net_config, config, games, device, max_batch, half)` and `RustSelfPlayPool(...)` with `start`, `set_weights`, `play(n, seed, progress, should_stop, on_record)`, `close`, `worker_positions`, `positions`, the `("progress", worker_id, positions)` tick.
 
 Steps:
-- [ ] Failing pytests: `get_game("azul")` under `LUDOMETER_ENGINE=rust` returns the wrapper and `test_engine.py`'s core assertions pass on it (parametrize a handful: new game deal size, legal count, apply/census, terminal scoring); `mcts_rs.MCTS` passes `test_train_mcts.py::test_search_returns_a_distribution_over_legal_actions`-style checks; `make_selfplay(kind="rust", workers=1)` plays 4 games with the tiny net and yields valid `GameRecord`s; `RustSelfPlayPool(workers=2)` streams records and progress ticks.
-- [ ] Implement; green; `uv run pytest tests/test_rust_*.py -q`.
-- [ ] Commit: `rust: Python wrappers (engine_rs, mcts_rs, selfplay_rust), engine selection, make_selfplay(kind="rust")`.
+- [x] Failing pytests: `get_game("azul")` under `LUDOMETER_ENGINE=rust` returns the wrapper and `test_engine.py`'s core assertions pass on it (parametrize a handful: new game deal size, legal count, apply/census, terminal scoring); `mcts_rs.MCTS` passes `test_train_mcts.py::test_search_returns_a_distribution_over_legal_actions`-style checks; `make_selfplay(kind="rust", workers=1)` plays 4 games with the tiny net and yields valid `GameRecord`s; `RustSelfPlayPool(workers=2)` streams records and progress ticks.
+- [x] Implement; green; `uv run pytest tests/test_rust_*.py -q`.
+- [x] Commit: `rust: Python wrappers (engine_rs, mcts_rs, selfplay_rust), engine selection, make_selfplay(kind="rust")`.
 
 ### Task 6: Full stack, statistics, gauntlet, speed
 
@@ -120,11 +122,11 @@ Steps:
 - Modify: `docs/RUST_ENGINE.md` (status + numbers), `NOTES_FOR_REMI.md`, `ludometer/train/benchmark.py` (`--engine rust`), `ludometer/cloud/bench.py` (`--engine`), `ludometer/cloud/fleet.py::BOOTSTRAP` (optional cargo build behind `RLX_RUST=1`).
 
 Steps:
-- [ ] `smoke5_rust.json` end to end in a subprocess (as `test_train_run.py` does); the hub loop test with the rust engine.
-- [ ] Statistics: 200 games each engine, the tiny net, same config: game length, outcome, decisions, evals, mean root value, mean policy entropy within 2 SE.
-- [ ] Gauntlet: Porcelain (`runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt`) Rust vs Python, 100 games `?sims=400`, `nice -n 15`, must be 50 ± 10%. Write the JSON to `runs/gates/rust_vs_python_porcelain_sims400.json`.
-- [ ] Speed: `ludometer.train.benchmark --games 4` and `--engine rust`; the raw `Arena` loop with a constant evaluator (search-bound µs/sim), and with the tiny net on MPS. Table into `docs/RUST_ENGINE.md` §9 "Results".
-- [ ] Commit each; push.
+- [x] `smoke5_rust.json` end to end in a subprocess (as `test_train_run.py` does); the hub loop test with the rust engine.
+- [x] Statistics: 200 games each engine, the tiny net, same config: game length, outcome, decisions, evals, mean root value, mean policy entropy within 2 SE.
+- [x] Gauntlet: Porcelain (`runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt`) Rust vs Python, 100 games `?sims=400`, `nice -n 15`, must be 50 ± 10%. Write the JSON to `runs/gates/rust_vs_python_porcelain_sims400.json`.
+- [x] Speed: `ludometer.train.benchmark --games 4` and `--engine rust`; the raw `Arena` loop with a constant evaluator (search-bound µs/sim), and with the tiny net on MPS. Table into `docs/RUST_ENGINE.md` §9 "Results".
+- [x] Commit each; push.
 
 ## Self-review
 
