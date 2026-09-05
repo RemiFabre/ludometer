@@ -35,6 +35,21 @@ player's own wasm stack: 3,113 vs 4,573 positions/s (0.68x), the same ratio the 
 gate sees (0.62x). So W160 pays ~55 Elo of speed at matched think time in both stacks and
 must be ~+200 stronger at fixed sims to clear the bar; Cobalt's own body (porc_a) needs +150.
 
+**First pretraining cycle (19:23-19:48).** Corpus at that moment: 21,392 teacher games
+(1.14M positions, ft2-4000 at 1024 sims) + 1,840 BGA elite games searched by the same
+teacher (98k positions). Cobalt's own body (`configs/porc_a.json`, 1.81M), trained from
+scratch for 3 epochs on it, **no self-play of its own**: 2250 ± 30 on the fixed-sims
+ladder and **48-1-51 against Cobalt at matched think time**. Parity with a net that
+took 38k games of its own self-play, from 19 minutes of supervised training on a
+quarter of the target corpus, with the loss still falling. The L4 wave then took the
+corpus to ~60k games by 21:00; the wide body (`porc_w`) was run through the same cycle
+right after: **the wide body (W160, 3.9M params, 0.62x Cobalt's speed), 4 epochs on the
+~30k-game corpus of 19:49, rates 2479 ± 38 at fixed sims and beats Cobalt 67-4-29 at
+matched think time** (`runs/gates/porc_w-p0905-1949_wallclock.json`), roughly +140 honest
+Elo from supervised training alone, no self-play polish yet. Cycle 2 on the full corpus
+(59,792 teacher games + all 3,795 labelled BGA games) started 20:37 with a 300-game gate;
+if it clears +150 it is the Porcelain candidate. Fleet spend at 20:37: $18.89.
+
 **Built today** (`ludometer/cloud/`, 6 tests): shards (a block of games as one .npz),
 a hub file store with a local twin for tests, the job-side generator, the trainer-side
 `selfplay: "hub"` engine (the trainer is otherwise untouched: same checkpoints, same Elo
