@@ -5,6 +5,7 @@
 //! [`mcts`] (the tree and the leaf protocol), [`arena`] (many games, one batch).
 //! The `python` feature adds the PyO3 module `ludometer_rs`.
 
+pub mod arena;
 pub mod azul;
 pub mod mcts;
 pub mod rng;

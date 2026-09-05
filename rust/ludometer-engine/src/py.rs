@@ -10,6 +10,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 
 use crate::azul::{self, State as RsState, ACTION_SPACE, ENCODED_SIZE, NUM_COLORS, NUM_FACTORIES};
+use crate::arena::{Arena as RsArena, GameRecord, SelfPlayConfig};
 use crate::mcts::{self, MctsConfig, SearchResult, Tree as RsTree};
 use crate::rng::RngKind;
 
@@ -697,6 +698,161 @@ impl PyTree {
     }
 }
 
+
+// ------------------------------------------------------------------ Arena
+/// `SelfPlayConfig` from a flat dict: the MCTS keys plus `temp_moves`,
+/// `temperature`, `stall_rounds`, `max_moves`, `value_score_weight`,
+/// `pcr_full_sims`, `pcr_cheap_sims`, `pcr_full_prob` (all optional).
+pub fn selfplay_config_from_dict(data: Option<&Bound<'_, PyDict>>) -> PyResult<SelfPlayConfig> {
+    let mut cfg = SelfPlayConfig { mcts: config_from_dict(data)?, ..SelfPlayConfig::default() };
+    if let Some(d) = data {
+        macro_rules! get {
+            ($key:literal, $field:ident, $ty:ty) => {
+                if let Some(v) = d.get_item($key)? {
+                    cfg.$field = v.extract::<$ty>()?;
+                }
+            };
+        }
+        get!("temp_moves", temp_moves, u32);
+        get!("temperature", temperature, f64);
+        get!("stall_rounds", stall_rounds, u32);
+        get!("max_moves", max_moves, u32);
+        get!("value_score_weight", value_score_weight, f64);
+        get!("pcr_full_sims", pcr_full_sims, u32);
+        get!("pcr_cheap_sims", pcr_cheap_sims, u32);
+        get!("pcr_full_prob", pcr_full_prob, f64);
+    }
+    Ok(cfg)
+}
+
+fn record_to_dict<'py>(py: Python<'py>, r: GameRecord) -> PyResult<Bound<'py, PyDict>> {
+    let t = r.len();
+    let d = PyDict::new(py);
+    d.set_item("states", PyArray1::from_vec(py, r.states).reshape([t, ENCODED_SIZE])?)?;
+    d.set_item("policies", PyArray1::from_vec(py, r.policies).reshape([t, ACTION_SPACE])?)?;
+    d.set_item("values", PyArray1::from_vec(py, r.values))?;
+    d.set_item("margins", PyArray1::from_vec(py, r.margins))?;
+    d.set_item("aux", PyArray1::from_vec(py, r.aux).reshape([t, 30])?)?;
+    d.set_item("policy_mask", PyArray1::from_vec(py, r.policy_mask))?;
+    d.set_item("outcome", r.outcome as f64)?;
+    d.set_item("scores", (r.scores[0] as i64, r.scores[1] as i64))?;
+    d.set_item("moves", r.moves)?;
+    d.set_item("rounds", r.rounds)?;
+    d.set_item("seed", r.seed)?;
+    d.set_item("decisions", r.decisions)?;
+    d.set_item("evals", r.evals)?;
+    d.set_item("duration", r.duration)?;
+    d.set_item("truncated", r.truncated)?;
+    d.set_item("search_values", PyArray1::from_vec(py, r.search_values))?;
+    d.set_item("search_mask", PyArray1::from_vec(py, r.search_mask))?;
+    Ok(d)
+}
+
+/// Many concurrent self-play games; the caller evaluates the leaves
+/// (see `ludometer.train.selfplay_rust`).
+#[pyclass(name = "Arena", module = "ludometer_rs", unsendable)]
+pub struct PyArena {
+    inner: RsArena,
+    leaf_cap: u32,
+}
+
+#[pymethods]
+impl PyArena {
+    #[new]
+    #[pyo3(signature = (config = None, has_margin = false, games = 64, rng = "fast", leaf_cap = 0))]
+    fn new(config: Option<&Bound<'_, PyDict>>, has_margin: bool, games: usize, rng: &str, leaf_cap: u32) -> PyResult<Self> {
+        let cfg = selfplay_config_from_dict(config)?;
+        let leaf_cap = if leaf_cap == 0 { cfg.mcts.search_batch.max(1) } else { leaf_cap };
+        Ok(PyArena { inner: RsArena::new(cfg, has_margin, games, rng_kind(rng)?), leaf_cap })
+    }
+
+    fn begin(&mut self, n_games: u64, seed_start: u64) {
+        self.inner.begin(n_games, seed_start);
+    }
+
+    fn set_stop(&mut self) {
+        self.inner.set_stop();
+    }
+
+    fn finished(&self) -> bool {
+        self.inner.finished()
+    }
+
+    #[getter]
+    fn done(&self) -> u64 {
+        self.inner.done()
+    }
+    #[getter]
+    fn active(&self) -> usize {
+        self.inner.active()
+    }
+    #[getter]
+    fn positions(&self) -> u64 {
+        self.inner.positions
+    }
+    #[getter]
+    fn batches(&self) -> u64 {
+        self.inner.batches
+    }
+    #[getter]
+    fn games(&self) -> usize {
+        self.inner.games
+    }
+    #[getter]
+    fn has_margin(&self) -> bool {
+        self.inner.has_margin
+    }
+
+    /// Seat, pump and collect: the pending leaves as `[n, 182]` float32 (n may be 0).
+    fn gather<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f32>>> {
+        let n = self.inner.gather(self.leaf_cap);
+        let obs = PyArray2::<f32>::zeros(py, [n, ENCODED_SIZE], false);
+        if n > 0 {
+            let view = unsafe { obs.as_slice_mut()? };
+            self.inner.observations(view);
+        }
+        Ok(obs)
+    }
+
+    /// Legal lists of the pending leaves (for an evaluator that softmaxes in Python).
+    fn pending_legal(&self) -> Vec<Vec<i64>> {
+        self.inner.pending_legal().iter().map(|l| l.iter().map(|&a| a as i64).collect()).collect()
+    }
+
+    #[pyo3(signature = (logits, values, margins = None))]
+    fn apply_logits(&mut self, logits: PyReadonlyArray2<f32>, values: PyReadonlyArray1<f32>, margins: Option<PyReadonlyArray1<f32>>) -> PyResult<()> {
+        let lg = logits.as_slice()?;
+        let vs = values.as_slice()?;
+        let ms = match &margins {
+            Some(m) => Some(m.as_slice()?),
+            None => None,
+        };
+        self.inner.apply_logits(lg, vs, ms).map_err(PyValueError::new_err)
+    }
+
+    /// One priors array per pending leaf (aligned with `pending_legal()`).
+    #[pyo3(signature = (priors, values, margins = None))]
+    fn apply_leaves(&mut self, priors: Vec<PyReadonlyArray1<f32>>, values: Vec<f64>, margins: Option<Vec<f64>>) -> PyResult<()> {
+        let n = priors.len();
+        if values.len() != n || margins.as_ref().map(|m| m.len() != n).unwrap_or(false) {
+            return Err(PyValueError::new_err("priors, values and margins must have one entry per leaf"));
+        }
+        let mut slices: Vec<&[f32]> = Vec::with_capacity(n);
+        for p in &priors {
+            slices.push(p.as_slice()?);
+        }
+        let results: Vec<(&[f32], f64, f64)> = (0..n)
+            .map(|i| (slices[i], values[i], margins.as_ref().map(|m| m[i]).unwrap_or(0.0)))
+            .collect();
+        self.inner.apply(&results).map_err(PyValueError::new_err)
+    }
+
+    /// Records of the games finished since the last call (dicts of numpy arrays).
+    fn drain<'py>(&mut self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        self.inner.drain().into_iter().map(|r| record_to_dict(py, r)).collect()
+    }
+}
+
 /// Softmax over the legal logits only, in float32 (numpy's arithmetic order:
 /// subtract the max, exp, divide by the sum).
 pub fn softmax_over(row: &[f32], legal: &[u8]) -> Vec<f32> {
@@ -736,6 +892,7 @@ fn decode_action(action: i64) -> PyResult<(usize, usize, usize)> {
 fn ludometer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyState>()?;
     m.add_class::<PyTree>()?;
+    m.add_class::<PyArena>()?;
     m.add_function(wrap_pyfunction!(numpy_sum, m)?)?;
     m.add_function(wrap_pyfunction!(encode_action, m)?)?;
     m.add_function(wrap_pyfunction!(decode_action, m)?)?;
