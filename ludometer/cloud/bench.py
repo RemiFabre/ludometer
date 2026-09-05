@@ -110,6 +110,27 @@ def main(argv: list[str] | None = None) -> int:
             )
     net.to("cpu")
 
+    # 1b. int8 dynamic quantization of the Linear layers (x86 VNNI is the hope)
+    try:
+        from torch.ao.quantization import quantize_dynamic
+
+        q = quantize_dynamic(net, {torch.nn.Linear}, dtype=torch.qint8)
+        for b in (16, 64):
+            x = torch.rand(b, 182)
+            with torch.inference_mode():
+                for _ in range(3):
+                    q.forward_heads(x)
+                t0 = time.perf_counter()
+                for _ in range(10):
+                    _ = q.forward_heads(x)[0].sum().item()
+                dt = (time.perf_counter() - t0) / 10
+            print(
+                f"[bench] forward int8 batch {b:3d}: {1e3 * dt:7.2f} ms  ({b / dt:9,.0f} positions/s)",
+                flush=True,
+            )
+    except Exception as exc:  # noqa: BLE001 - informative only
+        print(f"[bench] int8 unavailable: {exc}", flush=True)
+
     # 2. pure search rate (tiny net, search-bound)
     tiny = StructuredConfig(
         embed=32,

@@ -20,6 +20,21 @@ at matched think time** (`runs/gates/mid2-009216_wallclock.json`). About +52 hon
 the best candidate ever measured, a third of the +150 bar. The distill-then-polish road is
 real; it needs the scale the fleet gives it.
 
+**Measured on the Jobs themselves (evening).** The cheap CPU flavors are slow at the
+one thing the teacher needs, a 7M-parameter forward pass: `cpu-upgrade` (AMD EPYC, 8-core
+quota) does 459 positions/s per thread at batch 64 where one Mac core does 3,418, and its
+Python search walks a tree 3.9x slower than the Mac. A `cpu-upgrade` job therefore yields
+~3,000 positions/s for $0.03/hour, still the cheapest per position by 10x, just not the
+20x-the-Mac fleet I hoped for. **This Mac's GPU is the workhorse: a local generator does
+17,500 positions/s** (six drivers x 128 games, MPS), about 2,500 teacher games per hour,
+and it is running now alongside 12 cloud generators and 8 labelling jobs (the concurrency
+quota allows at least 20 jobs). Shards land in `RemiFabre/rl-experiment-shards`.
+
+Browser check of the wide student body (W160, 3.9M params) against Cobalt's body in the
+player's own wasm stack: 3,113 vs 4,573 positions/s (0.68x), the same ratio the Python
+gate sees (0.62x). So W160 pays ~55 Elo of speed at matched think time in both stacks and
+must be ~+200 stronger at fixed sims to clear the bar; Cobalt's own body (porc_a) needs +150.
+
 **Built today** (`ludometer/cloud/`, 6 tests): shards (a block of games as one .npz),
 a hub file store with a local twin for tests, the job-side generator, the trainer-side
 `selfplay: "hub"` engine (the trainer is otherwise untouched: same checkpoints, same Elo
