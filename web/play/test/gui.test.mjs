@@ -506,7 +506,12 @@ async function checkHistory(page, label, errors) {
     viewing: document.body.classList.contains("viewing"),
     pickable: document.querySelectorAll("#middle button.tile:not([disabled])").length,
     openRows: document.querySelectorAll("#board-human .line.open").length,
-    board: document.querySelector("#board-human .board-grid").textContent,
+    // the tile colours on both boards (pattern lines, wall, floor): every Azul
+    // move puts tiles on one of them, so two plies back must differ. The
+    // human's wall grid alone does not when that move went to the floor, which
+    // is what a different opponent's replies made the scripted game do.
+    board: Array.from(document.querySelectorAll("#board-human .tile, #board-ai .tile"))
+      .map((t) => t.dataset.color ?? "?").join(""),
     logEntries: document.querySelectorAll("#log .log-entry").length,
     liveShown: !document.querySelector(".nav-live").hidden,
   };`);
@@ -521,7 +526,9 @@ async function checkHistory(page, label, errors) {
   if (!/viewing move \d+ of \d+/i.test(past.headline)) {
     errors.push(`${label}: no "viewing move N of M" indicator, got ${JSON.stringify(past.headline)}`);
   }
-  if (past.board === live.board) errors.push(`${label}: the board did not change on ←`);
+  if (past.board === live.board) {
+    errors.push(`${label}: the position did not change on ← (${live.count} -> ${past.count})`);
+  }
   // tiles MAY be pickable while browsing a human-to-move frame: that is the
   // branching affordance (player page; see checkBranching). Rows never are,
   // because browsing carries no selection.

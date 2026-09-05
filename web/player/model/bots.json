@@ -3,12 +3,10 @@
   "reserved_for_future_nets": {
     "comment": "The next rungs of the ladder, in order, for agents stronger than Cobalt. THE FULL SHIPPING PROCEDURE AND THE BAR (at least +150 wall-clock-honest Elo over the current strongest, gated over >=300 games at matched think time) IS IN docs/BOT_DEPLOYMENT.md — follow it; it is self-contained. Do not rename existing bots; the page defaults to the strongest by the elo in model_meta.json automatically.",
     "names": [
-      "Porcelain",
       "Lapis Lazuli",
       "Ultramarine"
     ],
     "suggested_swatches": {
-      "Porcelain": "#f4efe4",
       "Ultramarine": "#1a1f6e",
       "Lapis Lazuli": "#2b3a8f"
     }
@@ -55,6 +53,12 @@
       "name": "Cobalt",
       "dir": "model",
       "swatch": "#16509f"
+    },
+    {
+      "id": "porcelain",
+      "name": "Porcelain",
+      "dir": "model/porcelain",
+      "swatch": "#f4efe4"
     }
   ]
 }

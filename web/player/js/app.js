@@ -1786,11 +1786,11 @@ if (analyticsOn()) {
 /* One line of news, shown until dismissed. Bump NEWS_VERSION when the line
  * changes and it comes back exactly once; the dismissal lives in
  * localStorage, like every other preference on this page (no cookies). */
-const NEWS_VERSION = "2026-08-21b";
+const NEWS_VERSION = "2026-09-05";
 // one line per change, so unrelated news never reads as one feature
 const NEWS_LINES = [
+  "Porcelain, a new strongest opponent: it beats Cobalt three games in four at the same thinking time.",
   "Choose your opponent's strength in the top bar.",
-  "Go back with ← and play any of your past moves differently.",
 ];
 (() => {
   let seen = null;

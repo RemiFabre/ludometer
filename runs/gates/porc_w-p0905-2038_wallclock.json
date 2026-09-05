@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "cand": "mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?think=1.0",
+    "cobalt": "mcts:runs/run4/checkpoints/ckpt-037888.pt?think=1.0"
+  },
+  "games": 300,
+  "matches": [
+    {
+      "a": "cand",
+      "b": "cobalt",
+      "n_games": 300,
+      "wins": 229,
+      "draws": 0,
+      "losses": 71,
+      "win_rate": 0.7633333333333333,
+      "mean_score_diff": 10.23,
+      "mean_score_a": 48.17333333333333,
+      "mean_score_b": 37.943333333333335,
+      "mean_moves": 55.24333333333333,
+      "base_seed": 21260906,
+      "truncated": 0
+    }
+  ],
+  "elo": {
+    "cand": 101.50489513230218,
+    "cobalt": -101.50489513230218
+  },
+  "elo_err": {
+    "cand": 707106.7825992772,
+    "cobalt": 707106.7825992772
+  },
+  "anchors": {}
+}
