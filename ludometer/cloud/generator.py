@@ -185,6 +185,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         engine.start(weights)
         _log(f"weights v{version} loaded; playing")
+
+        # A killed parent would leave its driver processes running (orphans
+        # burning the GPU for nobody, seen on the Mac): close the pool first.
+        import signal
+
+        def _terminate(signum: int, _frame: Any) -> None:
+            _log(f"signal {signum}: closing the drivers")
+            engine.close()
+            raise SystemExit(128 + signum)
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(sig, _terminate)
         base = seed_base(tag)
         block = 0
         played = 0
