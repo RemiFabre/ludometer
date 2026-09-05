@@ -101,6 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--give-up-min", type=float, default=30.0)
     p.add_argument("--device", default="cpu")
+    p.add_argument(
+        "--half", action="store_true", help="fp16 net on the device (MPS/CUDA)"
+    )
     return p
 
 
@@ -178,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
             games=cfg.selfplay_games,
             device=args.device,
             max_batch=cfg.selfplay_max_batch,
+            half=args.half,
         )
         engine.start(weights)
         _log(f"weights v{version} loaded; playing")

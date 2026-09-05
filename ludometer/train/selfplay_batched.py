@@ -166,13 +166,22 @@ class BatchEvaluator:
     leaf at once.
     """
 
-    def __init__(self, net: Any, device: str = "cpu", max_batch: int = 0) -> None:
+    def __init__(
+        self, net: Any, device: str = "cpu", max_batch: int = 0, half: bool = False
+    ) -> None:
         import torch
 
         self.torch = torch
         self.net = net
         self.device = torch.device(device)
+        # fp16 weights and activations on the device; every output is read back
+        # as float32. Measured on this Mac's GPU with the 7M teacher at batch 768:
+        # 1.4x the positions/s, argmax agreement 99.5%, value MAE 4e-4 — fine for
+        # generating self-play, never used for training or rating.
+        self.half = bool(half)
         self.net.to(self.device)
+        if self.half:
+            self.net.half()
         self.net.eval()
         self.has_margin = bool(getattr(net, "has_margin", False))
         self.max_batch = max(0, int(max_batch))
@@ -203,6 +212,8 @@ class BatchEvaluator:
             for start in range(0, n, chunk):
                 block = rows[start : start + chunk]
                 x = torch.from_numpy(block).to(self.device)
+                if self.half:
+                    x = x.half()
                 logits, value, margin = self.net.forward_heads(x)
                 # One readback, not three. Every device->host copy is a full
                 # synchronisation on MPS (~1-2 ms of pure latency each, and this
@@ -214,7 +225,9 @@ class BatchEvaluator:
                 else:
                     tail = torch.stack((value, margin), dim=1)
                 parts.append(
-                    torch.cat((logits, tail), dim=1).to("cpu", copy=True).numpy()
+                    torch.cat((logits, tail), dim=1)
+                    .to("cpu", torch.float32, copy=True)
+                    .numpy()
                 )
                 self.calls += 1
                 self.rows += len(block)
@@ -241,8 +254,12 @@ class BatchEvaluator:
         return out
 
     def set_weights(self, weights: dict[str, np.ndarray]) -> None:
+        if self.half:
+            self.net.float()
         self.net.load_numpy_state_dict(weights)
         self.net.to(self.device)
+        if self.half:
+            self.net.half()
         self.net.eval()
 
 
@@ -286,6 +303,7 @@ class BatchedSelfPlay:
         max_batch: int = 0,
         leaf_cap: int = 0,
         tick: float = 2.0,
+        half: bool = False,
     ) -> None:
         self.tick = float(tick)  # seconds between progress/should_stop polls
         self.net_config = net_config
@@ -300,7 +318,7 @@ class BatchedSelfPlay:
         self.net = make_net(net_config)
         self.net.eval()
         self.evaluator = BatchEvaluator(
-            self.net, device=self.device, max_batch=self.max_batch
+            self.net, device=self.device, max_batch=self.max_batch, half=half
         )
         self.batches = 0
         self.positions = 0
@@ -546,6 +564,7 @@ def _batched_worker_loop(
     games: int,
     device: str,
     max_batch: int,
+    half: bool = False,
 ) -> None:  # pragma: no cover - runs in a child process
     """Worker entry point: one batched engine, fed blocks of seeds."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # the parent orchestrates shutdown
@@ -556,7 +575,7 @@ def _batched_worker_loop(
     # process would only make the drivers fight each other.
     torch.set_num_threads(1)
     engine = BatchedSelfPlay(
-        net_config, config, games=games, device=device, max_batch=max_batch
+        net_config, config, games=games, device=device, max_batch=max_batch, half=half
     )
     while True:
         message = cmd_q.get()
@@ -609,11 +628,12 @@ class BatchedSelfPlayPool(SelfPlayPool):
         device: str = "auto",
         max_batch: int = 0,
         poll: float = 1.0,
+        half: bool = False,
     ) -> None:
         super().__init__(net_config, config, workers=workers, poll=poll)
         self.games = max(1, int(games))
         self.device = device
-        self.worker_extra = (self.games, device, int(max_batch))
+        self.worker_extra = (self.games, device, int(max_batch), bool(half))
 
     def _dispatch(self, n_games: int, seed_start: int) -> None:
         """One contiguous block of seeds per worker (the batch needs them all)."""

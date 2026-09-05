@@ -501,9 +501,7 @@ class SelfPlayPool:
                     if progress is not None:
                         progress(len(out), n_games)
                     continue
-                raise RuntimeError(
-                    f"self-play worker {item[1]} failed: {item[2]}"
-                )
+                raise RuntimeError(f"self-play worker {item[1]} failed: {item[2]}")
             out.append(item)
             if progress is not None:
                 progress(len(out), n_games)
@@ -561,6 +559,7 @@ def make_selfplay(
     games: int = 64,
     device: str = "auto",
     max_batch: int = 0,
+    half: bool = False,
 ) -> Any:
     """The self-play engine a run asked for.
 
@@ -577,7 +576,12 @@ def make_selfplay(
 
         if workers <= 1:
             return BatchedSelfPlay(
-                net_config, config, games=games, device=device, max_batch=max_batch
+                net_config,
+                config,
+                games=games,
+                device=device,
+                max_batch=max_batch,
+                half=half,
             )
         return BatchedSelfPlayPool(
             net_config,
@@ -586,6 +590,7 @@ def make_selfplay(
             games=games,
             device=device,
             max_batch=max_batch,
+            half=half,
         )
     if kind != "workers":
         raise ValueError(f"unknown selfplay engine {kind!r} (workers | batched)")
