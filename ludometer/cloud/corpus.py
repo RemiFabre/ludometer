@@ -83,10 +83,16 @@ def stats(run: str) -> dict:
     return out
 
 
-def build(run: str, out: Path, cap: int = 0, newest: bool = True) -> int:
-    files = sorted(_dir(run).glob("*.npz"), key=lambda p: p.stat().st_mtime)
-    if not files:
-        raise SystemExit(f"no shards under {_dir(run)}")
+def build(runs: list[str] | str, out: Path, cap: int = 0) -> int:
+    """Fold the shards of ``runs`` (in that order; the last run ends up newest,
+    which is what survives a ``cap``) into one replay file."""
+    runs = [runs] if isinstance(runs, str) else list(runs)
+    files: list[Path] = []
+    for run in runs:
+        part = sorted(_dir(run).glob("*.npz"), key=lambda p: p.stat().st_mtime)
+        if not part:
+            raise SystemExit(f"no shards under {_dir(run)}")
+        files.extend(part)
     total = 0
     for p in files:
         total += int(peek_meta(p).get("positions", 0))
@@ -109,7 +115,9 @@ def build(run: str, out: Path, cap: int = 0, newest: bool = True) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="ludometer.cloud.corpus")
-    p.add_argument("--run", required=True)
+    p.add_argument(
+        "--run", required=True, nargs="+", help="run(s); build folds them in order"
+    )
     p.add_argument("--shards", default="RemiFabre/rl-experiment-shards")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("pull")
@@ -121,9 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = p.parse_args(argv)
     if args.cmd == "pull":
-        pull(args.run, args.shards, os.environ.get("HF_TOKEN"))
+        for run in args.run:
+            pull(run, args.shards, os.environ.get("HF_TOKEN"))
     elif args.cmd == "stats":
-        stats(args.run)
+        for run in args.run:
+            stats(run)
     else:
         build(args.run, args.out, cap=args.cap)
     return 0

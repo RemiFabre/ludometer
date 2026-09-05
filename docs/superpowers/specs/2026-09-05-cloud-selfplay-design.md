@@ -55,8 +55,10 @@ corpus gives an agreement metric, not an Elo). The reasoning is in §2.
 - mid2 (2.94M, the last attempt) reached **2405 ± 29 at fixed sims** at game
   9216, then was stopped. Nobody wall-clock-gated it. The mid body runs at
   0.65× Cobalt's speed, which costs roughly 60 Elo at matched think time, so
-  my prior is that mid2-9216 is about even with Cobalt in real time. **That
-  gate is running now** (100 games, `runs/gates/mid2-009216_wallclock.json`).
+  my prior was that mid2-9216 would be about even with Cobalt in real time.
+  **Measured: 57-1-42 over 100 games at matched think time**
+  (`runs/gates/mid2-009216_wallclock.json`), about +52 honest Elo, the best
+  candidate ever measured and a third of the bar. The road is real.
 - The strongest thing we own at equal search is ft2/ft-004000 (7.04M, ~2445
   pooled). It loses at wall clock because it is 3.4× slower. It is the
   natural **teacher**.
@@ -193,6 +195,18 @@ Timeout per job: 8h (billing stops at timeout, relaunch is one command).
   net, and the trainer's existing smoke test runs with `selfplay: "hub"`.
 - Live: one smoke job on `cpu-upgrade` for 10 minutes ($0.005), which also
   measures hub positions/s and decides the fleet size.
+
+## 3.7 Human positions, searched (added after Rémi's note on the BGA crawl)
+
+The BGA elite crawl (3,795 validated games on 2026-09-05, ~200/day) enters
+the corpus a second way: `ludometer/cloud/label.py` replays every game in the
+engine (deals are scripted, the replay is exact) and the fleet searches every
+decision point of *both* players with the teacher at 1024 sims. The rows look
+exactly like self-play rows (visit policy, outcome value, search value,
+margin, final walls), so the same pretrain path consumes them. The student
+learns what the teacher would play there; the human's role is to have reached
+a position self-play rarely visits. `label export` writes the compact
+positions file, `fleet launch --entry label --asset ...` runs it.
 
 ## 4. Ledger
 

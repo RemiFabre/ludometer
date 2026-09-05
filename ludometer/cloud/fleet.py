@@ -51,6 +51,8 @@ PRICES = {
     "a10g-large": 1.50,
 }
 
+GPU_FLAVORS = {"t4-small", "t4-medium", "l4x1", "a10g-small", "a10g-large"}
+
 # vCPUs per flavor: `nproc` inside a job reports the HOST's cores (64 on the
 # first smoke job), so the generator must be told how many drivers to run.
 VCPUS = {
@@ -69,7 +71,11 @@ BOOTSTRAP = r"""
 set -euo pipefail
 echo "[rl-experiment] bootstrap on $(nproc) cpus"
 pip install -q --no-cache-dir numpy huggingface_hub >/dev/null
-pip install -q --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu >/dev/null
+if [ "${RLX_CUDA:-0}" = "1" ]; then
+  pip install -q --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124 >/dev/null
+else
+  pip install -q --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu >/dev/null
+fi
 python - <<'PY'
 import os
 from huggingface_hub import hf_hub_download
@@ -86,6 +92,9 @@ from huggingface_hub import hf_hub_download
 p = hf_hub_download(os.environ["RLX_SRC_REPO"], os.environ["RLX_ASSET"], repo_type="dataset", local_dir="/work/assets")
 print("[rl-experiment] asset", p)
 PY
+fi
+if [ "${RLX_ENTRY:-generator}" = "bench" ]; then
+  exec python -m ludometer.cloud.bench --run "$RLX_RUN" --weights "$RLX_WEIGHTS" $RLX_EXTRA
 fi
 if [ "${RLX_ENTRY:-generator}" = "label" ]; then
   exec python -m ludometer.cloud.label run --positions "/work/assets/$RLX_ASSET" --run "$RLX_RUN" \
@@ -220,6 +229,7 @@ def launch(
             "RLX_EXTRA": extra,
             "RLX_ENTRY": entry,
             "RLX_ASSET": asset,
+            "RLX_CUDA": "1" if flavor in GPU_FLAVORS else "0",
         }
         if dry_run:
             print(f"[fleet] dry run: {flavor} {timeout} tag {tag} env {env}")
@@ -411,7 +421,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--extra", default="", help="extra generator args, e.g. '--sims 1024'"
     )
     l.add_argument("--dry-run", action="store_true")
-    l.add_argument("--entry", default="generator", choices=["generator", "label"])
+    l.add_argument(
+        "--entry", default="generator", choices=["generator", "label", "bench"]
+    )
     l.add_argument(
         "--asset",
         default="",

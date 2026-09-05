@@ -43,7 +43,7 @@
   "value_weight": 1.0,
   "margin_weight": 0.25,
   "grad_clip": 1.0,
-  "replay_capacity": 1500000,
+  "replay_capacity": 3000000,
   "save_buffer": true,
   "pretrain": "data/cloud/porcelain_corpus.npz",
   "pretrain_epochs": 3,
