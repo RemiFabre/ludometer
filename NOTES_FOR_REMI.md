@@ -101,6 +101,16 @@ teacher; policy target = the search's visit distribution, value target = half ga
 half the search's root value. No self-play polish yet: that is Phase B, running tonight,
 toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
 
+**01:50, the fleet runs on Rust.** ludometer-d1's gauntlet (Porcelain on the Rust tree vs on
+the Python tree, 100 games at sims=400) came back 45-2-53, inside the noise band, so the
+generators switched: teacher 2 (`rlx_teacher2`, Porcelain at 2048 sims) on 2 l4x1 jobs and the
+polish stream on 1 l4x1 job, each 2 Rust drivers x 512 games, fp16; the 8 Python L4 jobs were
+cancelled. The polish learner restarted with `hub_delete_consumed` (the stream is not a corpus
+anyone keeps), 1,024 games per iteration and a rating every 8,192 games. Polish screens so far
+vs Porcelain at matched think: 44%, 51%, 56%, **60%** (ckpt-038912). Spend: $61 actual, $73
+worst-case committed, cap $90; the remaining headroom is for the gate and the ship, not for
+more jobs.
+
 **01:30, Rust engine landed** (ludometer-d1, commits 75bd1a9..bbb862d, `selfplay: "rust"`,
 `--engine rust`, `?engine=rust`). Checked here with Porcelain's net at 2048 sims: on one CPU
 core the search cost vanishes (0.4 s of search in 20 s; the torch forward pass is all that is
