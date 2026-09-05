@@ -82,6 +82,29 @@ in early September — remember trap 1 before celebrating).
 - run6 explored aux heads (wall-placement prediction); its exporter
   support already exists (`aux_heads` in the meta).
 
+## 2026-09-05 — the road now has a fleet on it
+
+Read `docs/superpowers/specs/2026-09-05-cloud-selfplay-design.md` first: the
+measured economics, the plan and the design of `ludometer/cloud/`. In one
+paragraph: the search is Python-bound, so a Hugging Face `cpu-upgrade` Job
+(8 vCPU, $0.03/hour) generates teacher games at ~1/5 of this Mac's rate for
+almost nothing, and dozens of them run at once; this Mac's GPU generates at
+17-24k positions/s on its own (`ludometer.cloud.generator --device mps
+--half`). Weights and games move through private repos
+`RemiFabre/rl-experiment-{src,weights,shards}`; jobs are launched, listed and
+cancelled with `ludometer.cloud.fleet`, whose ledger (`runs/cloud/ledger.jsonl`)
+enforces the spend cap. `selfplay: "hub"` in a config makes the trainer consume
+the fleet's games and publish its weights; nothing else in the trainer changed.
+
+The corpus recipe that the students are pretrained on: the ft2-4000 teacher
+(7.04M) playing itself at 1024 sims (`configs/rlx_teacher.json`), plus every
+position of the BGA elite games searched by the same teacher
+(`ludometer.cloud.label`). Every row carries the search's root value;
+`value_search_weight` mixes it into the value target.
+`scripts/porcelain_pretrain.sh porc_a` runs one pull-build-pretrain-rate-screen
+cycle. Wall-clock ledger of the day: mid2/ckpt-009216 beats Cobalt 57-1-42
+(`runs/gates/`), the first honest +50; the bar is +150.
+
 ## Ground rules
 
 - Wall-clock gate before any excitement; 100 games to rule out, ≥300 to
