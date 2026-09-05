@@ -53,7 +53,24 @@ MPS numbers on this Mac tonight are meaningless (big_t + the polish learner + a 
 saturate it); the clean measurement is the l4x1 bench job launched at 23:18
 (`fleet launch --entry bench --rust --extra "--engine both --games 256 --seconds 60 --half"`,
 job 6a9ca323e686246ca69a4824, bundle `bundle-3618ad7-20260905-231750.tar.gz`, $0.33 cap).
-Results below when it lands.
+
+**l4x1 results (Porcelain teacher weights, 3.9M params, 2048 sims, 256 games, one driver):**
+
+| driver | positions/s | eval s | search s | batches |
+|---|---|---|---|---|
+| Python batched, cuda fp16 | 6,203 | 15.2 | 45.3 | 1,532 |
+| **Rust, cuda fp16** | **107,207** | 32.2 | 27.8 | 25,142 |
+| Python batched, cpu | 2,660 | 42.9 | 18.9 | 653 |
+| Rust, cpu | 4,349 | 59.3 | 1.6 | 1,035 |
+| search-bound (tiny net, cpu): Python 6,301 / Rust 32,818 | | | | |
+
+**17x per driver on the GPU**; one Rust driver already does 4.5x what the whole 8-driver
+Python job did (~24k/s). The forward pass at batch 256 costs 1.09 ms on the L4 and is flat
+from batch 16 up (235k positions/s at 256), so the remaining time is per-round overhead:
+~1.1 ms of Python + Rust bookkeeping per round of 256 positions. Recommendation for the
+fleet: **2-3 drivers x 512 games** per l4x1 job (`--workers 2 --games 512`), which should
+land near the GPU's ~250k positions/s ceiling; memory is ~4 MB per tree at 2048 sims, so
+512 games is ~2 GB per driver. The crate built in 35 s in the job.
 
 **Pending / not done.** (1) Porcelain Rust-vs-Python gauntlet at sims=400, 100 games, running
 niced on 3 workers -> `runs/gates/rust_vs_python_porcelain_sims400.json`; the bar is 50 ± 10.

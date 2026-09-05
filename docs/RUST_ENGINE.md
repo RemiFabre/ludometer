@@ -372,8 +372,14 @@ Acceptance (§6), as of this writing:
    Python batched (search 1.3 s vs 31 s, torch 17 s vs 32 s). The forward pass
    is now the whole cost, so **the lever is batch size**: `selfplay_games`
    256-1024 per driver (~0.5 MB per tree at 256 sims), 1-2 drivers per GPU.
-   l4x1 numbers: the bench job `6a9ca323e686246ca69a4824` (`--engine both
-   --games 256 --half`), reported in `NOTES_FOR_REMI.md`.
+   **l4x1** (job `6a9ca323e686246ca69a4824`, Porcelain teacher weights, 2048
+   sims, 256 games, one driver): Python batched on cuda fp16 6,203
+   positions/s; **Rust on cuda fp16 107,207 positions/s (17x)**; on the job's
+   CPU 2,660 vs 4,349 (the 3.9M forward pass binds there). The L4 forward pass
+   is 1.09 ms at batch 256 (235k positions/s) and flat from batch 16, so the
+   Rust driver's remaining cost is ~1 ms of per-round overhead: run 2-3 drivers
+   x 512 games per job to sit at the GPU ceiling. The crate builds in 35 s
+   inside the job (`fleet launch --rust`).
 
 Not done: prebuilt wheels (the job builds from source behind `--rust`, ~2-3
 minutes); a corpus generated with the Rust engine and a student gated on it;
