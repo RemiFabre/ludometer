@@ -362,8 +362,8 @@ Acceptance (§6), as of this writing:
    2.517±0.010: every |z| < 1. Fixed-sims ladder rating: not run yet.
 4. **Full stack**: `configs/smoke5_rust.json` end to end + resume, the hub loop
    with `--engine rust` (`tests/test_rust_stack.py`). Porcelain Rust vs Python at
-   `?sims=400`, 100 games: see `runs/gates/rust_vs_python_porcelain_sims400.json`
-   (running at the time of writing; the note in `NOTES_FOR_REMI.md` has the result).
+   `?sims=400`, 100 games: **rust 45-2-53**, mean scores 41.0 vs 41.5, inside
+   the 50 ± 10 bar (`runs/gates/rust_vs_python_porcelain_sims400.json`).
 5. **Speed** (Mac M3 Pro, fully loaded by two training jobs and a gauntlet, so
    absolute numbers are pessimistic): tree walk **0.41 µs/simulation** with a
    constant evaluator (target ≤ 6; Python ~90), clone+apply+legal 0.23 µs,

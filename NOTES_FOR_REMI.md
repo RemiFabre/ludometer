@@ -72,9 +72,14 @@ fleet: **2-3 drivers x 512 games** per l4x1 job (`--workers 2 --games 512`), whi
 land near the GPU's ~250k positions/s ceiling; memory measured at **7.2 MB per tree at 2048
 sims** (3.7 GB RSS for a 512-game driver), so budget ~4 GB per driver. The crate built in 35 s in the job.
 
-**Pending / not done.** (1) Porcelain Rust-vs-Python gauntlet at sims=400, 100 games, running
-niced on 3 workers -> `runs/gates/rust_vs_python_porcelain_sims400.json`; the bar is 50 ± 10.
-(2) l4x1 numbers. (3) Wheels in CI (the job builds from source instead, ~2-3 min). (4) A
+**Gauntlet (acceptance 4).** Porcelain on the Rust tree vs Porcelain on the Python tree, 100
+games at `?sims=400`: **rust 45-2-53 (0.46)**, mean scores 41.0 vs 41.5, no truncated game
+(`runs/gates/rust_vs_python_porcelain_sims400.json`). Inside the 50 ± 10 bar (SE of a
+100-game match is 5 points): the engines play the same strength. ludometer-1a was told and
+plans to move rlx_teacher2 to 2 Rust l4x1 jobs (`--workers 2 --games 512`) and the porc_w
+generators to 1.
+
+**Not done.** (3) Wheels in CI (the job builds from source instead, ~2-3 min). (4) A
 corpus generated with it + a student gated on it: that is the other agent's call once (1)
 and (2) are in (ludometer-1a was told; they plan rlx_teacher2 and the porc_w generators).
 (5) The GUI still runs the Python engine; `engine_rs.AzulState` attributes are copies, so

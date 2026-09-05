@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "python": "mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?sims=400",
+    "rust": "mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?sims=400&engine=rust"
+  },
+  "games": 100,
+  "matches": [
+    {
+      "a": "python",
+      "b": "rust",
+      "n_games": 100,
+      "wins": 53,
+      "draws": 2,
+      "losses": 45,
+      "win_rate": 0.54,
+      "mean_score_diff": 0.53,
+      "mean_score_a": 41.49,
+      "mean_score_b": 40.96,
+      "mean_moves": 53.86,
+      "base_seed": 1004242,
+      "truncated": 0
+    }
+  ],
+  "elo": {
+    "python": 13.857601089103108,
+    "rust": -13.857601089103108
+  },
+  "elo_err": {
+    "python": 707106.7825992772,
+    "rust": 707106.7825992772
+  },
+  "anchors": {}
+}
