@@ -26,9 +26,9 @@ nice -n 5 uv run python -m ludometer.train.run --config "configs/$CFG.json" --ru
   > "runs/$RUN.log" 2>&1
 grep -E "pretrain epoch|eval ckpt" "runs/$RUN.log" | tail -4
 
-echo "== wall-clock screen vs Cobalt ($GAMES games)"
+echo "== wall-clock screen vs ${OPP_NAME:-cobalt} ($GAMES games)"
 mkdir -p runs/gates
 nice -n 10 uv run python -m ludometer.eval.gauntlet --games "$GAMES" --workers 8 --seed 20260906 \
   --json "runs/gates/${RUN}_wallclock.json" \
   "cand=mcts:runs/$RUN/checkpoints/ckpt-000000.pt?think=1.0" \
-  "cobalt=mcts:runs/run4/checkpoints/ckpt-037888.pt?think=1.0" 2>&1 | grep -E "cand vs|games$" | head -3
+  "${OPP_NAME:-cobalt}=mcts:${OPP_CKPT:-runs/run4/checkpoints/ckpt-037888.pt}?think=1.0" 2>&1 | grep -E "cand vs|games$" | head -3
