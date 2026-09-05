@@ -282,7 +282,17 @@ def label_game(labeler: BatchLabeler, game: PositionGame) -> GameRecord:
 
 # ---------------------------------------------------------------- job workers
 def _worker(args: tuple[Any, ...]) -> list[GameRecord]:  # pragma: no cover - subprocess
-    weights_path, net_config, mcts_config, sims, slots, seed, games_json = args
+    (
+        weights_path,
+        net_config,
+        mcts_config,
+        sims,
+        slots,
+        seed,
+        games_json,
+        device,
+        half,
+    ) = args
     import torch
 
     torch.set_num_threads(1)
@@ -292,7 +302,7 @@ def _worker(args: tuple[Any, ...]) -> list[GameRecord]:  # pragma: no cover - su
     payload = torch.load(weights_path, map_location="cpu", weights_only=False)
     net = make_net(net_config_from_dict(net_config))
     net.load_numpy_state_dict({k: v.numpy() for k, v in payload["weights"].items()})
-    evaluator = BatchEvaluator(net, device="cpu")
+    evaluator = BatchEvaluator(net, device=device, half=half)
     labeler = BatchLabeler(evaluator, mcts_config, slots=slots, sims=sims, seed=seed)
     out = []
     for d in games_json:
@@ -327,6 +337,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     r.add_argument("--sims", type=int, default=0)
     r.add_argument("--block", type=int, default=16, help="games per shard")
+    r.add_argument("--device", default="cpu")
+    r.add_argument("--half", action="store_true")
     return p
 
 
@@ -378,6 +390,8 @@ def _run(args: argparse.Namespace) -> int:
                     args.games,
                     7919 * (i + 1),
                     [g.to_json() for g in chunk],
+                    args.device,
+                    args.half,
                 )
                 for i, chunk in enumerate(chunks)
             )
