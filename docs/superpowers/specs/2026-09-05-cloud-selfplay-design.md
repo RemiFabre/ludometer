@@ -22,18 +22,32 @@ Jobs price list is extremely lopsided in our favour:
 | l4x1 (GPU) | 8 | 0.80 | 0.100 |
 | a10g-large (GPU) | 12 | 1.50 | 0.125 |
 
-A `cpu-upgrade` job is roughly 25× cheaper per core than any GPU flavor. Measured
-today on one core of this Mac, a batched self-play driver does 2.7k
-positions/s with the 7M teacher at 1024 sims, 7k with the mid net, 9.3k with
-the site net. Even if a Hugging Face vCPU is half as fast, one $0.03/hour job
-generates roughly 600-900 teacher-quality games per hour. **Twenty such jobs
-cost $0.60/hour, about $15/day, and produce 10-20× this Mac's throughput.**
-Money is not the constraint at this price; the concurrency quota on Jobs is,
-and I will measure it with the first launch.
+A `cpu-upgrade` job is roughly 25× cheaper per core than any GPU flavor. On
+one core of this Mac, a batched self-play driver does 2.7k positions/s with
+the 7M teacher at 1024 sims, 7k with the mid net, 9.3k with the site net.
 
-**So the GPUs are not the lever; parallel CPU jobs are.** GPU flavors stay
-in reserve for one thing: if the local learner (MPS on this Mac) cannot keep
-up with the fleet, a single `l4x1` learner job at $0.80/hour is the fallback.
+**Measured on the Jobs (evening, `ludometer.cloud.bench`), the picture moved.**
+The cloud CPUs are slow at exactly the teacher's cost, a 7M-parameter forward
+pass: 459 positions/s per thread at batch 64 on `cpu-upgrade` (AMD EPYC)
+against 3,418 on a Mac core, and the Python search itself is 3.9× slower. A
+`cpu-upgrade` job yields ~3,400 positions/s for $0.03/hour. A `t4-small`
+driver runs at 3,600 positions/s (search-bound, the T4 makes the net free), so
+`l4x1` (8 vCPU) should give ~29k/s for $0.80/hour. And **this Mac's GPU does
+17,500 positions/s on its own** (24k in fp16), five cpu-upgrade jobs' worth.
+
+| generator | positions/s | $/hour | $ per 1k positions/s-hour |
+|---|---|---|---|
+| this Mac (MPS, 6 drivers × 128 games) | 17,500 (fp16: ~24k) | 0 | 0 |
+| cpu-upgrade (8 drivers × 32 games) | ~3,400 | 0.03 | 0.009 |
+| t4-small (3 drivers) | ~10,000 | 0.40 | 0.040 |
+| l4x1 (8 drivers × 64 games, fp16) | ~29,000 | 0.80 | 0.028 |
+
+So: CPU jobs are the cheapest per position by 3-4×, GPU jobs are 8× more
+throughput per job, the Mac is free. The fleet runs as a mix: the Mac, 36
+cpu-upgrade generators, 2 l4x1 generators, 8 cpu-upgrade labelling jobs. At
+~25k evaluations per teacher game that is roughly 15-20k games/hour, so the
+100k-game corpus is an overnight job for under $15. The concurrency quota
+allowed 20 jobs without complaint; the 36-job wave is the next probe.
 
 **Naming.** Jobs run in the `pollen-robotics` namespace (that is where the
 credits are) under the neutral name `rl-experiment`. The private repos that

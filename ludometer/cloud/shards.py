@@ -100,17 +100,13 @@ def read_shard(path: str | os.PathLike[str]) -> tuple[list[GameRecord], dict[str
         lengths = z["lengths"]
         cols = {
             k: z[k]
-            for k in (
-                "states",
-                "policies",
-                "values",
-                "margins",
-                "aux",
-                "policy_mask",
-                "search_values",
-                "search_mask",
-            )
+            for k in ("states", "policies", "values", "margins", "aux", "policy_mask")
         }
+        n_rows = len(cols["values"])
+        # Shards written before 2026-09-05 (the first smoke job's) carry no
+        # search value: load them masked out, like the replay buffer does.
+        for k in ("search_values", "search_mask"):
+            cols[k] = z[k] if k in z.files else np.zeros(n_rows, dtype=np.float32)
         per_game = {
             k: z[k]
             for k in (

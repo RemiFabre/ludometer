@@ -115,14 +115,14 @@ def build(runs: list[str] | str, out: Path, cap: int = 0) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="ludometer.cloud.corpus")
-    p.add_argument(
-        "--run", required=True, nargs="+", help="run(s); build folds them in order"
-    )
-    p.add_argument("--shards", default="RemiFabre/rl-experiment-shards")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("pull")
-    sub.add_parser("stats")
-    b = sub.add_parser("build")
+    parsers = [sub.add_parser(name) for name in ("pull", "stats", "build")]
+    for sp in parsers:
+        sp.add_argument(
+            "--run", required=True, nargs="+", help="run(s); build folds them in order"
+        )
+        sp.add_argument("--shards", default="RemiFabre/rl-experiment-shards")
+    b = parsers[2]
     b.add_argument("--out", type=Path, required=True)
     b.add_argument(
         "--cap", type=int, default=0, help="keep only the newest N positions"
