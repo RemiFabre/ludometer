@@ -120,6 +120,17 @@ class TrainConfig:
     # sequential one; above 1 costs search quality (see mcts.py) and is ramped.
     search_batch: int = 1
     search_batch_ramp: int = 16
+    # "hub" (ludometer.cloud): games are played by a fleet of Hugging Face Jobs
+    # and pulled from a shards store; weights are published to a weights store.
+    # Specs are hub paths (`owner/name`, `model:owner/name`) or local dirs.
+    hub_shards: str = ""
+    hub_weights: str = ""
+    hub_run: str = ""  # "" -> the run name
+    hub_publish_s: float = 180.0  # min seconds between weight publishes
+    hub_poll_s: float = 15.0  # seconds between shard polls when idle
+    hub_max_lag: int = (
+        3  # shards from weights older than this many versions are dropped
+    )
     search_min_batch: int = 1
     virtual_loss: float = 1.0
 
@@ -181,6 +192,12 @@ class TrainConfig:
     lr_total_steps: int = 0  # 0 -> derive from total_games
     weight_decay: float = 1e-4
     value_weight: float = 1.0
+    # 2026-09-05: the value target is (1-w) * outcome + w * search root value on
+    # positions that carry one (search_mask), the plain outcome elsewhere. The
+    # search value is a lower-variance, slightly biased estimate; every study
+    # that tried it (Willemsen et al. 2020/22 on Connect Four and Breakthrough,
+    # Lc0's q_ratio) learned faster with a mix. 0 keeps the historical target.
+    value_search_weight: float = 0.0
     margin_weight: float = 0.25  # weight of the margin MSE (margin_head only)
     aux_weight: float = 0.1  # weight of the final-wall BCE (aux_heads only)
     grad_clip: float = 1.0
@@ -240,6 +257,8 @@ class TrainConfig:
             raise ValueError("replay_capacity must be >= batch_size")
         if self.pretrain and self.pretrain_epochs < 1:
             raise ValueError("pretrain needs pretrain_epochs >= 1")
+        if not 0.0 <= self.value_search_weight <= 1.0:
+            raise ValueError("value_search_weight must be in [0, 1]")
         # Both game names must resolve NOW: a typo in eval_game would otherwise
         # only surface inside an eval worker process, hours into the run.
         spec = get_game(self.game)
@@ -255,10 +274,12 @@ class TrainConfig:
                 "the margin target tanh(diff/20) is Azul's scale; Uno hand "
                 "scores saturate it (tanh(50/20)=0.99) - retune MARGIN_SCALE first"
             )
-        if self.selfplay not in ("workers", "batched"):
+        if self.selfplay not in ("workers", "batched", "hub"):
             raise ValueError(
-                f"unknown selfplay engine {self.selfplay!r} (workers | batched)"
+                f"unknown selfplay engine {self.selfplay!r} (workers | batched | hub)"
             )
+        if self.selfplay == "hub" and not (self.hub_shards and self.hub_weights):
+            raise ValueError("selfplay='hub' needs hub_shards and hub_weights")
         if self.selfplay_games < 1:
             raise ValueError("selfplay_games must be >= 1")
         if self.margin_head:
@@ -386,15 +407,33 @@ class Trainer:
             input_size=spec.encoded_size,
             action_space=spec.action_space,
         )
-        self.selfplay = make_selfplay(
-            config.net_config(),
-            config.selfplay_config(),
-            config.workers,
-            kind=config.selfplay,
-            games=config.selfplay_games,
-            device=config.selfplay_device,
-            max_batch=config.selfplay_max_batch,
-        )
+        if config.selfplay == "hub":
+            from ludometer.cloud.hub_selfplay import HubSelfPlay  # lazy: hub deps
+
+            self.selfplay = HubSelfPlay(
+                config.net_config(),
+                config.selfplay_config(),
+                run=config.hub_run or config.run,
+                shards=config.hub_shards,
+                weights=config.hub_weights,
+                state_dir=self.run_dir / "hub",
+                train_config=config.to_dict(),
+                publish_s=config.hub_publish_s,
+                poll_s=config.hub_poll_s,
+                max_lag=config.hub_max_lag,
+                token=os.environ.get("HF_TOKEN"),
+                log=self._log,
+            )
+        else:
+            self.selfplay = make_selfplay(
+                config.net_config(),
+                config.selfplay_config(),
+                config.workers,
+                kind=config.selfplay,
+                games=config.selfplay_games,
+                device=config.selfplay_device,
+                max_batch=config.selfplay_max_batch,
+            )
 
     # -------------------------------------------------------------- properties
     @property
@@ -507,12 +546,15 @@ class Trainer:
                 if cfg.arch == "structured"
                 else f"{cfg.blocks}x{cfg.hidden}"
             )
-            engine = (
-                f"batched({cfg.selfplay_games}x{cfg.workers} on "
-                f"{getattr(self.selfplay, 'device', cfg.selfplay_device)})"
-                if cfg.selfplay == "batched"
-                else f"workers({cfg.workers})"
-            )
+            if cfg.selfplay == "hub":
+                engine = f"hub({cfg.hub_shards} <- fleet, weights -> {cfg.hub_weights})"
+            elif cfg.selfplay == "batched":
+                engine = (
+                    f"batched({cfg.selfplay_games}x{cfg.workers} on "
+                    f"{getattr(self.selfplay, 'device', cfg.selfplay_device)})"
+                )
+            else:
+                engine = f"workers({cfg.workers})"
             self._log(
                 f"run {cfg.run}: device={self.device} selfplay={engine} "
                 f"arch={cfg.arch} net={shape} params={self.net.num_params:,} "
@@ -623,6 +665,11 @@ class Trainer:
             + (f" m {loss_m:.4f}" if self.net.has_margin else "")
             + (f" a {loss_a:.4f}" if self.net.has_aux else "")
             + f") | buffer {len(self.buffer)} | games {self.games}"
+            + (
+                f" | lag {dict(sorted(self.selfplay.lag_hist.items()))} skipped {self.selfplay.skipped}"
+                if hasattr(self.selfplay, "lag_hist")
+                else ""
+            )
         )
 
         # ---------------------------------------------------- 3. checkpoint
@@ -702,6 +749,8 @@ class Trainer:
                     unpack_aux(self.buffer.aux[idx]),
                     self.buffer.aux_mask[idx],
                     self.buffer.policy_mask[idx],
+                    self.buffer.search_values[idx],
+                    self.buffer.search_mask[idx],
                 )
                 loss = self._total_loss(loss_p, loss_v, loss_m, loss_a)
                 for group in self.optimizer.param_groups:
@@ -806,6 +855,8 @@ class Trainer:
         aux: np.ndarray | None = None,
         aux_mask: np.ndarray | None = None,
         policy_mask: np.ndarray | None = None,
+        search_values: np.ndarray | None = None,
+        search_mask: np.ndarray | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """``(policy CE, value MSE, margin MSE, aux BCE)`` for one minibatch.
 
@@ -832,6 +883,11 @@ class Trainer:
         x = torch.from_numpy(states).to(device, non_blocking=True)
         target_p = torch.from_numpy(policies).to(device, non_blocking=True)
         target_v = torch.from_numpy(values).to(device, non_blocking=True)
+        w_search = self.config.value_search_weight
+        if w_search > 0.0 and search_values is not None and search_mask is not None:
+            s_v = torch.from_numpy(search_values).to(device, non_blocking=True)
+            s_w = torch.from_numpy(search_mask).to(device, non_blocking=True) * w_search
+            target_v = (1.0 - s_w) * target_v + s_w * s_v
         logits, value, margin, aux_logits = self.net.forward_aux(x)
         logp = torch.log_softmax(logits, dim=-1)
         per_row_p = -(target_p * logp).sum(dim=1)

@@ -259,6 +259,8 @@ class _Slot:
     policies: list[np.ndarray] = field(default_factory=list)
     players: list[int] = field(default_factory=list)
     policy_mask: list[float] = field(default_factory=list)
+    search_values: list[float] = field(default_factory=list)
+    search_mask: list[float] = field(default_factory=list)
     move: int = 0
     decisions: int = 0  # moves with more than one legal action (searched moves)
     searching: bool = False
@@ -460,6 +462,8 @@ class BatchedSelfPlay:
                 policy[legal[0]] = 1.0
                 slot.policies.append(policy)
                 slot.policy_mask.append(1.0)
+                slot.search_values.append(0.0)
+                slot.search_mask.append(0.0)
                 state.apply(legal[0])
                 slot.mcts.advance(legal[0])
                 slot.move += 1
@@ -484,6 +488,8 @@ class BatchedSelfPlay:
             else np.zeros(slot.state.ACTION_SPACE, dtype=np.float32)
         )
         slot.policy_mask.append(1.0 if slot.full else 0.0)
+        slot.search_values.append(float(result.value) if slot.full else 0.0)
+        slot.search_mask.append(1.0 if slot.full else 0.0)
         # Two deterministic policies can keep a game going forever (nobody ever
         # completes a pattern line): past `stall_rounds` we sample again.
         stalling = slot.state.round_index >= config.stall_rounds
@@ -525,6 +531,8 @@ class BatchedSelfPlay:
             evals=slot.mcts.evals,
             duration=time.perf_counter() - slot.started,
             truncated=truncated,
+            search_values=np.asarray(slot.search_values, dtype=np.float32),
+            search_mask=np.asarray(slot.search_mask, dtype=np.float32),
         )
 
 

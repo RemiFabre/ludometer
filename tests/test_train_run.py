@@ -64,6 +64,8 @@ def test_shipped_configs_parse() -> None:
     # Every config in the repo must load: a stale key (configs/uno_smoke.json
     # once shipped a leftover "segment_value_weight") fails at launch time.
     for path in sorted((REPO / "configs").glob("*.json")):
+        if path.name.endswith("_net.json"):
+            continue  # a bare net config (distill --student-config), not a run
         cfg = TrainConfig.load(path)
         cfg.validate()
         assert cfg.run

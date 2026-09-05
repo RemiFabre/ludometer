@@ -4,6 +4,32 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-09-05 — Porcelain push: cloud fleet built, and mid2 was never gated (it wins 57-42)
+
+**The plan you asked for** is in `docs/superpowers/specs/2026-09-05-cloud-selfplay-design.md`
+(opened on your screen). Short version: the self-play loop is bound by the Python tree
+search, not the GPU, and a `cpu-upgrade` Job (8 vCPU) costs **$0.03/hour**, 25x less per
+core than any GPU flavor. So the lever is a *fleet of CPU jobs*, not a big GPU. Jobs run in
+the pollen-robotics namespace under the neutral name `rl-experiment`; the private repos are
+`RemiFabre/rl-experiment-{src,weights,shards}`. Spend ledger: `runs/cloud/ledger.jsonl`,
+hard cap $90 committed (`ludometer.cloud.fleet` refuses past it).
+
+**First measurement of the day**: `runs/mid2/checkpoints/ckpt-009216.pt` (2405 at fixed
+sims, the last agent's best, never wall-clock gated) beats Cobalt **57-1-42 over 100 games
+at matched think time** (`runs/gates/mid2-009216_wallclock.json`). About +52 honest Elo:
+the best candidate ever measured, a third of the +150 bar. The distill-then-polish road is
+real; it needs the scale the fleet gives it.
+
+**Built today** (`ludometer/cloud/`, 6 tests): shards (a block of games as one .npz),
+a hub file store with a local twin for tests, the job-side generator, the trainer-side
+`selfplay: "hub"` engine (the trainer is otherwise untouched: same checkpoints, same Elo
+curve, same dashboard), and the fleet CLI with the ledger. The BGA elite games (3,799 as of
+this morning, ~200/day) go into the corpus two ways: through the teacher (ft2-4000 was
+fine-tuned on them) and, new, by having the teacher *search* every elite position on the
+fleet so the students get search-improved targets on positions self-play never reaches.
+
+---
+
 ## 2026-08-21 — The opponents ladder, and the names reserved for future nets
 
 The browser player offers seven opponents, the ceramics ladder from raw ground to

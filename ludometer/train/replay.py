@@ -96,6 +96,8 @@ class Batch(NamedTuple):
     aux: np.ndarray  # (B, 30) float32, unpacked
     aux_mask: np.ndarray  # (B,) float32
     policy_mask: np.ndarray  # (B,) float32
+    search_values: np.ndarray  # (B,) float32, the search's root value estimate
+    search_mask: np.ndarray  # (B,) float32, 1 where `search_values` is real
 
 
 def unblend_values(values: np.ndarray, weight: float) -> tuple[np.ndarray, np.ndarray]:
@@ -148,6 +150,11 @@ class ReplayBuffer:
         # run6: 0.0 for a position whose search was the cheap one, so `policies`
         # holds no target. Defaults to 1.0 because every older position has one.
         self.policy_mask = np.ones(self.capacity, dtype=np.float32)
+        # 2026-09-05: the search's root value per position, its own mask. Files
+        # written before it load with a zero mask, so a run that mixes it into
+        # the value target falls back to the outcome on those rows.
+        self.search_values = np.zeros(self.capacity, dtype=np.float32)
+        self.search_mask = np.zeros(self.capacity, dtype=np.float32)
         self.size = 0
         self.position = 0
         self.total_added = 0
@@ -182,6 +189,8 @@ class ReplayBuffer:
         aux: np.ndarray | None = None,
         aux_mask: np.ndarray | float | None = None,
         policy_mask: np.ndarray | float | None = None,
+        search_values: np.ndarray | None = None,
+        search_mask: np.ndarray | float | None = None,
     ) -> int:
         """Append a block of positions, overwriting the oldest ones when full.
 
@@ -216,6 +225,12 @@ class ReplayBuffer:
                 raise ValueError("aux must have the same length as states")
             a_mask = self._column(aux_mask, n, 1.0, "aux_mask")
         p_mask = self._column(policy_mask, n, 1.0, "policy_mask")
+        if search_values is None:
+            s_vals = np.zeros(n, dtype=np.float32)
+            s_mask = np.zeros(n, dtype=np.float32)
+        else:
+            s_vals = self._column(search_values, n, 0.0, "search_values")
+            s_mask = self._column(search_mask, n, 1.0, "search_mask")
         if n == 0:
             return 0
         blocks = (
@@ -227,6 +242,8 @@ class ReplayBuffer:
             (self.aux, aux_bits),
             (self.aux_mask, a_mask),
             (self.policy_mask, p_mask),
+            (self.search_values, s_vals),
+            (self.search_mask, s_mask),
         )
         if n >= self.capacity:  # only the tail fits
             blocks = tuple((dest, src[-self.capacity :]) for dest, src in blocks)
@@ -254,6 +271,8 @@ class ReplayBuffer:
             getattr(record, "margins", None),
             aux=getattr(record, "aux", None),
             policy_mask=getattr(record, "policy_mask", None),
+            search_values=getattr(record, "search_values", None),
+            search_mask=getattr(record, "search_mask", None),
         )
 
     # ----------------------------------------------------------------- sample
@@ -276,6 +295,8 @@ class ReplayBuffer:
             unpack_aux(self.aux[idx]),
             self.aux_mask[idx],
             self.policy_mask[idx],
+            self.search_values[idx],
+            self.search_mask[idx],
         )
 
     # -------------------------------------------------------------- persistence
@@ -304,6 +325,8 @@ class ReplayBuffer:
                 aux=take(self.aux),  # packed: 4 bytes a position
                 aux_mask=take(self.aux_mask),
                 policy_mask=take(self.policy_mask),
+                search_values=take(self.search_values),
+                search_mask=take(self.search_mask),
                 meta=np.array(
                     [
                         self.capacity,
@@ -346,6 +369,8 @@ class ReplayBuffer:
             # A file without the key predates cheap searches: every row has a
             # policy target, which is what `add`'s default already says.
             p_mask = data["policy_mask"] if "policy_mask" in data.files else None
+            s_vals = data["search_values"] if "search_values" in data.files else None
+            s_mask = data["search_mask"] if "search_mask" in data.files else None
             meta = data["meta"] if "meta" in data.files else None
         if margins is None and unblend > 0.0:
             values, margins = unblend_values(values, unblend)
@@ -363,6 +388,8 @@ class ReplayBuffer:
             aux=aux,
             aux_mask=aux_mask,
             policy_mask=p_mask,
+            search_values=s_vals,
+            search_mask=s_mask,
         )
         if meta is not None and len(meta) >= 5:
             self.total_added = int(meta[2])
@@ -379,4 +406,5 @@ class ReplayBuffer:
             "margin_targets": int(self.margin_mask[: self.size].sum()),
             "aux_targets": int(self.aux_mask[: self.size].sum()),
             "policy_targets": int(self.policy_mask[: self.size].sum()),
+            "search_targets": int(self.search_mask[: self.size].sum()),
         }

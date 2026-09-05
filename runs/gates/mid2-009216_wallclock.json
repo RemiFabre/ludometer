@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "mid2_9216": "mcts:runs/mid2/checkpoints/ckpt-009216.pt?think=1.0",
+    "cobalt": "mcts:runs/run4/checkpoints/ckpt-037888.pt?think=1.0"
+  },
+  "games": 100,
+  "matches": [
+    {
+      "a": "mid2_9216",
+      "b": "cobalt",
+      "n_games": 100,
+      "wins": 57,
+      "draws": 1,
+      "losses": 42,
+      "win_rate": 0.575,
+      "mean_score_diff": 0.11,
+      "mean_score_a": 43.75,
+      "mean_score_b": 43.64,
+      "mean_moves": 55.59,
+      "base_seed": 21260905,
+      "truncated": 0
+    }
+  ],
+  "elo": {
+    "cobalt": -26.123173899998097,
+    "mid2_9216": 26.123173899998097
+  },
+  "elo_err": {
+    "cobalt": 707106.8017654459,
+    "mid2_9216": 707106.8017654457
+  },
+  "anchors": {}
+}

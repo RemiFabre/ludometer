@@ -10,6 +10,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+cloud = [
+    "huggingface-hub>=1.0",
+]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 # Only the ONNX export path needs these (ludometer/export/, tests/test_export*.py):
 # `onnx` because torch's exporter serialises through it, `onnxruntime` because the

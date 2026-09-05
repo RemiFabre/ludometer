@@ -135,6 +135,12 @@ class GameRecord:
     evals: int = 0
     duration: float = 0.0
     truncated: bool = False  # hit max_moves without finishing (scored as a draw)
+    #: The search's own root value estimate per position (player-to-move frame),
+    #: and 1 where a real search produced it (forced moves and cheap PCR searches
+    #: carry 0). A second value target next to the game outcome: less noisy,
+    #: slightly biased — see ``TrainConfig.value_search_weight``.
+    search_values: np.ndarray | None = None  # (T,) float32
+    search_mask: np.ndarray | None = None  # (T,) float32
 
     def __len__(self) -> int:
         return len(self.values)
@@ -240,6 +246,8 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
     policies: list[np.ndarray] = []
     players: list[int] = []
     policy_mask: list[float] = []
+    search_values: list[float] = []
+    search_mask: list[float] = []
     schedule = pcr_rng(seed)
     move = 0
     decisions = 0
@@ -251,6 +259,8 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
             policy = np.zeros(state.ACTION_SPACE, dtype=np.float32)
             policy[legal[0]] = 1.0
             policy_mask.append(1.0)
+            search_values.append(0.0)
+            search_mask.append(0.0)
             action = legal[0]
         else:
             decisions += 1
@@ -258,8 +268,14 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
             # and a cheap move's visit distribution is not a training target.
             sims, full = pcr_sims(config, schedule)
             result = mcts.search(state, add_noise=full, sims=sims)
-            policy = result.policy if full else np.zeros(state.ACTION_SPACE, dtype=np.float32)
+            policy = (
+                result.policy
+                if full
+                else np.zeros(state.ACTION_SPACE, dtype=np.float32)
+            )
             policy_mask.append(1.0 if full else 0.0)
+            search_values.append(float(result.value) if full else 0.0)
+            search_mask.append(1.0 if full else 0.0)
             # Two deterministic policies can keep a game going forever (nobody
             # ever completes a pattern line, so no wall tile is ever placed):
             # past `stall_rounds` we sample again, which breaks the loop.
@@ -306,6 +322,8 @@ def play_selfplay_game(evaluator: Any, seed: int, config: SelfPlayConfig) -> Gam
         evals=mcts.evals,
         duration=time.perf_counter() - started,
         truncated=truncated,
+        search_values=np.asarray(search_values, dtype=np.float32),
+        search_mask=np.asarray(search_mask, dtype=np.float32),
     )
 
 
