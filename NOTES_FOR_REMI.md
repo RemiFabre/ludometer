@@ -4,6 +4,65 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-09-06 — **Rust engine for Azul self-play**: bit-exact twin of the Python engine, tree walk 200x faster
+
+Done overnight from `docs/RUST_ENGINE.md` (plan: `docs/superpowers/plans/2026-09-06-rust-engine.md`).
+The crate `rust/ludometer-engine` (Python package `ludometer_rs`, built with maturin into
+`.venv`) holds the Azul rules, the PUCT tree with the leaf protocol, and the many-games
+arena. The net stays in PyTorch. Opt-in everywhere, the Python engine is untouched and
+still the default:
+
+- **Trainer**: `"selfplay": "rust"` (same knobs as `"batched"`; `configs/smoke5_rust.json`).
+- **Fleet**: `fleet launch --rust ...` builds the crate in the job (~2-3 min, rustup +
+  maturin) and runs the generator with `--engine rust`; `rust/` is now in the bundle.
+- **Gauntlet / agents**: `mcts:<ckpt>?sims=400&engine=rust` searches on the Rust tree with
+  the ordinary evaluator; `LUDOMETER_ENGINE=rust` swaps `get_game("azul")`'s rules.
+- **Benchmarks**: `ludometer.train.benchmark --games 4 --engine rust`,
+  `ludometer.cloud.bench --engine both --half`.
+
+**Exactness (the project's standard, "identical games given identical evaluations").**
+The Rust engine reproduces CPython's `random.Random` (MT19937 + `seed(int)`, `shuffle`,
+`randrange`, `random()`) in its `rng="python"` mode, so parity tests need no scripting:
+- rules: every observable (legal lists, `encode()` rows, `chance_key`, `fingerprint`,
+  `is_stochastic`, scores, outcome, census) identical on **10,000 random-play games from the
+  same seeds** and on **all 3,795 BGA replays** (`tests/test_rust_engine.py`,
+  `LUDOMETER_SLOW=1` for the full sets);
+- search: visit counts, policy, root value, win-Q/margin-Q identical to
+  `ludometer.train.mcts.MCTS` on isolated positions, across whole games with tree reuse,
+  through the leaf protocol, with `search_batch > 1` and virtual loss, and with the
+  margin head (`tests/test_rust_mcts.py`); `evals` and `nodes_created` counters match too;
+- arena: `GameRecord`s identical to `BatchedSelfPlay`'s array for array (states, policies,
+  values, margins, aux, masks, search values) with root noise off — `dirichlet_eps=0`, since
+  numpy's Dirichlet is the one stream not reproduced (`tests/test_rust_arena.py`);
+- statistics with noise on, 200 games per engine, tiny net: moves 63.5±0.7 vs 63.7±0.8,
+  outcome -0.05±0.07 vs -0.06±0.07, evals/game 4406±57 vs 4484±65, root value, policy entropy,
+  decisions — every |z| < 1;
+- full stack: `smoke5_rust` trains end to end and resumes; the hub loop runs with the Rust
+  generator (`tests/test_rust_stack.py`). 110 pytest tests + 21 cargo tests, all green; every
+  pre-existing suite I touched (selfplay_batched, gauntlet, arena, margin, pcr,
+  search_values, agents, train_mcts, tree_reuse, cloud) still passes.
+
+**Speed.** Rust tree walk **0.41 µs/simulation** (target was ≤ 6 µs; Python ~90 µs),
+clone+apply+legal 0.23 µs, encode 0.17 µs (`cargo run --release --example bench_tree`, on
+the loaded Mac). End to end the search cost is gone and what remains is the forward pass:
+tiny net on CPU, one driver, 32 games x 256 sims: **10.9k evals/s vs 3.2k** for the Python
+batched driver (3.4x), with the Rust driver spending 1.3 s in search vs 17 s in torch.
+So the lever with the Rust engine is **batch size**: raise `selfplay_games` (256-1024 per
+driver is cheap: ~0.5 MB per tree at 256 sims) and run 1-2 drivers per GPU instead of 6-8.
+MPS numbers on this Mac tonight are meaningless (big_t + the polish learner + a gauntlet
+saturate it); the clean measurement is the l4x1 bench job launched at 23:18
+(`fleet launch --entry bench --rust --extra "--engine both --games 256 --seconds 60 --half"`,
+job 6a9ca323e686246ca69a4824, bundle `bundle-3618ad7-20260905-231750.tar.gz`, $0.33 cap).
+Results below when it lands.
+
+**Pending / not done.** (1) Porcelain Rust-vs-Python gauntlet at sims=400, 100 games, running
+niced on 3 workers -> `runs/gates/rust_vs_python_porcelain_sims400.json`; the bar is 50 ± 10.
+(2) l4x1 numbers. (3) Wheels in CI (the job builds from source instead, ~2-3 min). (4) A
+corpus generated with it + a student gated on it: that is the other agent's call once (1)
+and (2) are in (ludometer-1a was told; they plan rlx_teacher2 and the porc_w generators).
+(5) The GUI still runs the Python engine; `engine_rs.AzulState` attributes are copies, so
+the hand-editing tests/GUI paths (`state.factories[0][0] = 1; recount()`) stay Python-only.
+
 ## 2026-09-05 — **Porcelain shipped**: 229-0-71 vs Cobalt over 300 games at matched think time
 
 **It is live** on https://remifabre-faience.static.hf.space/ (and the GitHub Pages stub),

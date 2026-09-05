@@ -312,3 +312,71 @@ at batch 8), so equivalence is layered:
 
 If step 1 shows the engines disagree on a rule, the Python engine is right
 until proven otherwise by a BGA replay: it has survived 3,795 of them.
+
+## 9. Status and results (2026-09-06, the night after the brief)
+
+Shipped, opt-in, on `main` (`rust/ludometer-engine`, package `ludometer_rs`;
+plan and per-task checklist in
+`docs/superpowers/plans/2026-09-06-rust-engine.md`; running log in
+`NOTES_FOR_REMI.md`).
+
+| layer | file | Python twin | selected by |
+|---|---|---|---|
+| rules | `rust/ludometer-engine/src/azul.rs` | `ludometer/azul/engine.py` | `ludometer.azul.engine_rs.AzulState`, `LUDOMETER_ENGINE=rust` |
+| tree + leaf protocol | `src/mcts.rs` | `ludometer/train/mcts.py` | `ludometer.train.mcts_rs.MCTS`, `?engine=rust` in agent specs |
+| arena | `src/arena.rs` | `ludometer/train/selfplay_batched.py` | `ludometer.train.selfplay_rust`, `"selfplay": "rust"`, `generator --engine rust`, `fleet launch --rust` |
+| RNG | `src/rng.rs` | CPython `random.Random` | `rng="python"` (tests) / `rng="fast"` (default, splitmix64) |
+
+Design decisions that differ from §5, and why:
+
+- **The state carries its bag order** (`[u8; 100]`, popped from the end like
+  `list.pop()`) and a 3-word RNG descriptor instead of a count-only bag: with
+  `rng="python"` the Rust engine replays CPython's Mersenne Twister exactly
+  (seeding, `shuffle`, `randrange`, `random()`), so "same seed, same game"
+  holds against the Python engine and the parity tests need no scripted deals.
+  The MT state is rebuilt from `(seed, outputs consumed)` at the rare real-game
+  refill; the state stays `Copy` (~250 bytes).
+- **Dirichlet noise is the one stream not reproduced** (numpy's PCG64 + gamma
+  sampler): exact tests run with `add_noise=False` or `dirichlet_eps=0`; the
+  noisy comparison is statistical.
+- **`advance()` re-roots without copying; the kept subtree is compacted into a
+  scratch arena at the next `start_search`**, so memory is bounded by two trees
+  whatever the game length.
+- **Softmax over legal logits happens in Rust** (`apply_logits`, float32 in
+  numpy's operation order) so the Python driver only runs the net; the exact
+  tests use `apply_leaves` with numpy-computed priors.
+
+Acceptance (§6), as of this writing:
+
+1. **Rules, exact**: 10,000 random-play games from seeds 0..9999 and all 3,795
+   BGA replays, every observable identical (`tests/test_rust_engine.py`,
+   `LUDOMETER_SLOW=1` runs the full sets in ~100 s).
+2. **Search, exact**: visits/policy/value/Q/margins identical to `MCTS` on
+   isolated positions, whole games with tree reuse, the pumped leaf protocol,
+   `search_batch=4` with virtual loss, margin head (`tests/test_rust_mcts.py`).
+   The arena reproduces `BatchedSelfPlay`'s `GameRecord`s array for array
+   (`tests/test_rust_arena.py`).
+3. **Statistical**: 200 games per engine, tiny net, noise on: moves 63.5±0.7 vs
+   63.7±0.8, outcome -0.05±0.07 vs -0.06±0.07, decisions 61.5 vs 61.7, evals/game
+   4406±57 vs 4484±65, mean root value, mean policy entropy 2.523±0.011 vs
+   2.517±0.010: every |z| < 1. Fixed-sims ladder rating: not run yet.
+4. **Full stack**: `configs/smoke5_rust.json` end to end + resume, the hub loop
+   with `--engine rust` (`tests/test_rust_stack.py`). Porcelain Rust vs Python at
+   `?sims=400`, 100 games: see `runs/gates/rust_vs_python_porcelain_sims400.json`
+   (running at the time of writing; the note in `NOTES_FOR_REMI.md` has the result).
+5. **Speed** (Mac M3 Pro, fully loaded by two training jobs and a gauntlet, so
+   absolute numbers are pessimistic): tree walk **0.41 µs/simulation** with a
+   constant evaluator (target ≤ 6; Python ~90), clone+apply+legal 0.23 µs,
+   encode 0.17 µs (`cargo run --release --example bench_tree`). End to end,
+   tiny net on CPU, one driver, 32 games x 256 sims: 10.9k evals/s Rust vs 3.2k
+   Python batched (search 1.3 s vs 31 s, torch 17 s vs 32 s). The forward pass
+   is now the whole cost, so **the lever is batch size**: `selfplay_games`
+   256-1024 per driver (~0.5 MB per tree at 256 sims), 1-2 drivers per GPU.
+   l4x1 numbers: the bench job `6a9ca323e686246ca69a4824` (`--engine both
+   --games 256 --half`), reported in `NOTES_FOR_REMI.md`.
+
+Not done: prebuilt wheels (the job builds from source behind `--rust`, ~2-3
+minutes); a corpus generated with the Rust engine and a student gated on it;
+the GUI (Python engine, by design). `engine_rs.AzulState` attributes are
+copies, so code that edits `state.factories[...]` by hand must use the Python
+engine or `to_dict`/`from_dict`.
