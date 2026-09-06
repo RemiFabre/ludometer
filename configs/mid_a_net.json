@@ -1,0 +1,16 @@
+{
+ "arch": "structured",
+ "input_size": 182,
+ "action_space": 180,
+ "embed": 128,
+ "layers": 2,
+ "heads": 4,
+ "ffn_mult": 2,
+ "body": 1280,
+ "body_blocks": 1,
+ "value_hidden": 160,
+ "policy_rank": 40,
+ "policy_global": true,
+ "margin_head": true,
+ "version": 2
+}

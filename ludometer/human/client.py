@@ -156,21 +156,28 @@ def endpoints() -> dict[str, str]:
 
 @dataclass
 class ClientConfig:
-    """Politeness budget. The defaults are the ones the report recommends.
+    """Politeness budget. The defaults are the conservative ones.
 
-    ``min_interval`` 3 s with ``jitter`` 1.5 s averages ~3.75 s between requests,
-    i.e. ~16/minute and ~23k/day if it ran flat out for 24 h — well under the
-    ``max_requests_per_day`` cap, which is the real limit. Both are deliberately
-    slower than a human clicking through replays, because a human does not do it
-    for eight hours straight.
+    ``min_interval`` 6 s with ``jitter`` 4 s means **one request every 6-10 s**,
+    uniformly — ~8/minute, and since an accepted table costs 2-3 requests, ~20-30 s
+    per game. ``max_requests_per_day`` 600 is then ~an hour of traffic a day and a
+    hard stop after that.
+
+    The reason these are slower than the 3 s/4000 the first recon proposed is
+    :class:`ReplayLimitReached`: BGA caps archived-game views per account per day,
+    the number is undocumented, and we will not rotate accounts to find out. So the
+    honest posture is to stay far under any plausible cap and take more days —
+    ``ludometer.human.fetch.CrawlPace`` holds the same numbers as named constants
+    and adds a randomized long pause every 20 tables. Raise them only with a
+    measured quota in hand.
     """
 
-    min_interval: float = 3.0
-    jitter: float = 1.5
+    min_interval: float = 6.0
+    jitter: float = 4.0
     timeout: float = 30.0
     max_retries: int = 3
     retry_backoff: float = 15.0
-    max_requests_per_day: int = 4000
+    max_requests_per_day: int = 600
     max_requests_per_run: int = 0  # 0 = no per-run cap
     host: str = BGA_HOST
     user_agent: str = USER_AGENT
@@ -312,17 +319,29 @@ class BgaClient:
     def fetch_request_token(self, path: str = "/gamepanel?game=azul") -> str | None:
         """Scrape ``bgaConfig.requestToken`` off any BGA page and remember it.
 
-        Costs one request. BGA embeds a per-session CSRF token in every page as
-        ``requestToken: '<hex>'`` inside the ``bgaConfig`` literal, and its own JS
-        replays it as the ``X-Request-Token`` header on some authenticated AJAX
-        calls — ``gamestats/getGames.html`` among them, per working community code
-        (``DavidEGx/bga-duel-finder``). Anonymous pages carry a token too, so this
-        works before login, but the token that matters is one fetched **with** the
-        cookies.
+        Costs one request. BGA embeds a per-session request token in every page as
+        ``requestToken: '<token>'`` inside the ``bgaConfig`` literal, and its own JS
+        replays it as the ``X-Request-Token`` header on the authenticated AJAX
+        calls — ``gamestats/getGames.html``, ``archive/logs.html`` and
+        ``table/tableinfos.html`` all reject the session with **code 806** without
+        it (verified live 2026-08-17). The token is a **short mixed-case
+        alphanumeric** string (e.g. ``gNZGNxgP5p7MOzj``, 15 chars) — *not* the
+        lowercase-hex value an earlier guess assumed, which is why the first
+        authenticated call failed. It also **rotates on every page load** while the
+        session stays the same, so call this once per run and reuse the result.
+        Anonymous pages carry a token too, so this works before login, but the
+        token that matters is one fetched **with** the cookies.
         """
         _status, body = self.get(path)
+        # The token BGA embeds in `bgaConfig` is a short mixed-case alphanumeric
+        # string (e.g. `requestToken: 'gNZGNxgP5p7MOzj'`, 15 chars), NOT the
+        # lowercase-hex CSRF token an earlier guess assumed. Match letters+digits
+        # of any case and any realistic length; anchoring on `bgaConfig`'s
+        # `requestToken:` key keeps this from catching the many unrelated OAuth
+        # `requestToken` occurrences elsewhere on the page.
         match = re.search(
-            r"requestToken:\s*'([0-9a-f]{16,128})'", body.decode("utf-8", "replace")
+            r"requestToken:\s*'([A-Za-z0-9]{8,128})'",
+            body.decode("utf-8", "replace"),
         )
         self.request_token = match.group(1) if match else None
         return self.request_token

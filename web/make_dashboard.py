@@ -139,6 +139,8 @@ class Run:
         self.elo, self.elo_dropped = read_jsonl(directory / "elo.jsonl")
 
         self.run_name = str(self.status.get("run") or self.config.get("run") or self.name)
+        # runs predating ludometer/games.py have no "game" key and are all Azul
+        self.game = str(self.config.get("game") or "azul").lower()
         self.state = str(self.status.get("state") or "unknown").lower()
         if self.state not in ("running", "done", "failed"):
             self.state = "unknown"
@@ -863,7 +865,23 @@ def winrate_chart(run: Run) -> str:
 
 
 def overview_chart(runs: list[Run]) -> str:
-    """Cross-run comparison, only worth drawing when there are several runs."""
+    """Cross-run comparison, one chart per game.
+
+    Elo is only defined against a game's own anchor pool, so an Azul 1500 and a
+    Uno 1500 are different numbers and never share an axis.
+    """
+    games = []
+    for run in runs:
+        if run.game not in games:
+            games.append(run.game)
+    if len(games) > 1:
+        return "".join(
+            _overview_one(g, [r for r in runs if r.game == g]) for g in games
+        )
+    return _overview_one(games[0] if games else "azul", runs)
+
+
+def _overview_one(game: str, runs: list[Run]) -> str:
     # Two distinct x values minimum, or the run contributes a legend entry with
     # no visible line.
     usable = [r for r in runs if len({p[0] for p in r.elo_points}) >= 2]
@@ -896,7 +914,7 @@ def overview_chart(runs: list[Run]) -> str:
         for r in usable
     ]
     return figure(
-        "All runs",
+        f"All {game} runs",
         "Every run's Elo curve on one scale — the anchor pool is fixed, so they are comparable.",
         plot.svg("Elo curves for all runs"),
         legend(entries),
@@ -1010,7 +1028,7 @@ def run_panel(run: Run, primary: bool) -> str:
     return (
         f'<section class="panel{"" if primary else " panel-secondary"}">'
         f'<header class="panel-head">'
-        f'<div class="run-id"><span class="eyebrow">run</span>'
+        f'<div class="run-id"><span class="eyebrow">{esc(run.game)}</span>'
         f'<h2>{esc(run.run_name)}</h2></div>'
         f'<div class="panel-state">{state_pill(run)}{heartbeat(run)}</div>'
         f"</header>"
@@ -1590,7 +1608,7 @@ def runs_table_html(runs: list[Run]) -> str:
     if not rated:
         return '<p class="empty">No rated runs found under runs/.</p>'
     headers = [
-        "run", "network", "sims/move", "games", "wall clock",
+        "run", "game", "network", "sims/move", "games", "wall clock",
         "best Elo", "latest Elo", "Elo / 1k games", "R²",
     ]
     rows = []
@@ -1600,6 +1618,7 @@ def runs_table_html(runs: list[Run]) -> str:
         rows.append(
             [
                 run.run_name,
+                run.game,
                 s["net"],
                 fmt_int(s["sims"]),
                 fmt_int(s["games"]),

@@ -10,18 +10,26 @@ It writes the notifications Azul really uses — ``factoriesFilled``,
 ``tilesSelected`` + ``tilesPlacedOnLine`` per turn, ``placeTileOnWall`` at each
 round end — with real tile objects (``{id, type, column, line, location}``) and
 BGA's tile-type numbering (:data:`~ludometer.human.parse.AZUL_COLOR_MAP`), so it
-exercises the same code path a downloaded log will:
+exercises the same code path a downloaded log does. The encodings below were
+**confirmed against a real archive log on 2026-08-17** (table 897976436, see
+``docs/HUMAN_GAMES.md`` §4) and the fixture now matches them exactly:
 
-* factories are **0-based** (``location: "factory_0"``), and source
-  ``NUM_FACTORIES`` (5, past the last display) means the center;
+* the ``factories`` list is **1-based**: entry 0 is the center/"deck" slot (it
+  holds only the first-player marker at fill time), entries 1..5 are the
+  factories. ``tilesSelected.fromFactory`` uses the same numbering — ``0`` is the
+  center, ``1``..``5`` the factories;
 * pattern lines are **1-based** in ``line``, ``0`` meaning the floor line;
+* wall placement ``column`` (and deal ``column``) are **1-based** (1..5), so the
+  parser de-bases them before comparing to ``convert.wall_col`` (0-based);
 * tile ``type`` is ``1`` Black, ``2`` Cyan, ``3`` Blue, ``4`` Yellow, ``5`` Red,
   and ``0`` is the first-player marker;
 * each wall placement carries the fixed wall's ``column``, i.e.
-  ``(colour + row) % 5``.
+  ``(colour + row) % 5`` (1-based here);
+* the final scores are reported in ``tableinfos`` (``infos_payload`` below), not
+  in the log — a real archive log has no cumulative-score notification. This
+  fixture *also* emits ``score`` notifications so the score-mismatch guard has
+  something to mutate, and those take priority (see ``parse.parse_log``).
 
-The last three are confirmed from a working third-party Azul parser; the center
-and floor encodings are the parts still to verify (``docs/HUMAN_GAMES.md`` §8).
 The point of the fixture is that the *code* does not care: change
 :class:`~ludometer.human.parse.LogSchema` and the same tests still pass.
 """
@@ -35,7 +43,6 @@ from ludometer.azul.engine import (
     CENTER,
     FLOOR,
     NUM_COLORS,
-    NUM_FACTORIES,
     AzulState,
     decode_action,
 )
@@ -152,10 +159,10 @@ class SyntheticGame:
                     "log": "${player_name} takes ${number} ${color} tiles",
                     "args": {
                         "player_id": player,
-                        "fromFactory": NUM_FACTORIES if source == CENTER else source,
+                        "fromFactory": 0 if source == CENTER else source + 1,
                         "type": _bga_type(color),
                         "selectedTiles": [
-                            _tile(color, f"factory_{source}") for _ in range(taken)
+                            _tile(color, "factory") for _ in range(taken)
                         ],
                         "discardedTiles": [],
                     },
@@ -189,7 +196,7 @@ class SyntheticGame:
                                         "placedTile": {
                                             "id": 1,
                                             "type": _bga_type(wall_color),
-                                            "column": column,
+                                            "column": column + 1,  # BGA is 1-based
                                             "line": row + 1,
                                             "location": "wall",
                                         },
@@ -233,7 +240,19 @@ class SyntheticGame:
         return {"status": 1, "data": {"valid": 1, "data": packets}}
 
     def infos_payload(self, table_id: int = 999_000_001) -> dict[str, Any]:
-        """A fake ``tableinfos`` payload shaped like BGA's, for the filter tests."""
+        """A fake ``tableinfos`` payload shaped like BGA's, for the filter tests.
+
+        Carries the final scores in ``data.result.player`` the way a real payload
+        does (a real archive log has no cumulative-score notification), so the
+        ``parse.scores_from_infos`` fallback is exercised end to end.
+        """
+        pairs = list(
+            zip(
+                (self.seat_to_player(0), self.seat_to_player(1)),
+                self.scores,
+                strict=True,
+            )
+        )
         return {
             "status": 1,
             "data": {
@@ -246,11 +265,13 @@ class SyntheticGame:
                         "player_elo": "2050",
                         "score": str(score),
                     }
-                    for pid, score in zip(
-                        (self.seat_to_player(0), self.seat_to_player(1)),
-                        self.scores,
-                        strict=True,
-                    )
+                    for pid, score in pairs
+                },
+                "result": {
+                    "player": [
+                        {"player_id": str(pid), "score": str(score)}
+                        for pid, score in pairs
+                    ]
                 },
                 "options": {},
             },
@@ -277,17 +298,22 @@ def _tile(color: int, location: str, tile_id: int = 0) -> dict[str, Any]:
     }
 
 
+def _marker_tile(tile_id: int = 0) -> dict[str, Any]:
+    """The first-player marker tile (``type`` 0), which the center slot holds."""
+    return {"id": tile_id, "type": 0, "column": 0, "line": 0, "location": "deck"}
+
+
 def _deal_entry(factories: list[list[int]], round_index: int) -> dict[str, Any]:
+    # Real BGA shape: a 1-based list whose entry 0 is the center/"deck" slot (the
+    # first-player marker) and entries 1..5 are the factories.
     return {
         "uid": f"deal{round_index}",
         "type": "factoriesFilled",
         "log": "",
         "args": {
             "remainingTiles": None,
-            "factories": [
-                [_tile(color, f"factory_{index}") for color in factory]
-                for index, factory in enumerate(factories)
-            ],
+            "factories": [[_marker_tile()]]
+            + [[_tile(color, "factory") for color in factory] for factory in factories],
         },
     }
 

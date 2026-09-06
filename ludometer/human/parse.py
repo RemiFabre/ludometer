@@ -171,6 +171,11 @@ class ReplayGame:
     final_scores: dict[int, int] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
+    #: BGA player id who resigned, or ``None`` for a game that ran to its natural
+    #: end. When set, the game stopped at the concession: the picks are those played
+    #: up to it and :func:`ludometer.human.convert.convert_game` scores it as a loss
+    #: for this player rather than requiring a terminal engine state.
+    conceded_by: int | None = None
 
     def seat_of(self, player_id: int) -> int:
         try:
@@ -240,6 +245,33 @@ class LogSchema:
         "takeFirstPlayer",
         "firstPlayer",
     )
+    #: "take that back": a player rewound a move before confirming it. BGA lets a
+    #: turn be undone in two steps, and emits one notification per step **in reverse
+    #: order** — confirmed across the real corpus (2026-08-17):
+    #:
+    #: * ``undoSelectLine`` undoes the *placement* (``tilesPlacedOnLine``): the tiles
+    #:   go back into the hand, so the turn re-opens as a pending selection. It is
+    #:   always immediately preceded by a ``tilesPlacedOnLine``.
+    #: * ``undoTakeTiles`` undoes the *take* (``tilesSelected``): the open selection
+    #:   is cancelled entirely. It is always immediately preceded either by a
+    #:   ``tilesSelected`` (undo of an un-placed take) or by an ``undoSelectLine``
+    #:   (undo of a fully-placed turn, placement first then take).
+    #:
+    #: :func:`parse_log` must *rewind* these, not ignore them: the reconstructed move
+    #: sequence has to match what finally happened at the table, or the engine replay
+    #: desynchronises and every following move looks illegal.
+    undo_place_types: tuple[str, ...] = ("undoSelectLine", "undoPlaceTiles")
+    undo_take_types: tuple[str, ...] = ("undoTakeTiles", "undoSelect")
+    #: A player resigned. The game ends at that notification (confirmed: it is always
+    #: the last move notification in the log); the moves played up to it are kept and
+    #: the outcome is the resignation result — the conceder loses. Handled by
+    #: :func:`ludometer.human.convert.convert_game`, which reads
+    #: :attr:`ReplayGame.conceded_by`.
+    concede_types: tuple[str, ...] = (
+        "playerConcedeGame",
+        "playerGiveUp",
+        "concede",
+    )
     #: Framework-level notifications that every BGA game emits and that carry no
     #: move information (the first four are confirmed present in real logs).
     #: Anything NOT listed here and not recognised above is a fatal parse error, on
@@ -259,6 +291,26 @@ class LogSchema:
         "tableWindowClose",
         "history_history",
         "resend",
+        # Confirmed present in a real Azul archive log (2026-08-17) and carrying no
+        # move information — they are the human-readable "…completed a line/column…"
+        # text lines that mirror a real notification, the last-round banner, and the
+        # end-of-game per-tile score breakdown. The authoritative final score is read
+        # from `tableinfos` (see `scores_from_infos`), not from `endScore`, whose
+        # `points` are the *final-round* increment, not a total.
+        "placeTileOnWallTextLogDetails",
+        "emptyFloorLineTextLogDetails",
+        "completeLineLogDetails",
+        "completeColumnLogDetails",
+        # `completeColorLogDetails` is the same family (a "…completed a colour…"
+        # human-readable log line, present in a handful of real games) and carries
+        # no move information.
+        "completeColorLogDetails",
+        "lastRound",
+        "endScore",
+        # Turn-based (holiday) clock bookkeeping — "${player_name} uses a holiday
+        # time joker (+${nb_days} days thinking time)". Args are player_name/nb_days
+        # only (verified on tables 779195006 and 781529784); no move information.
+        "timeJokerUsed",
     )
     arg_aliases: dict[str, tuple[str, ...]] = field(
         default_factory=lambda: {
@@ -283,23 +335,29 @@ class LogSchema:
     color_map: dict[int, int] | None = field(
         default_factory=lambda: dict(AZUL_COLOR_MAP)
     )
-    #: **Unconfirmed**: how the log names the center pile in ``fromFactory``. With
-    #: 0-based displays (``factory_0`` ... ``factory_4`` for two players) the
-    #: natural encoding is the next index up, which is why any source ``>=
-    #: NUM_FACTORIES`` is read as the center; these explicit values are the escape
-    #: hatch for a negative or sentinel encoding.
-    center_values: tuple[int, ...] = (-1, 99)
-    #: **Unconfirmed**: how the log names the floor line in ``line``. With 1-based
-    #: pattern lines, 0 is the floor; a wrong guess here makes moves illegal or
-    #: scores mismatch, so the converter will catch it — see docs §8.
+    #: **Confirmed live 2026-08-17**: the log numbers the center pile ``0`` in
+    #: ``tilesSelected.fromFactory`` (the five real factories are ``1``..``5``), and
+    #: ``factoriesFilled.args.factories`` is the *same* 1-based list — index 0 is the
+    #: center/"deck" slot (it holds only the first-player marker at fill time) and
+    #: indices 1..5 are the factories. So ``center_values`` includes ``0``; anything
+    #: ``>= NUM_FACTORIES`` after de-basing is also treated as the center for
+    #: robustness, and the negative/sentinel escapes are kept.
+    center_values: tuple[int, ...] = (0, -1, 99)
+    #: **Confirmed live 2026-08-17**: pattern lines are 1..5 with ``0`` the floor, so
+    #: this floor set and ``lines_one_based`` below are both correct. Applies to
+    #: ``tilesPlacedOnLine.line`` and to the wall placement's ``line``.
     floor_values: tuple[int, ...] = (0, -1, 6, 9)
-    #: **Unconfirmed**: ``True`` when the log's pattern lines are 1..5 rather than
-    #: 0..4. Applies to ``tilesPlacedOnLine.line`` and to the wall placement's
-    #: ``line``.
+    #: **Confirmed live 2026-08-17**: ``True`` — the log's pattern lines are 1..5.
     lines_one_based: bool = True
-    #: ``True`` when factory ids in the log are 1..5 rather than 0..4. The
-    #: ``location: "factory_0"`` strings say 0-based, so this defaults to False.
-    factories_one_based: bool = False
+    #: **Confirmed live 2026-08-17**: ``True`` — factory ids (``fromFactory`` and the
+    #: ``factories`` array index) are 1..5, with 0 = center. The earlier guess of
+    #: 0-based ``factory_0`` strings was wrong: the real tile ``location`` is just
+    #: ``"factory"`` and the numbering lives in ``fromFactory`` / the array index.
+    factories_one_based: bool = True
+    #: **Confirmed live 2026-08-17**: ``True`` — the wall placement's ``column`` (and
+    #: the deal tiles' ``column``) are 1..5. ``convert.wall_col`` returns a 0-based
+    #: column, so the wall column must be de-based by one before comparison.
+    columns_one_based: bool = True
     #: Marker tile ``type``, excluded from every colour count.
     marker_tile_type: int = MARKER_TILE_TYPE
 
@@ -509,14 +567,25 @@ def _parse_factories(
                 per_factory[index].append(raw)
                 colors.append(raw)
         return per_factory
+    # The real (2026-08-17) shape is 1-based: entry 0 is the center/"deck" slot
+    # (it carries only the first-player marker at fill time), entries 1..5 are the
+    # factories — the same numbering `fromFactory` uses. Route each array index
+    # through `_map_source` (which knows `factories_one_based` + `center_values`),
+    # drop whatever lands on the center, and reject a genuinely oversized deal
+    # (a 3-/4-player table) rather than silently truncating it.
+    real_factories = 0
     for index, tiles in enumerate(value):
-        if index >= NUM_FACTORIES:
+        dest = _map_source(index, schema)
+        if dest == CENTER:
+            continue
+        real_factories += 1
+        if dest >= NUM_FACTORIES or real_factories > NUM_FACTORIES:
             raise ParseError(
-                f"deal lists {len(value)} factories, the 2-player game has "
-                f"{NUM_FACTORIES} (a 3- or 4-player table has more)"
+                f"deal lists {len(value)} slots, more than the 2-player game's "
+                f"{NUM_FACTORIES} factories plus a center (a 3-/4-player table)"
             )
         for raw in _tile_types(tiles, schema, "deal"):
-            per_factory[index].append(raw)
+            per_factory[dest].append(raw)
             colors.append(raw)
     return per_factory
 
@@ -560,6 +629,79 @@ def observed_color_ids(payload: Any, schema: LogSchema = DEFAULT_SCHEMA) -> list
     return sorted(ids)
 
 
+def scores_from_infos(infos: dict[str, Any] | None) -> dict[int, int]:
+    """BGA's authoritative final scores, keyed by player id, from ``tableinfos``.
+
+    A real Azul archive log does **not** carry a cumulative-score notification —
+    ``endScore`` reports only the final-round *increment* per player. The reported
+    final scores instead live in the table metadata, in two redundant places
+    (confirmed live 2026-08-17)::
+
+        data.result.player[]          -> {"player_id": "...", "score": "72", ...}
+        data.gameResult.rankedTeams[] -> {"players": [{"id": ..., "score": 72}]}
+
+    Either is read here; the map is empty when neither is present (the synthetic
+    fixture uses log ``score`` notifications instead, and those still take
+    priority — see :func:`parse_log`).
+    """
+    data = (infos or {}).get("data", infos or {})
+    if not isinstance(data, dict):
+        return {}
+    out: dict[int, int] = {}
+    result = data.get("result")
+    if isinstance(result, dict):
+        players = result.get("player")
+        if isinstance(players, list):
+            for p in players:
+                if isinstance(p, dict) and p.get("player_id") and p.get("score") is not None:
+                    try:
+                        out[int(p["player_id"])] = int(p["score"])
+                    except (TypeError, ValueError):
+                        pass
+    if not out:
+        game_result = data.get("gameResult")
+        teams = game_result.get("rankedTeams") if isinstance(game_result, dict) else None
+        if isinstance(teams, list):
+            for team in teams:
+                for p in (team.get("players") or []) if isinstance(team, dict) else []:
+                    if isinstance(p, dict) and p.get("id") is not None and p.get("score") is not None:
+                        try:
+                            out[int(p["id"])] = int(p["score"])
+                        except (TypeError, ValueError):
+                            pass
+    return out
+
+
+def conceder_from_infos(infos: dict[str, Any] | None) -> int | None:
+    """The conceding player id, from ``tableinfos``, for logs with no concede notification.
+
+    A few real concessions (2 of 28 in the first 400-game corpus) carry **no**
+    ``playerConcedeGame`` notification at all — the log just stops mid-game. The
+    concession is still visible in the table metadata: ``data.result.endgame_reason``
+    is ``"normal_concede_end"`` and BGA reports a nominal 1-0, with the **conceder
+    holding the 0** (verified against all 26 notification-carrying concessions in
+    the same corpus: the zero-score player is the conceder in every one). Returns
+    the conceder's player id only when the reason matches and exactly one player
+    has score 0; ``None`` otherwise.
+    """
+    data = (infos or {}).get("data", infos or {})
+    if not isinstance(data, dict):
+        return None
+    result = data.get("result")
+    if not isinstance(result, dict) or result.get("endgame_reason") != "normal_concede_end":
+        return None
+    zeros = []
+    players = result.get("player")
+    if isinstance(players, list):
+        for p in players:
+            if isinstance(p, dict) and p.get("player_id") and str(p.get("score")) == "0":
+                try:
+                    zeros.append(int(p["player_id"]))
+                except (TypeError, ValueError):
+                    return None
+    return zeros[0] if len(zeros) == 1 else None
+
+
 # ------------------------------------------------------------------------ parse
 def parse_log(
     payload: Any,
@@ -586,6 +728,7 @@ def parse_log(
     walls: list[WallPlacement] = []
     scores: dict[int, int] = {}
     first_player: int | None = None
+    conceded_by: int | None = None
     unknown: dict[str, int] = {}
     pending: dict[str, Any] | None = None
     warnings: list[str] = []
@@ -639,6 +782,17 @@ def parse_log(
             }
         elif name in schema.place_types:
             if pending is None:
+                # A `tilesPlacedOnLine` with no open selection and no *coloured*
+                # tiles is the first-player-marker going to the floor: BGA emits a
+                # standalone placement (marker in `discardedTiles`, `placedTiles`
+                # empty, `type` 0) right before the `tilesSelected` of the turn that
+                # takes from the center. It is not a pick — our engine assigns the
+                # marker to whoever first takes from the center on its own (docs
+                # §4.2 row 7) — so skip it. A placement that *does* carry coloured
+                # tiles with no selection is a genuinely dropped turn: still fatal.
+                placed = _tile_types(schema.arg(args, "placed"), schema, "placed")
+                if not placed:
+                    continue
                 raise ParseError(
                     f"table {table_id} move {move_id}: tiles placed without a selection"
                 )
@@ -684,6 +838,49 @@ def parse_log(
             player = schema.arg(args, "player")
             if player is not None and first_player is None:
                 first_player = _as_int(player, "marker player")
+        elif name in schema.undo_place_types:
+            # Undo a placement: the tiles come back into the hand, so the last
+            # committed turn re-opens as a pending selection (a re-placement, or an
+            # `undoTakeTiles`, follows). Confirmed always preceded by a placement.
+            if pending is not None:
+                # a placement was undone while another selection is still open —
+                # impossible in BGA's own flow; refuse rather than corrupt state
+                raise ParseError(
+                    f"table {table_id} move {move_id}: {name} with a selection "
+                    "still open"
+                )
+            if not picks:
+                raise ParseError(
+                    f"table {table_id} move {move_id}: {name} with no placed turn "
+                    "to undo"
+                )
+            last = picks.pop()
+            pending = {
+                "player": last.player_id,
+                "source": last.source,
+                "color": last.color,
+                "count": last.count,
+            }
+        elif name in schema.undo_take_types:
+            # Undo a take: whatever selection is currently open is cancelled. It is
+            # always preceded by the `tilesSelected` it cancels, or by the
+            # `undoSelectLine` that just re-opened the turn, so a selection must be
+            # pending here.
+            if pending is None:
+                raise ParseError(
+                    f"table {table_id} move {move_id}: {name} with no open "
+                    "selection to undo"
+                )
+            pending = None
+        elif name in schema.concede_types:
+            # A resignation ends the game where it stands. Drop any half-made turn
+            # (the resigning player never completed it) and stop reading moves — the
+            # concession is the last move notification in every real game.
+            player = schema.arg(args, "player")
+            if player is not None:
+                conceded_by = _as_int(player, "concede player")
+            pending = None
+            break
         elif name in schema.ignore_types:
             continue
         else:
@@ -695,9 +892,23 @@ def parse_log(
             "`python -m ludometer.human.cli inspect <raw.json.gz>` and extend "
             "LogSchema (docs/HUMAN_GAMES.md §4.4)"
         )
+    if conceded_by is None:
+        # A concession with no `playerConcedeGame` in the log at all (rare but
+        # real): the metadata still records it, and the half-made turn — if any —
+        # is dropped exactly as the notification path does.
+        conceded_by = conceder_from_infos(infos)
+        if conceded_by is not None:
+            pending = None
+            warnings.append("concession read from tableinfos (no concede notification)")
     if pending is not None:
         flush(0, FLOOR)
         warnings.append("the last turn had no placement notification")
+
+    # Log `score` notifications win when present (the fixture uses them, and the
+    # score-mismatch guard depends on reading them); real archive logs carry none,
+    # so fall back to the authoritative final scores in `tableinfos`.
+    if len(scores) < 2:
+        scores = scores_from_infos(infos) or scores
 
     color_map = schema.color_map or _infer_color_map(raw_colors)
     options = dict(((infos or {}).get("data", infos or {})).get("options", {}) or {})
@@ -736,6 +947,7 @@ def parse_log(
         final_scores=scores,
         options=options,
         warnings=tuple(warnings),
+        conceded_by=conceded_by,
     )
 
 
@@ -757,12 +969,15 @@ def _wall_placements(
         if raw == schema.marker_tile_type:
             continue
         raw_colors.append(raw)
+        column = _as_int(tile.get("column"), "wall column")
+        if schema.columns_one_based:
+            column -= 1  # BGA columns are 1..5; wall_col() is 0-based
         out.append(
             WallPlacement(
                 player_id=_as_int(player, "wall player"),
                 color=raw,
                 row=_map_line(tile.get("line"), schema, "wall row"),
-                column=_as_int(tile.get("column"), "wall column"),
+                column=column,
             )
         )
     return out

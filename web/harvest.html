@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="refresh" content="20" />
+<title>Ludometer Harvest Monitor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  color-scheme: dark;
+  --plane: #0b1013; --surface: #151c20; --surface-2: #1b2429;
+  --ink: #eaf0f1; --ink-2: #9dafb5; --muted: #6d8188;
+  --grid: #1f2a2f; --axis: #36484f; --hairline: rgba(234,240,241,0.10);
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b; --accent: #3987e5;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ui-sans-serif, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --r: 10px;
+}
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--plane); color: var(--ink);
+  font-family: var(--sans); font-size: 15px; line-height: 1.55;
+  padding: 0 18px 64px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+
+.masthead { padding: 34px 0 20px; border-bottom: 1px solid var(--hairline); }
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.brand h1 { font-size: 26px; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+.thesis { font-family: var(--serif); font-style: italic; color: var(--ink-2); font-size: 16px; }
+.masthead-meta {
+  margin: 12px 0 0; display: flex; gap: 18px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.eyebrow {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.panel { padding: 26px 0 6px; border-bottom: 1px solid var(--hairline); }
+.panel-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+.panel-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.run-note { color: var(--ink-2); font-size: 13.5px; margin: 0 0 14px; }
+
+.tiles {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+}
+.tile {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r); padding: 13px 15px 15px;
+}
+.tile-hero { background: var(--surface-2); }
+.tile-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--muted);
+}
+.tile-value {
+  font-size: 27px; font-weight: 600; letter-spacing: -0.02em; margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.tile-hero .tile-value { font-size: 36px; color: var(--accent); }
+.tile-sub { color: var(--ink-2); font-size: 12.5px; margin-top: 4px; }
+
+.bars { display: grid; gap: 18px; }
+.bar-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.bar-label { font-size: 14px; }
+.bar-value { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+.bar-track {
+  margin-top: 7px; height: 12px; border-radius: 999px; overflow: hidden;
+  background: var(--grid); border: 1px solid var(--hairline);
+}
+.bar-fill { height: 100%; border-radius: 999px; min-width: 0; }
+.bar-note { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+.tbl-wrap { overflow-x: auto; margin-top: 16px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tbl th {
+  text-align: left; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted);
+  padding: 0 12px 7px 0; border-bottom: 1px solid var(--grid); white-space: nowrap;
+}
+.tbl td {
+  padding: 6px 12px 6px 0; border-bottom: 1px solid var(--grid);
+  color: var(--ink-2); vertical-align: top;
+}
+.tbl td:first-child, .tbl th:first-child { white-space: nowrap; }
+.tag {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.08em; border: 1px solid var(--hairline); color: var(--ink-2);
+}
+.tag-ok { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.tag-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.tag-crit { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 45%, transparent); }
+.empty-note { color: var(--muted); font-size: 13.5px; margin: 14px 0 0; }
+
+.banner {
+  margin: 22px 0 0; padding: 18px 20px; border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--hairline);
+}
+.banner h2 { margin: 6px 0 8px; font-size: 20px; }
+.banner p { margin: 0 0 8px; color: var(--ink-2); font-size: 14px; }
+.banner pre {
+  font-family: var(--mono); font-size: 12.5px; background: var(--plane);
+  border: 1px solid var(--hairline); border-radius: 7px; padding: 11px 13px;
+  overflow-x: auto; color: var(--ink);
+}
+.banner-crit { border-color: color-mix(in srgb, var(--crit) 60%, transparent); background: color-mix(in srgb, var(--crit) 10%, var(--surface)); }
+.banner-warn { border-color: color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--warn) 8%, var(--surface)); }
+.banner-idle { border-style: dashed; }
+.banner-head {
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--muted);
+}
+.banner-kind { color: var(--crit); }
+.banner-detail code { color: var(--ink-2); overflow-wrap: anywhere; }
+
+.foot {
+  margin-top: 38px; padding-top: 16px; border-top: 1px solid var(--hairline);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  display: flex; gap: 18px; flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  body { padding: 0 13px 48px; font-size: 14.5px; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .tile-value { font-size: 23px; }
+  .tile-hero .tile-value { font-size: 30px; }
+  .brand h1 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head><body>
+<div class="wrap"><header class="masthead"><div class="brand"><h1>Harvest</h1><p class="thesis">Human games, one elite player at a time.</p></div><div class="masthead-meta"><span>generated 2026-09-06 11:27:06</span><span>auto-refresh 20s</span><span>state state.json</span><span>3,999 games fetched</span><span>stopped: replay-limit</span></div></header><section class="banner banner-crit"><div class="banner-head"><span class="banner-kind">replay-limit</span><span class="banner-when">recorded 2026-09-06T04:57:55+00:00</span></div><h2>BGA&#x27;s daily replay quota is reached</h2><p>This is the expected way a day ends: BGA caps how many archived games one account may open per day. The crawl stopped on it rather than hammering past it, nothing is lost, and re-running in ~24 h resumes at the exact table it stopped on.</p><p class="banner-detail"><code>/archive/archive/logs.html?table=306255001&amp;translated=true: You have reached a limit (replay)</code></p></section><section class="panel"><header class="panel-head"><span class="eyebrow">now</span><h2>Ladder position</h2></header><p class="run-note">last fetch 4.5 h ago, cursor written 2026-09-06T04:57:55+00:00</p><div class="tiles"><div class="tile tile-hero"><div class="tile-label">Rank being crawled</div><div class="tile-value">#2</div><div class="tile-sub">of 200 in the ladder snapshot</div></div><div class="tile"><div class="tile-label">Player</div><div class="tile-value">CN_Azul</div><div class="tile-sub">displayed Elo 1,159 (raw 2460)</div></div><div class="tile"><div class="tile-label">Tables done for this player</div><div class="tile-value">2,358</div><div class="tile-sub">3,171 ranked games on record</div></div><div class="tile"><div class="tile-label">Players finished</div><div class="tile-value">1</div></div><div class="tile"><div class="tile-label">Replays today</div><div class="tile-value">200 / 1,000,000</div><div class="tile-sub">pace from state.json</div></div><div class="tile"><div class="tile-label">Requests today</div><div class="tile-value">603 / 1,000,000</div><div class="tile-sub">604 in total</div></div></div></section><section class="panel"><header class="panel-head"><span class="eyebrow">yield</span><h2>Collected</h2></header><div class="tiles"><div class="tile"><div class="tile-label">Games fetched</div><div class="tile-value">3,999</div><div class="tile-sub">4,137 decided</div></div><div class="tile"><div class="tile-label">Passed engine validation</div><div class="tile-value">3,995</div><div class="tile-sub">replayed move for move in our engine</div></div><div class="tile"><div class="tile-label">Rejected</div><div class="tile-value">143</div><div class="tile-sub">fetch filters + replay validation</div></div><div class="tile"><div class="tile-label">Target record</div><div class="tile-value">3,658W/328L/9D</div><div class="tile-sub">the elite player&#x27;s results, not seat 0&#x27;s</div></div></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>rejection reason</th><th>tables</th></tr></thead><tbody><tr><td>below Elo floor</td><td><span class="mono">125</span></td></tr><tr><td>unranked or wrong mode</td><td><span class="mono">6</span></td></tr><tr><td>replay failed validation</td><td><span class="mono">5</span></td></tr><tr><td>replay unavailable</td><td><span class="mono">4</span></td></tr><tr><td>not 2 players</td><td><span class="mono">3</span></td></tr></tbody></table></div></section><section class="panel"><header class="panel-head"><span class="eyebrow">targets</span><h2>Progress</h2></header><div class="bars"><div class="bar-row"><div class="bar-head"><span class="bar-label">Positions toward the full target</span><span class="bar-value">115k / 550k</span></div><div class="bar-track" role="img" aria-label="Positions toward the full target: 20.9 percent of 550k"><div class="bar-fill" style="width:20.89%;background:#3987e5"></div></div><div class="bar-note">20.89% of 550k</div></div><div class="bar-row"><div class="bar-head"><span class="bar-label">Games toward the 2.0k-game milestone</span><span class="bar-value">4.0k / 2.0k</span></div><div class="bar-track" role="img" aria-label="Games toward the 2.0k-game milestone: 100.0 percent of 2.0k"><div class="bar-fill" style="width:100.00%;background:#199e70"></div></div><div class="bar-note">100.0% of target</div></div><div class="bar-row"><div class="bar-head"><span class="bar-label">Games toward the 10k-game target</span><span class="bar-value">4.0k / 10k</span></div><div class="bar-track" role="img" aria-label="Games toward the 10k-game target: 40.0 percent of 10k"><div class="bar-fill" style="width:39.99%;background:#c98500"></div></div><div class="bar-note">40.0% of target</div></div><div class="bar-row"><div class="bar-head"><span class="bar-label">Elite-only positions vs all decision points</span><span class="bar-value">115k / 219k</span></div><div class="bar-track" role="img" aria-label="Elite-only positions vs all decision points: 52.5 percent of 219k"><div class="bar-fill" style="width:52.53%;background:#d55181"></div></div><div class="bar-note">52.5% of replayed decisions are the target player&#x27;s; the rest are validated but never trained on</div></div></div><p class="run-note">target Elo floor: raw 1950 (displayed 650); opponent rows: drop</p></section><section class="panel"><header class="panel-head"><span class="eyebrow">arithmetic</span><h2>Rate and time to milestones</h2></header><div class="tiles"><div class="tile"><div class="tile-label">Fetch rate</div><div class="tile-value">116.7/h</div><div class="tile-sub">pace allows one request every 6-10s</div></div><div class="tile"><div class="tile-label">2.0k games</div><div class="tile-value">reached</div><div class="tile-sub">reached of fetching</div></div><div class="tile"><div class="tile-label">10k games</div><div class="tile-value">today</div><div class="tile-sub">2.1 d of fetching</div></div><div class="tile"><div class="tile-label">Days assume</div><div class="tile-value">1,000,000/day</div><div class="tile-sub">our own cap; BGA&#x27;s quota may be lower and stops the day early</div></div></div></section><section class="panel"><header class="panel-head"><span class="eyebrow">log tail</span><h2>Recent fetches</h2></header><div class="tbl-wrap"><table class="tbl"><thead><tr><th>time</th><th>rank</th><th>player</th><th>table</th><th>status</th><th>detail</th></tr></thead><tbody><tr><td><span class="mono">06:57:55</span></td><td></td><td>—</td><td><span class="mono">—</span></td><td><span class="tag tag-crit">stopped</span></td><td>replay-limit</td></tr><tr><td><span class="mono">06:53:56</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">306256842</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:53:32</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">306845961</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:53:07</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307191007</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:52:42</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307197698</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:52:18</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307359238</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:51:56</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307380058</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:51:33</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307382186</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:51:10</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307388479</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:50:45</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307390236</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:50:24</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307390811</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:49:58</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307394559</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:49:32</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307394984</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:49:06</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307397108</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:48:44</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307397933</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:48:20</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">307407041</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:47:57</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326412420</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:47:35</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326412657</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:47:12</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326431341</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:46:47</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326432127</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:46:29</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326438694</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:42:11</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326439592</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:41:48</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326440405</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr><tr><td><span class="mono">06:41:22</span></td><td>2</td><td>CN_Azul</td><td><span class="mono">326442119</span></td><td><span class="tag tag-ok">downloaded</span></td><td>target 91718783</td></tr></tbody></table></div></section><footer class="foot"><span>ludometer · generated by web/make_harvest.py</span><span>static page, no external requests</span><span>2026-09-06 11:27:06</span></footer></div>
+</body></html>

@@ -90,9 +90,22 @@ class HumanGame:
     scores: tuple[int, int]
     outcome: float  # +1 seat 0 won, -1 seat 1 won, 0 draw
     rounds: int
+    #: BGA player ids in seat order (``player_ids[0]`` is engine seat 0). Carried
+    #: through from the log so the dataset builder can say "learn from *this*
+    #: player's turns only" without re-parsing anything.
+    player_ids: tuple[int, ...] = ()
 
     def __len__(self) -> int:
         return len(self.actions)
+
+    def seat_of(self, player_id: int | None) -> int | None:
+        """Engine seat of a BGA player id, or ``None`` if that id is not seated."""
+        if player_id is None:
+            return None
+        try:
+            return self.player_ids.index(int(player_id))
+        except ValueError:
+            return None
 
     def values(self) -> np.ndarray:
         """Outcome per row, in the mover's frame (the value head's convention)."""
@@ -218,6 +231,18 @@ def convert_game(
         raise ConversionError(f"table {game.table_id}: no picks in the log")
     if not game.deals:
         raise ConversionError(f"table {game.table_id}: no factory deals in the log")
+
+    # A resigned game never reaches a natural end and BGA reports only a nominal
+    # score (1-0), so the "game is terminal" and "engine scores == BGA scores"
+    # guards cannot apply: the moves up to the concession are real and kept, but the
+    # outcome is the resignation result (the conceder loses). Everything else — the
+    # per-move legality replay, tile conservation, the fixed-wall check on the
+    # completed rounds — still runs and still protects the data.
+    conceded_seat: int | None = None
+    if game.conceded_by is not None:
+        conceded_seat = game.seat_of(game.conceded_by)
+        require_terminal = False
+        check_scores = False
     if check_wall:
         reason = check_wall_placements(game)
         if reason:
@@ -282,6 +307,12 @@ def convert_game(
             f"table {game.table_id}: engine scored {engine_scores}, BGA reported {reported}"
         )
 
+    if conceded_seat is not None:
+        # The resigning seat loses regardless of the board score at that moment.
+        outcome = -1.0 if conceded_seat == 0 else 1.0
+    else:
+        outcome = float(state.outcome() or 0.0)
+
     walls = [state.wall_summary(0), state.wall_summary(1)]
     aux_by_seat = [np.array(walls[p] + walls[1 - p], dtype=np.uint8) for p in (0, 1)]
     return HumanGame(
@@ -291,8 +322,9 @@ def convert_game(
         movers=np.asarray(movers, dtype=np.int64),
         aux=np.stack([aux_by_seat[m] for m in movers]),
         scores=engine_scores,
-        outcome=float(state.outcome() or 0.0),
+        outcome=outcome,
         rounds=int(state.round_index) + 1,
+        player_ids=tuple(int(p) for p in game.player_ids),
     )
 
 

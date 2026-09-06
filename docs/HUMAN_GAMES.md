@@ -8,8 +8,15 @@ open-source projects, not from touching BGA.
 to be rediscovered.
 
 Read this before touching `ludometer/human/`. Code: the seven modules in §6. Tests:
-`tests/test_human_pipeline.py` (53, no network). Nothing in
+`tests/test_human_pipeline.py` (74, no network). Nothing in
 `ludometer/{train,eval,azul,agents}` was modified.
+
+**Newest sections supersede older ones where they disagree: §17 (2026-08-20) >
+§16 (2026-08-19) > §15 > §14 (both 2026-08-18) > §13 > §12.** **§12 (2026-08-17, live)** supersedes everything above it — the first authenticated run: auth fixed (the request-token header), the
+wall variant pinned (option 100), and one real elite replay validated end to end
+(scores matched exactly). **§11** is next-newest: the crawl walks the ladder in rank order
+with a resumable cursor, the pace is slow (one request every 6-10 s, 120 replays/day), the
+dataset learns from the **elite player only**, and `web/harvest.html` shows it live.
 
 ---
 
@@ -700,6 +707,550 @@ without one, and the daily cap is on by default.
 
 ---
 
+## 11. Rank-ordered crawl, elite-only learning, progress page (2026-08-17, later)
+
+Three additions on top of §6, all still test-only (no BGA request has been made):
+
+**11.1 `Fetcher.crawl_ranked` — the ladder in rank order.** Rank 1's games first, then
+rank 2. The state file is version **2** and adds `cursor` (`{rank, player_id,
+table_offset, players_done}`, rewritten after *every* table), `downloads` (the per-day
+counter for the requests that spend BGA's replay quota), `error` (why the last run
+stopped) and `pace`. A version-1 file loads and is upgraded. A restart re-enters at
+`tables[table_offset]` of rank `cursor.rank`; ranks below it are never revisited.
+`ReplayLimitReached` / `AccountDisabled` / `AuthRequired` and our own daily caps all end
+the run **cleanly**, with the reason in `state.error` and the cursor left pointing *at*
+the table BGA refused (so tomorrow retries exactly that one). `fetch.jsonl` gets one
+JSON line per table decision.
+
+**11.2 The pace is now conservative and named.** `fetch.CrawlPace` (mirrored in
+`ClientConfig`): `min_interval=6.0`, `jitter=4.0` (**one request every 6-10 s**),
+`max_tables_per_day=120`, `max_requests_per_day=600`, plus a randomized 90-300 s pause
+every 20 tables. ~25 s per accepted table, ~50 min of traffic a day. This supersedes the
+3 s/4000 in §6.2: the quota, not bandwidth, is the budget. **2,000 games ≈ 17 days**;
+raise the caps only with a measured quota (§9 step 4).
+
+**11.3 Elite-player-only learning.** Many tables pair a top-200 player with a much weaker
+one, so a game now teaches us **one** player's decisions. `fetch.choose_target_player`
+picks the target (both seats ranked → the higher raw Elo; otherwise the ranked/source
+player), `fetch.player_elos` reads both seats' Elos out of `tableinfos`, and both land in
+`state.tables[tid]` **and** in the raw payload (`payload["meta"]`) — so a rebuild with a
+different floor costs no request. `dataset.build_dataset` then emits rows only where the
+target is to move (`opponent_rows="drop"`, the default; `"value-only"` keeps the
+opponent's positions with `policy_mask=0`, the same convention run6 uses for
+cheaply-searched positions). Every stored row's value/margin is therefore in the
+*target's* frame. `min_target_elo_raw` is a floor on the **target**, not on "someone at
+the table". A sidecar `replay.stats.json` records games, positions, elite positions, all
+decision points and the rejection tallies.
+
+**11.4 `web/make_harvest.py` → `web/harvest.html`.** Stdlib-only, self-contained, dark,
+auto-refreshing, `--watch N`, and readable on a phone; it reads `state.json`,
+`fetch.jsonl` and `replay.stats.json` (falling back to the row count in `replay.npz`'s
+own header via `zipfile`) and shows the current rank/player, players done, games fetched
+/ validated / rejected with reason tallies, positions toward 550k, the 2k and 10k
+milestones with ETAs, elite vs all decision points, a log tail, and the replay-limit
+state as a banner above everything else. Every panel renders with no state file at all.
+
+```bash
+python -m ludometer.human.cli crawl --out data/human \
+  --cookies ~/ludometer/.bga_cookies.txt --top 200 --min-elo 650 --min-games 200
+python -m ludometer.human.cli dataset --out data/human \
+  --npz data/human/replay.npz --min-target-elo 650
+python3 web/make_harvest.py --state data/human --watch 20
+```
+
+Tests: `tests/test_human_pipeline.py` is now **74** (53 + rank-order/resume/quota-stop,
+elite-only masking and Elo floor, and the harvest page parsed with `html.parser`).
+
+---
+
+## 12. First authenticated run — live validation (2026-08-17, Remi's cookies)
+
+**This section is the newest and supersedes §§1-11 where they disagree.** Nine
+authenticated BGA requests were spent (paced ≥6 s apart, desktop-Chrome UA, one at
+a time). The pipeline's first authenticated call had been failing with
+`code 806 "Invalid session information for this action"`; that is fixed, the
+wall-variant option is pinned, and one real elite replay was validated end to end
+through our engine. **Nothing hit a replay-limit or disable signal.**
+
+### 12.1 Auth: the request token — root cause and fix
+
+`getGames.html`, `logs.html` and `tableinfos.html` all require the per-session
+**`X-Request-Token`** header in addition to the cookies. The token lives in every
+page's HTML inside the `bgaConfig` JS literal:
+
+```
+bgaConfig = { ... requestToken: 'gNZGNxgP5p7MOzj', ... }
+```
+
+Two facts the earlier code got wrong, both now fixed in
+`BgaClient.fetch_request_token`:
+
+1. **The token is short mixed-case alphanumeric** (e.g. `gNZGNxgP5p7MOzj`, 15
+   chars), **not** lowercase hex. The old regex `requestToken:\s*'([0-9a-f]{16,128})'`
+   never matched, so `request_token` stayed `None`, no header was sent, and BGA
+   answered `code 806`. The regex is now `requestToken:\s*'([A-Za-z0-9]{8,128})'`.
+2. **The token rotates on every page load** while the session itself stays valid —
+   two loads gave `gNZGNxgP5p7MOzj` then `AyZAa3d3WVPNN1Y`, both accepted. So
+   scrape it **once per run** (`fetch_request_token()`) and reuse it; both
+   `cli crawl` and `cli tables` now do this before the first authenticated call.
+
+**Verified**: with the fix, `getGames.html` for rank-1 (`player=91843016`,
+`game_id=1467`, `finished=1`, `page=1`) returns a valid JSON table list — 10 rows,
+no 806. A row carries `table_id`, `players` (comma-joined ids), `player_names`,
+`scores` ("72,45"), `ranks`, `unranked`, `concede`, `normalend`, `elo_after`, but
+**no game options** — so the `tableinfos` call cannot be skipped (§8 Q2 answered:
+options are not in the history row).
+
+### 12.2 The wall variant — option **100 "Board"** (pinned)
+
+`tableinfos.data.options["100"]` is the board side, an enum:
+
+| value | name | our engine? |
+|---|---|---|
+| **1** | **Colored side** | **yes — the standard fixed-colour wall** |
+| 2 | Gray side | no — the variable/grey wall |
+| 3 | Crystal Mozaic: Side 1 | no — a different board |
+| 4 | Crystal Mozaic: Side 2 | no — a different board |
+
+So only `options["100"] == 1` is a game we can learn from. `STANDARD_WALL_OPTION_HINTS`
+is now `{"option_id": 100, "standard_values": (1,)}` and `TableFilter` accepts value
+1, rejects 2/3/4, and skips a table whose options omit 100. This refines the old
+`majorvariant` hypothesis (there are four sides, not two; standard is value 1).
+Cross-checked against the wall-column invariant (§3.1): the validated replay's 32
+wall placements all satisfy `column == (colour+row)%5`, independently confirming
+both the standard wall and the colour map.
+
+**A second, independent variant to watch**: option **110 "Special Factories (Azul
+Master Chocolatier variant)"** — 1 = Disabled (standard), 2 = Enabled. Our engine
+does not model it. The wall filter does not gate on it (a 110=2 game would instead
+fail the tile-census / score checks in `convert_game`); `SPECIAL_FACTORIES_OPTION`
+is defined in `fetch.py` for a future request-saving pre-filter. Framework option
+**201** (game mode: 0 normal / 1 friendly / 2 Arena) and **200** (speed) are as
+documented; the validated table was 201=0 (Normal), so it was *not* an Arena game —
+`TableFilter(allowed_game_modes=(ARENA_MODE,))` would have skipped it.
+
+### 12.3 Replay format — five corrections to §4
+
+The real archive log (`/archive/archive/logs.html?table=<id>&translated=true`,
+envelope `data.logs = [ {move_id, channel, data:[notif…]}, … ]`) differed from the
+assumed schema in five ways. All are now fixed in `LogSchema` / `parse.py` **and**
+mirrored in the synthetic `fixture.py`, so the 77-test suite validates against the
+real shape:
+
+1. **Factories are 1-based, with the center at index 0.**
+   `factoriesFilled.args.factories` is a list of **6**: entry 0 is the center /
+   "deck" slot (it holds only the first-player marker, `type 0`, at fill time),
+   entries 1..5 are the five factories. The earlier "0-based `factory_0`" guess was
+   wrong — the tile `location` is just `"factory"`, and the numbering lives in the
+   array index. `LogSchema.factories_one_based = True`; `_parse_factories` routes
+   each index through `_map_source` and drops the center slot.
+2. **`tilesSelected.fromFactory` uses the same numbering**: **0 = center**, 1..5 =
+   factories. `LogSchema.center_values` now includes `0`.
+3. **Columns are 1-based.** The wall placement's `placedTile.column` (and the deal
+   tiles' `column`) run 1..5, while `convert.wall_col` is 0-based, so the parser
+   de-bases them (`LogSchema.columns_one_based = True`). Without this the wall-column
+   check would wrongly reject every standard game. (Pattern-line `line` is also
+   1-based with 0 = floor, which §4 already had right.)
+4. **The first-player marker generates a standalone `tilesPlacedOnLine`.** When a
+   player first takes from the center, BGA emits — *before* that turn's
+   `tilesSelected` — a `tilesPlacedOnLine` with the marker in `discardedTiles`,
+   `placedTiles` empty and `type 0`. It is **not a pick** (our engine assigns the
+   marker itself), so `parse_log` skips a placement that has no open selection and
+   no coloured tiles. A placement with coloured tiles and no selection is still a
+   fatal "dropped turn".
+5. **Final scores are in `tableinfos`, not the log.** A real archive log has **no**
+   cumulative-score notification; `endScore` reports only the *final-round
+   increment* per player. The reported totals live in
+   `tableinfos.data.result.player[].score` (and redundantly in
+   `data.gameResult.rankedTeams[]`). New helper `parse.scores_from_infos` reads
+   them; `parse_log` prefers a log `score` notification when present (the fixture
+   uses one) and falls back to `tableinfos` otherwise. Several display-only
+   notification types (`placeTileOnWallTextLogDetails`, `emptyFloorLineTextLogDetails`,
+   `completeLineLogDetails`, `completeColumnLogDetails`, `lastRound`, `endScore`)
+   were added to `LogSchema.ignore_types`.
+
+**Not in `tableinfos`: per-seat Elo.** §8 Q8 answered — the payload carries no
+`player_elo`/`rank` per seat, so `player_elos()` returns `{}` on a real table and
+`TableFilter.min_player_elo_raw` cannot demand *both* players strong from
+`tableinfos`. Elite-seat selection therefore relies on `ranked_ids` +
+`source_player_id` (which the crawl already supplies from the ladder snapshot), and
+the per-game Elo is available in the `getGames` row (`elo_after`) if ever needed.
+
+### 12.4 End-to-end validation (table 897976436, rank-1 Sapperlot)
+
+One standard-wall, 2-player, finished table from rank-1 (Sapperlot 91843016 vs
+Bruno Lana 90637398, BGA scores **72–45**) was fetched (`tableinfos` +
+`requestTableArchive` + `logs`) and run through the full pipeline. The raw payload
+is saved at **`data/human/raw/897976436.json.gz`** as proof. Result:
+
+- `parse_log` → 53 picks, 5 deals, 32 wall placements, first player 90637398;
+- `convert_game` replays it **legally** in our engine: tile census `[20]*5`, all 32
+  wall columns satisfy the fixed-wall formula, and **engine final scores `(72, 45)`
+  exactly match BGA's reported `(72, 45)`** → outcome +1, 5 rounds, 53 positions;
+- elite-seat extraction: `choose_target_player` picks seat 0 (Sapperlot, rank 1),
+  and `target_mask` keeps 27 of 53 rows, **all from seat 0** — the right seat.
+
+### 12.5 Is the crawl ready? — yes, with two caveats
+
+Auth, the wall filter, the converter and elite extraction are all validated on real
+data, and the resume/pace/quota machinery is unchanged and tested. Before a real
+launch, note:
+
+- **Arena filter vs. supply.** The validated top table was *Normal* mode, not
+  Arena. If `allowed_game_modes=(ARENA_MODE,)` is kept (recommended for the "both
+  trying" signal), confirm the yield of Arena tables among the top players is
+  enough before committing to a target — many top-player games are Normal mode.
+- **Measure the replay quota first** (§5.1, §9 step 4) — still the one unknown that
+  governs the schedule. Launch small (the 20-game smoke target), watch for
+  `ReplayLimitReached`, then scale.
+
+## 13. First bulk crawl converted — undo/concede handling + the Elo-floor fix (2026-08-17)
+
+**This section is the newest and supersedes §§1-12 where they disagree.** The first
+real crawl put **120 rank-1/2 replays** in `data/human/raw/*.json.gz` (121 files
+counting the §12.4 validation table). Straight off the crawl the dataset build
+yielded **0 positions**: only **28/121** games replayed and the Elo floor then
+dropped everything. Both causes are now fixed and the corpus converts in full.
+
+### 13.1 The complete notification taxonomy (every type in the 120 games)
+
+Run `python -m ludometer.human.cli inspect <raw.json.gz>` for one game, or the
+histogram over all of them, and this is the full set. "Handling" is where in
+`LogSchema` / `parse_log` each lands.
+
+| notification | count (corpus) | role | handling |
+|---|---|---|---|
+| `gameStateChange` | 28,996 | framework turn/state bookkeeping | **ignore** (`ignore_types`) |
+| `tilesPlacedOnLine` | 7,246 | a turn's placement | `place_types` → closes the open pick |
+| `tilesSelected` | 6,826 | a turn's take | `select_types` → opens a pick |
+| `updateReflexionTime` | 6,329 | clock update | **ignore** |
+| `placeTileOnWallTextLogDetails` | 3,633 | "…tiled a line…" prose | **ignore** (cosmetic) |
+| `placeTileOnWall` | 2,310 | round-end wall tiling (carries `column`) | `wall_types` → `WallPlacement`, drives the fixed-wall check |
+| `emptyFloorLineTextLogDetails` | 1,037 | floor-clear prose | **ignore** (cosmetic) |
+| `firstPlayerToken` | 632 | who holds the marker | `marker_types` → cross-check only (engine assigns the marker itself) |
+| `factoriesFilled` | 604 | start-of-round deal (1-based, index 0 = center) | `deal_types` → scripted `Deal` |
+| `emptyFloorLine` | 590 | round-end floor clear | `floor_clear_types` → boundary flush |
+| `endScore` | 386 | final-**round** score increment (not a total) | **ignore** — totals come from `tableinfos` (`scores_from_infos`) |
+| **`undoTakeTiles`** | **335** (85 games) | **player took a take back** | **`undo_take_types` → cancel the open selection** |
+| `completeLineLogDetails` | 250 | "…completed a line…" prose | **ignore** (cosmetic) |
+| `completeColumnLogDetails` | 210 | "…completed a column…" prose | **ignore** (cosmetic) |
+| **`undoSelectLine`** | **125** (58 games) | **player took a placement back** | **`undo_place_types` → pop the last pick, re-open it as pending** |
+| `simpleNode` | 121 | UI note | **ignore** (`simpleNode`/`simpleNote`) |
+| `lastRound` | 117 | last-round banner | **ignore** |
+| `simpleNote` | 107 | UI note | **ignore** |
+| `wakeupPlayers` | 33 | UI ping | **ignore** |
+| **`playerConcedeGame`** | **14** (14 games) | **a player resigned** | **`concede_types` → game ends here, conceder loses** |
+| **`completeColorLogDetails`** | **11** (9 games) | "…completed a colour…" prose | **ignore** (cosmetic, added to `ignore_types`) |
+
+The four bold rows are what §12 had not seen. Every other type was already in
+`select`/`place`/`deal`/`wall`/`floor`/`score`/`marker`/`ignore`. **Anything not in
+one of those lists is still a fatal `ParseError`** — a silently dropped
+notification is a silently wrong game, so new types must be classified, never
+swallowed.
+
+### 13.2 Undo — the rewind (this was 93 % of the failures)
+
+BGA lets a turn be taken back in two steps and logs one notification per step, **in
+reverse order**, confirmed across all 120 games:
+
+```
+undoSelectLine   always preceded by tilesPlacedOnLine   (125×)
+undoTakeTiles    preceded by tilesSelected (262×) or by undoSelectLine (73×)
+```
+
+So at the moment of an undo the state is always well-defined, and the rewind is:
+
+- **`undoSelectLine`** — the placement is reversed, the tiles go back into the
+  hand: `parse_log` pops the last committed `Pick` and restores it as the pending
+  (open) selection. A re-placement then closes it on the new line; an
+  `undoTakeTiles` then cancels the take entirely.
+- **`undoTakeTiles`** — the take is reversed: the open pending selection is dropped.
+
+Ignoring them (the old behaviour) was fatal two ways: an unhandled `undoSelectLine`
+left the following re-placement looking like "tiles placed without a selection"
+(the 34 games that failed that way), and an unhandled `undoTakeTiles` left a phantom
+floor pick that desynchronised every later move. **After the rewind the engine
+replays each undo game legally and reproduces BGA's reported final scores exactly**
+(e.g. table 681632353, which has both undo types, replays to 61-42 = BGA 61-42).
+
+### 13.3 Concession — terminate cleanly, conceder loses
+
+`playerConcedeGame` is always the **last** move notification (the game ends on
+resign). `parse_log` records `ReplayGame.conceded_by`, drops any half-made turn and
+stops reading moves. `convert_game` then, for a conceded game only, turns **off**
+`require_terminal` and `check_scores` (BGA reports a nominal 1-0 for a resign, and
+the board never reached a natural end) while keeping the per-move legality replay,
+tile-conservation and fixed-wall checks. The outcome is set to a **loss for the
+conceder** regardless of the board score; the kept picks are exactly those played
+up to the concession. 14 games are conceded (all opponents resigning to the rank-1
+player, so all 14 are wins for the target).
+
+### 13.4 The target-Elo floor — resolve it from the ladder, not from `tableinfos`
+
+The dataset builder read the target's Elo as null/0, so `--min-target-elo 650`
+dropped all 120 games. Root cause: a real `tableinfos` payload carries **no
+per-seat Elo** (§12.3), so `meta.elos` and `player_elos(infos)` are both empty on
+real data. The only authoritative source of the target's Elo is the **ladder
+ranking snapshot** in `state.json` (`ranking.rows[].elo_raw`), plus the crawl's
+recorded `meta.source_elo_raw` for the player whose history the table came from.
+
+The fix (`GameMeta.from_raw` + `cli.cmd_dataset`): the dataset build now passes a
+`{player_id: elo_raw}` map built from `ranking.rows` and backfills the target's Elo
+from it (and from `source_elo_raw`), so `min_target_elo_raw` has a real number to
+compare.
+
+**Units — confirmed.** `ranking.rows[].elo_raw` is BGA **raw** Elo (~1500-centred;
+raw = displayed + 1300). `--min-target-elo` is in **displayed** units, and the CLI
+converts it once: `min_target_elo_raw = displayed + 1300`. So a floor of **650**
+becomes a raw floor of **1950**, and the rank-1/2 targets (raw 2486 / 2459,
+displayed 1186 / 1159) clear it comfortably; a floor of 1200 (raw 2500) drops even
+rank 1 — verified both directions.
+
+### 13.5 Real numbers after the fix
+
+```
+$ python -m ludometer.human.cli --out data/human convert
+121 games convert, 0 rejected          # was 28 convert / 93 rejected
+
+$ python -m ludometer.human.cli --out data/human dataset \
+      --npz data/human/replay.npz --min-target-elo 650
+wrote data/human/replay.npz: 3204 positions from 121 games
+  (3204 elite policy targets out of 6489 decision points;
+   target record {'win': 104, 'loss': 17, 'draw': 0})
+dropped: 0 failed validation, 0 below the Elo floor, 0 with no elite player
+```
+
+- **Validation pass rate: 28/121 (23 %) → 121/121 (100 %).** 107 games run to a
+  natural end (engine scores match BGA exactly), 14 end on a concession.
+- **Dataset: 3,204 elite policy targets** (the target player's turns only) out of
+  6,489 replayed decision points, from 121 games.
+- **Outcome balance is win-skewed: 104 win / 17 loss / 0 draw.** Expected — the
+  targets are rank-1/2 players who win most games, and every conceded game is a win
+  for them. The policy targets (real elite moves) are the primary signal; the value
+  head sees few losses and no draws, so watch for value-head imbalance and consider
+  balancing or de-weighting once the corpus is larger.
+
+**Is the pipeline ready to accumulate a real training set? Yes.** Parse → convert →
+dataset now handle everything the real logs contain, the Elo floor resolves
+correctly, and the raw payloads are cached so re-running convert/dataset costs no
+BGA request. The remaining caveats are unchanged from §12.5 (measure the replay
+quota; decide on the Arena-mode filter) and the new one above (outcome imbalance at
+this small scale). 120 games ≈ 3.2k positions is a smoke-sized set; the value of the
+data is tested at the 2,000-game milestone (§9 step 7).
+
+## 14. 400-game corpus: the last 4 conversion rejects fixed (2026-08-18)
+
+At ~400 downloaded games, 4 of them (1 %) failed to convert. Both causes are fixed
+(zero requests spent — cached payloads only), **400/400 now convert**, and the
+dataset is **10,790 elite positions**. Two additions to the §13.1 taxonomy:
+
+1. **`timeJokerUsed`** (2 games: tables 779195006, 781529784) — turn-based clock
+   bookkeeping, `"${player_name} uses a holiday time joker (+${nb_days} days
+   thinking time)"`, args `player_name`/`nb_days` only. Added to
+   `LogSchema.ignore_types`.
+2. **A concession with no `playerConcedeGame` in the log at all** (2 games: tables
+   841829025, 842761995) — the log just stops mid-game ("log ran out after N moves").
+   The concession is still in the metadata: `tableinfos.data.result.endgame_reason ==
+   "normal_concede_end"`, and the conceder holds the nominal **0** in BGA's 1-0
+   result — verified against all 26 notification-carrying concessions in the corpus
+   (the zero-score player is the conceder in every one). New
+   `parse.conceder_from_infos` reads it; `parse_log` falls back to it when the log
+   carried no concede notification, dropping any half-made turn exactly as the
+   notification path does. §13.3's convert handling then applies unchanged.
+
+Tests: `tests/test_human_pipeline.py` is now **86** (84 + one per fix).
+
+**Runner backoff fix (same day).** `continuous_runner.sh`'s replay-limit backoff
+filtered `fetch.jsonl` downloads to a **26h** window before taking
+`min(ts) + 24h + 15min`. Entries 24-26h old — which no longer occupy quota slots —
+made that wake time land in the past, so the 300s floor kicked in and the runner
+woke every ~5min against a still-full quota (~5 wasted passes, ~4 requests each,
+observed 18:56-19:24Z). The lookback is now **24h**, which makes every computed
+wake ≥ now + 15min by construction. Runner restarted ~20:31Z to load the fix
+(the running bash had the old loop in memory).
+
+## 15. Complete-harvest mode: the 120-games-per-player cap found and removed (2026-08-18, later)
+
+**Why the crawl reached rank 4 in two days when ranks 1-3 have 1,633 / 3,171 /
+2,521 ranked games each**: `crawl_ranked`'s `history_pages` default is **12** — at
+10 rows per page only a player's **120 most recent** tables were ever listed, and
+the runner's `--per-player 200` silently did nothing beyond that (`[:200]` of a
+120-item list). So ranks 1-3 "completed" at 109/119/116 downloads each. Not a
+BGA limit — our own listing depth.
+
+Per Rémi (2026-08-18): **harvest the top players completely first, then move
+down** — their games are the highest-quality signal. Changes:
+
+- **`cli crawl --restart`** → `crawl_ranked(resume=False)`: re-walk the ladder
+  from rank 1 instead of resuming at the cursor. Already-judged tables are
+  revisited **for free** — a terminal verdict short-circuits before any request,
+  budget check or pause, and is counted in the new `CrawlReport.cached` (printed
+  by the CLI). So a restart re-walk costs 0 requests for everything already done,
+  and new capacity always flows to the highest-ranked player with pending tables.
+- **The runner** now passes `--per-player 100000 --history-pages 1000 --restart`
+  on every pass: full histories, top-first, self-healing order.
+- **Arithmetic to keep in mind**: ranks 1-4 alone hold ~11,400 ranked games and
+  ~95 % of their judged tables were accepted so far, so "top 4 complete" is
+  ~7-8 weeks at the ~200/day quota. The 2,000-game milestone lands mid-rank-1/2
+  either way; deciding to stop or to cap per-player is Rémi's call, not the
+  crawler's.
+- **Elo-weighting hook**: `replay.stats.json` now carries `game_records` — one
+  `{table_id, rows, target_elo_raw}` per game, in npz row-append order (the
+  buffer holds every row, so cumulative `rows` reconstruct exact per-row spans).
+  Training can weight rows by the target's Elo without any npz format change
+  (`ReplayBuffer` reads keys by name and ignores extras, but stays untouched).
+- Of the first 400 downloaded games, **43 (~11 %) have both seats in the top
+  200** — mining the second elite seat of those tables would be free extra
+  positions at zero quota cost; not implemented (dataset currently learns the
+  higher-Elo seat only).
+
+Tests: **87** (86 + the restart/cached re-walk).
+
+## 16. Per-game Elo capture: `elo_after` from the history rows (2026-08-19)
+
+**Question this answers**: can moves be scored by the Elo of the player who made
+them? Now yes, time-accurately, for the elite seat (the only seat whose moves are
+policy targets).
+
+- `tableinfos` has **no per-seat Elo** (§12.3) and the ladder snapshot is *today's*
+  number — wrong for old games. The **`getGames` history row** is the only per-game
+  Elo BGA exposes: `elo_after` (the **queried** player's raw Elo right after that
+  game), plus `start`/`end` timestamps, `elo_win`, concede/normalend flags.
+  Verified live 2026-08-19; the drift is real: Sapperlot is 2486 raw today but
+  ~2383 in his mid-2025 games — a ~100-point error the snapshot would have baked in.
+- The crawler used to extract only table ids from those rows and **discard the
+  rest**. `fetch_player_tables` now appends every row verbatim to
+  **`data/human/table_rows.jsonl`** (append-only, duplicates deduped at read time,
+  never raises). Listing progress was reset once (pages_done → 0, table ids kept)
+  so already-listed pages get re-listed *with* capture; re-listing costs requests
+  but no replay-quota slots.
+- `fetch.elo_after_map(path)` → `{table_id: {player_id: elo_after_raw}}`;
+  `cli dataset` passes it to `build_dataset(elo_at_game=...)`, and each
+  `game_records` entry in `replay.stats.json` now carries **`target_elo_after`**
+  (None for games whose history page predates capture — coverage completes as the
+  re-walk re-lists each rank). Weight training rows by `target_elo_after`,
+  falling back to `target_elo_raw`.
+- The opponent's per-game Elo exists only when the opponent is also a crawled
+  ranked player (their own history contributes their `elo_after` for the shared
+  table) — ~11 % of games so far. For everyone else BGA gives us nothing.
+
+Tests: **89** (87 + row persistence/`elo_after_map` + the dataset record).
+
+## 17. Elo-at-game-time floor + private HF mirror (2026-08-20)
+
+**The Elo scale, one more time** (it keeps biting): BGA displays
+`max(0, raw − 1300)`. Sapperlot shows **1188** on the site = **2488 raw**; the
+ladder API, `elo_after`, and everything in our state file are RAW. `mode=elo`
+(what we crawl) IS the all-time ladder; `mode=arena` is the current season and
+is not used anywhere.
+
+- **Rank 1's full history spans raw 1338 → 2488 (displayed 38 → 1188)** — a top
+  player's early games are beginner games. 117 of rank 1's 1,604 tables (7 %)
+  are below the displayed-650 floor *at game time*; the snapshot floor would
+  have accepted all of them.
+- **Fetch-side floor**: `crawl_ranked(min_source_elo_raw=...)` (CLI: the same
+  `--min-elo` that selects players) skips a table from the history row alone
+  when the source player's `elo_after` is below the floor — **before any
+  request**, so a beginner-era game costs zero replay quota. Skip reason:
+  `"source elo N at game time below floor M"`.
+- **Dataset-side floor**: `build_dataset`'s `min_target_elo_raw` now compares
+  the per-game `elo_after` when captured, falling back to the ladder snapshot.
+- **Private HF mirror (loss insurance, per Rémi)**: every crawl pass ends with
+  `data/human/push_hf.py` (run via `uvx --from huggingface_hub`, token from
+  `~/.cache/huggingface`) mirroring all of `data/human/` — raw payloads, state,
+  rows, npz, the wip-backup of uncommitted code — to
+  **`RemiFabre/azul-elite-replays`** (dataset repo, **private**: scraped BGA
+  data must never be republished). `upload_folder` is content-hash incremental.
+- Known reject to revisit: 1 game of 800 fails with "engine started round 4 but
+  the log only holds 4 deals" — unclassified, likely an undo/log edge; grep the
+  runner log for the table id when someone has time.
+
+Tests: **91** (89 + the quota-saving skip + the elo_after floor).
+
+## 18. First training experiments on the human data (2026-08-21, overnight)
+
+**Corpus used (pinned)**: 799 games / 798 converted, all rank-1 (Sapperlot), built as
+`data/human/replay_full.npz` — 43,210 rows, **22,738 policy targets** (21,286 elite +
+1,452 dual-target: per Rémi, when the opponent is also ≥ displayed **800** at game
+time their moves are policy targets too — `--dual-target-min-elo 800`, 54 games
+qualified, implemented in `dataset.py`/`cli.py`, wired into the runner). Opponent
+rows kept value-only (`--keep-opponent-rows`) so value labels are two-sided
+(21,287 `+1` / 21,923 `−1`) instead of the 93%-win skew. Plus 54 Faïence
+human-win/draw games (`ludometer/human/faience.py`, all 315 finished site games
+replay exactly; humans are 44W-10D-261L vs the run4 site net) → 1,524 more policy
+rows at `data/faience/human_windraw.npz`.
+
+**E0 — agreement** (`ludometer/human/agreement.py`, `data/human/agreement.json`):
+run4/run5/run6 nets pick Sapperlot's move **39-40%** top-1 (67% top-3) — and
+**33% in the first game-quartile vs 48% in the last**: weakest exactly where
+strategy lives, confirming the "great calculator, poor strategist" read.
+
+**E2 — fine-tune with rehearsal** (`ludometer/train/finetune.py`: mixed batches
+1 human : 3 self-play from the base's own replay buffer, LR 1e-4):
+
+| candidate | base | vs base @ sims=100 | verdict |
+|---|---|---|---|
+| ft1/ft-002000 (`runs/ft1`) | run5/ckpt-006912 (best on disk, 2381) | **59.0%** over 200 g | **works** (~+63 Elo; pooled fit **2394.5** anchored run4site=2360.6) |
+| ft2/ft-004000 (`runs/ft2`, dual buffer, 4000 steps) | same | **62%/100 g vs ft2000** (55.5/62/59 across 3 ckpts ≈ 59% agg/300 g) | **new equal-search champion**, ~2445 pooled |
+| ft3, ft3b (`runs/ft3*`) | run4/ckpt-037888 (the site net) | all ≈50% after honest 200-300-game tests | small net **cannot absorb** the prior |
+| ds1 (`runs/ds1`, distill ft2000→run4 arch, `ludometer/train/distill.py`) | — | 37/51.5/47.5% vs site net | quick distillation doesn't transfer it either |
+
+Agreement moves 40%→48% top-1 (early game 34%→46%) on the fine-tuned nets —
+the policy really does absorb the human prior; on the big net it converts to
+playing strength, on the 1.8M-param site net it only displaces self-play
+knowledge (capacity-saturated).
+
+**The wall-clock trap (why nothing was deployed)**: ft2000 wins at equal *sims*
+but at equal *think time* loses **36-64** to the 4×-smaller site net
+(`data/human/gauntlet_ft2000_wallclock.json`) — which is also why run4 outlived
+run5 on the site. Rule going forward: **a deploy candidate must win at
+wall-clock parity**, and for identical architectures sims-parity = wall-clock
+parity. Second rule, learned the embarrassing way: a 100-game screen of many
+sibling checkpoints WILL produce fake 60% winners (ft3b-1000 screened 60.5%,
+confirmed **49.8%** over 300 games) — never believe a screen, always confirm the
+selected candidate on ≥200 fresh-seed games.
+
+**E3 — pretrain A/B** (`runs/hp2` vs `runs/run6`, identical configs incl. 3
+pretrain epochs over a 500k buffer; hp2's buffer = 371k run5 self-play rows +
+3×43,210 human rows (25.9%, `data/human/replay_mix.npz`, single-target — built
+before the dual flag); control run6 = run5 rows only; 9,984 self-play games
+each, `ludometer/eval/compare_runs.py`): the human mix costs **−58 Elo at the
+warm start** (2181 vs 2239) and trails to ~game 2,000, is even through ~5,400,
+then the **second half averages ~+55 Elo** with three points outside both error
+bars (+54/+99/+66 at 6144/6912/7680, and +99 at the end: 2299.5 vs 2200.9).
+Best-vs-best is a tie (2303.6 vs 2298.6). Single seed each — read as
+*suggestive-positive*, worth a re-run at the 2,000-game corpus milestone.
+(Also: `runs/hp1`, abandoned arm, gives the pure-BC datapoint — 3 epochs on the
+human data alone rates **1315** at 100 sims, between greedy 1220 and heuristic
+1378.)
+
+**Update (2026-08-21 afternoon) — the mid-size path works, but is under the new
+bar.** `runs/mid1`: a fresh 2.94M-param net (`configs/mid_a_net.json`, 0.57× the
+site net's inference speed) pretrained 3 epochs on **ft2-4000 teacher soft
+targets** over 296k states (`data/human/teacher_labeled.npz` — distillation
+through the standard `--pretrain` path, no trainer changes) and then self-play
+polished for 8,000 games. Curve: 2147 at game 0 → best **2317** at 4,096 →
+plateau ~2270-2300. Its best checkpoint is the **first candidate above 50% at
+wall-clock parity with the site net: 52.5% over 100 games** (think=1.0 each,
+`gauntlet_mid1_wallclock.json`) — ≈+17 honest Elo, versus the deploy bar Rémi
+set the same day (**+150 honest over ≥300 games**, `docs/BOT_DEPLOYMENT.md`;
+ft2-4000 as an extra site opponent was also ruled out). So: no deploy, recipe
+validated. The road to "Porcelain" is this exact pipeline scaled up — a better
+teacher (the fine-tune ceiling rises with every crawl milestone), a longer
+polish, and possibly the ~4M "midB" body — plus the corpus growth that feeds it.
+
+**Bottom line**: the elite-human data measurably improves the strongest net at
+equal search (+60-110 Elo of fine-tune headroom demonstrated from just 799
+games of ONE player), the effect concentrates in the early/strategic game, and
+the site was deliberately **not** touched because no same-speed candidate
+cleared the wall-clock gate. Paths to a deployed win, in order of promise:
+(1) a **mid-size net (~3-3.5M params)** distilled from the ft2 teacher then
+briefly self-played — big enough to hold the prior, small enough to search;
+(2) raise the site think budget; (3) redo E2/E3 at the 2,000-game multi-player
+milestone (breadth-first crawl would accelerate this). Faïence win/draw games as
+targeted self-play seeds remain unimplemented — still the most surgical attack
+on the "brutal blunder" states.
+
 ## Appendix A: request ledger for this recon (20)
 
 | # | Request | Result |
@@ -732,3 +1283,22 @@ BGA tile type -> engine colour: {1:3 black, 2:4 teal, 3:0 blue, 4:1 yellow, 5:2 
 replay.npz row = states(182) policies(180 one-hot) values margins+mask aux(30 packed)+mask policy_mask
 value/margin/aux are all in the *player-to-move* frame — same convention as self-play
 ```
+
+## Appendix C: request ledger for the 2026-08-17 authenticated validation (9)
+
+All with Remi's cookies + `X-Request-Token`, desktop Chrome UA, ≥6 s apart.
+
+| # | Request | Result |
+|---|---|---|
+| 1 | `GET /gamepanel?game=azul` (logged in) | 200; token `gNZGNxgP5p7MOzj` scraped |
+| 2 | `GET /gamepanel?game=azul` (token refresh) | 200; token `AyZAa3d3WVPNN1Y` (rotates) |
+| 3 | `GET /gamestats/…/getGames.html?player=91843016&game_id=1467&finished=1&page=1` | **200, 10 tables** (was 806) |
+| 4–5 | `GET /table/table/tableinfos.html?id=897976436,897976536` | 200; option 100 = "Board" pinned |
+| 6 | `GET /gamepanel?game=azul` (token for replay fetch) | 200 |
+| 7 | `GET /gamereview/…/requestTableArchive.html?table=897976436` | 200, archive primed |
+| 8 | `GET /archive/archive/logs.html?table=897976436&translated=true` | 200, full replay |
+
+(The token refreshes reuse the public `/gamepanel` page — no session risk — and
+each authenticated script re-scraped it because the process was restarted; a single
+long-running crawl scrapes once.) **No replay-limit or account-disable signal at any
+point.**
