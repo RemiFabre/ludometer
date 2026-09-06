@@ -85,6 +85,22 @@ and (2) are in (ludometer-1a was told; they plan rlx_teacher2 and the porc_w gen
 (5) The GUI still runs the Python engine; `engine_rs.AzulState` attributes are copies, so
 the hand-editing tests/GUI paths (`state.factories[0][0] = 1; recount()`) stay Python-only.
 
+## 2026-09-06 — Lapis Lazuli released discreetly, as an experimental opponent
+
+Per Rémi's morning call: the +109 checkpoint (`runs/porc_w-p0905-2038/checkpoints/ckpt-096768.pt`,
+193-5-102 vs Porcelain over 300 games, honest 2673) is live as **Lapis Lazuli** with
+`"experimental": true` in `web/player/model/bots.json`. The page lists it only when
+"Experimental opponents" is switched on in Settings (off by default; `faience.experimental` in
+localStorage), Porcelain keeps the default slot and the coach, no news line. The rule is in
+`docs/BOT_DEPLOYMENT.md` §4 and the GUI guardrail checks hidden-by-default, shown-on-demand,
+never-the-default. Staging checked, production deployed, live browser test green. Promoting it
+to a regular rung means a fresh ≥300-game gate at +150. Ultramarine stays reserved.
+
+Also committed this morning: the Aug 20-31 human-pipeline work that had been running from the
+working tree uncommitted (finetune/distill tools, mid configs, harvest and experiments pages;
+97 tests green), so a fresh checkout has everything the notes refer to. Still untracked on
+purpose: `post.md` (a draft that is not mine) and `rust/Cargo.lock` (ludometer-d1's crate).
+
 ## 2026-09-06 — Morning report: Lapis Lazuli not reached, +109 is where every route lands
 
 **Shipped**: Porcelain (last night). **Not shipped**: Lapis Lazuli, whose bar is +150 over
