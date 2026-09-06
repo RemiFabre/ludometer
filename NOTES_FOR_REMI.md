@@ -101,6 +101,14 @@ teacher; policy target = the search's visit distribution, value target = half ga
 half the search's root value. No self-play polish yet: that is Phase B, running tonight,
 toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
 
+**03:30, the big teacher seed rates 2500 ± 39** (`runs/big_t/checkpoints/ckpt-000000.pt`, 19.5M
+params, 4 supervised epochs on the generation-1 corpus): identical to Porcelain, which is the
+expected result: the corpus sets the ceiling, a bigger body cannot exceed its teacher by
+copying it. Its value is as the seed of a fleet polish at 2048 sims (a 19.5M net is nearly
+free on an L4 with the Rust engine), which I did not start tonight to keep the last $17 of
+the cap for gating and shipping. Polish screens vs Porcelain at matched think meanwhile:
+44 → 51 → 56 → 60 → **64%** (ckpt-072192); ladder 2603 ± 30 at 80k games.
+
 **01:50, the fleet runs on Rust.** ludometer-d1's gauntlet (Porcelain on the Rust tree vs on
 the Python tree, 100 games at sims=400) came back 45-2-53, inside the noise band, so the
 generators switched: teacher 2 (`rlx_teacher2`, Porcelain at 2048 sims) on 2 l4x1 jobs and the
