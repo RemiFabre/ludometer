@@ -1,14 +1,12 @@
 {
   "comment": "The opponents the page offers, weakest first: the ceramics ladder, from raw ground to precious glaze. Each dir holds a model.onnx + model_meta.json (the meta carries the Elo and parameter count the menu shows; run/checkpoint stay internal). Five of the swatch colours are the game's own tile glazes; Sand and Clay are the two raw earths beneath them. scripts/deploy_player.sh ships this whole tree.",
   "reserved_for_future_nets": {
-    "comment": "The next rungs of the ladder, in order, for agents stronger than Cobalt. THE FULL SHIPPING PROCEDURE AND THE BAR (at least +150 wall-clock-honest Elo over the current strongest, gated over >=300 games at matched think time) IS IN docs/BOT_DEPLOYMENT.md — follow it; it is self-contained. Do not rename existing bots; the page defaults to the strongest by the elo in model_meta.json automatically.",
+    "comment": "The next rungs of the ladder, in order, for agents stronger than Cobalt. THE FULL SHIPPING PROCEDURE AND THE BAR (at least +150 wall-clock-honest Elo over the current strongest, gated over >=300 games at matched think time) IS IN docs/BOT_DEPLOYMENT.md — follow it; it is self-contained. Do not rename existing bots; the page defaults to the strongest by the elo in model_meta.json automatically. An entry with \"experimental\": true is hidden unless the player turns on 'Experimental opponents' in Settings, never becomes the default or the adviser, and needs no gate: it is how a net that is stronger but below the +150 bar can be offered (Lapis Lazuli, 2026-09-06, +109 over Porcelain over 300 games).",
     "names": [
-      "Lapis Lazuli",
       "Ultramarine"
     ],
     "suggested_swatches": {
-      "Ultramarine": "#1a1f6e",
-      "Lapis Lazuli": "#2b3a8f"
+      "Ultramarine": "#1a1f6e"
     }
   },
   "bots": [
@@ -59,6 +57,13 @@
       "name": "Porcelain",
       "dir": "model/porcelain",
       "swatch": "#f4efe4"
+    },
+    {
+      "id": "lapis_lazuli",
+      "name": "Lapis Lazuli",
+      "dir": "model/lapis_lazuli",
+      "swatch": "#2b3a8f",
+      "experimental": true
     }
   ]
 }

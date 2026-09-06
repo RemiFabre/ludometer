@@ -154,6 +154,56 @@ const shareButtons = [true, false].map((value) => {
   return b;
 });
 settings.panel.append(shareGroup);
+
+/* Experimental opponents: nets that beat the current strongest at matched
+ * think time but by less than the +150 the ladder demands (docs/
+ * BOT_DEPLOYMENT.md). Hidden by default; never the default opponent, never
+ * the adviser. Stored like every other preference (no cookies). */
+function experimentalOn() {
+  try {
+    return localStorage.getItem("faience.experimental") === "on";
+  } catch (err) {
+    return false;
+  }
+}
+function setExperimental(on) {
+  try {
+    localStorage.setItem("faience.experimental", on ? "on" : "off");
+  } catch (err) {
+    /* private mode: the switch lasts for this tab */
+  }
+}
+settings.panel.append(
+  node("i", "settings-gap"),
+  node("span", "settings-label", "Experimental opponents")
+);
+const experimentalGroup = node("div", "speeds");
+experimentalGroup.setAttribute("role", "group");
+experimentalGroup.setAttribute("aria-label", "Experimental opponents");
+const experimentalButtons = [true, false].map((value) => {
+  const b = node("button", "flag", value ? "On" : "Off");
+  b.type = "button";
+  b.dataset.experimental = String(value);
+  b.title = value
+    ? "Also list nets that beat the strongest opponent, but not by enough to take its place yet."
+    : "Only the regular ladder.";
+  b.addEventListener("click", () => {
+    setExperimental(value);
+    syncExperimental();
+    fillBotMenu();
+    if (!value && bot && bot.experimental) loadBot(strongestBot());
+    say(value ? "experimental opponents listed" : "experimental opponents hidden");
+  });
+  experimentalGroup.appendChild(b);
+  return b;
+});
+settings.panel.append(experimentalGroup);
+function syncExperimental() {
+  experimentalButtons.forEach((b, i) => {
+    b.setAttribute("aria-pressed", String((i === 0) === experimentalOn()));
+  });
+}
+syncExperimental();
 function syncShare() {
   shareButtons.forEach((b, i) => {
     b.setAttribute("aria-pressed", String((i === 0) === sharingOn()));
@@ -294,23 +344,32 @@ async function bootEngine() {
   } catch (err) {
     /* private mode */
   }
-  // a returning player keeps their chosen opponent; everyone else faces the
-  // strongest net available, whatever it is called by then
-  bot = bots.find((b) => b.id === storedId) || strongestBot();
-  if (bots.length > 1) {
-    ui.botField.hidden = false;
-    ui.bot.innerHTML = "";
-    for (const b of bots) {
-      const option = document.createElement("option");
-      option.value = b.id;
-      const elo = b.meta && typeof b.meta.elo === "number" ? ` · ${Math.round(b.meta.elo)} Elo` : "";
-      option.textContent = b.name + elo;
-      ui.bot.appendChild(option);
-    }
-    ui.bot.value = bot.id;
-    syncBotChip();
-  }
+  // a returning player keeps their chosen opponent (if it is still listed);
+  // everyone else faces the strongest net available, whatever it is called
+  bot = visibleBots().find((b) => b.id === storedId) || strongestBot();
+  fillBotMenu();
   await loadBot(bot);
+}
+
+/** The roster as the player sees it: experimental entries only when asked for. */
+function visibleBots() {
+  return bots.filter((b) => !b.experimental || experimentalOn());
+}
+
+/** (Re)build the opponent menu from the visible roster. */
+function fillBotMenu() {
+  const visible = visibleBots();
+  ui.botField.hidden = visible.length <= 1;
+  ui.bot.innerHTML = "";
+  for (const b of visible) {
+    const option = document.createElement("option");
+    option.value = b.id;
+    const elo = b.meta && typeof b.meta.elo === "number" ? ` · ${Math.round(b.meta.elo)} Elo` : "";
+    option.textContent = b.name + elo;
+    ui.bot.appendChild(option);
+  }
+  if (bot) ui.bot.value = bot.id;
+  syncBotChip();
 }
 
 /** Download one bot's net into the worker and, once ready, deal. */
@@ -422,7 +481,8 @@ function describeModel() {
 /* ---------------------------------------------------------------- the boards */
 /** The strongest entry in the roster: the one that gives advice. */
 function strongestBot() {
-  return bots.reduce((a, b) =>
+  const regular = bots.filter((b) => !b.experimental);
+  return (regular.length ? regular : bots).reduce((a, b) =>
     ((b.meta && b.meta.elo) || 0) > ((a.meta && a.meta.elo) || 0) ? b : a
   );
 }
