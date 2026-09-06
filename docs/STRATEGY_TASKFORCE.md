@@ -2,10 +2,10 @@
 
 *Handoff written 2026-09-06 for a separate agent. Budget: **$50 of cloud
 compute**, every job through `ludometer.cloud.fleet` (ledger in
-`runs/cloud/ledger.jsonl`; the CLI refuses past the cap, but state flavor
-× timeout before every launch anyway). Read `docs/ROADMAP.md` first for
-where this sits; `NOTES_FOR_REMI.md` (newest on top) for what was measured;
-`docs/PORCELAIN.md` for how the nets were made.*
+`/Users/remi/ludometer/runs/cloud/ledger.jsonl`; the CLI refuses past the cap, but state flavor
+× timeout before every launch anyway). Read `/Users/remi/ludometer/docs/ROADMAP.md` first for
+where this sits; `/Users/remi/ludometer/NOTES_FOR_REMI.md` (newest on top) for what was measured;
+`/Users/remi/ludometer/docs/PORCELAIN.md` for how the nets were made.*
 
 ## 1. The hypothesis, in Rémi's words
 
@@ -26,50 +26,50 @@ Start with **round 1**, the first three moves, and widen only if that pays.
 
 ## 2. What you have
 
-- **Expert games**: `data/cloud/bga_positions.json.gz`, 3,795 validated
+- **Expert games**: `/Users/remi/ludometer/data/cloud/bga_positions.json.gz`, 3,795 validated
   games in compact form (deals per round, action ids, first seat, outcome,
   scores). `ludometer.cloud.label.replay_positions(game)` replays one into a
   list of `AzulState` positions with the mover per position; deals are
   scripted so the replay is exact. Per-game Elo of the players and the
   target-seat annotations live in the human pipeline's dataset
-  (`ludometer/human/dataset.py`, `data/human/replay.stats.json`);
-  `docs/HUMAN_GAMES.md` is its manual. **Never write under `data/human/`**:
+  (`/Users/remi/ludometer/ludometer/human/dataset.py`, `/Users/remi/ludometer/data/human/replay.stats.json`);
+  `/Users/remi/ludometer/docs/HUMAN_GAMES.md` is its manual. **Never write under `/Users/remi/ludometer/data/human/`**:
   the daily crawl owns it. In public-facing text say "expert games" and do
   not name the source.
-- **The nets**: Porcelain `runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt`
+- **The nets**: Porcelain `/Users/remi/ludometer/runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt`
   (3.9M, honest 2564), Lapis Lazuli `.../ckpt-096768.pt` (+109 over it),
-  the 7M teacher `runs/ft2/checkpoints/ft-004000.pt`, the big seed
-  `runs/big_t/checkpoints/ckpt-000000.pt` (19.5M, rates 2500). Load with
+  the 7M teacher `/Users/remi/ludometer/runs/ft2/checkpoints/ft-004000.pt`, the big seed
+  `/Users/remi/ludometer/runs/big_t/checkpoints/ckpt-000000.pt` (19.5M, rates 2500). Load with
   `ludometer.train.net.load_net`; agent specs `mcts:<ckpt>?sims=N` or
   `?think=<s>`, and `&engine=rust` for the fast tree.
 - **Search labels at scale**: `ludometer.cloud.label` replays games and
   searches every position with a published net (`fleet launch --entry
-  label --rust ...`; see `docs/PORCELAIN.md` §2026-09-05 and
-  `ludometer/cloud/label.py`). Add a `--rounds 0-1` filter (a small change:
+  label --rust ...`; see `/Users/remi/ludometer/docs/PORCELAIN.md` §2026-09-05 and
+  `/Users/remi/ludometer/ludometer/cloud/label.py`). Add a `--rounds 0-1` filter (a small change:
   keep positions whose `state.round_index` is in the range) so a run labels
   only the opening. With the Rust engine an L4 job does ~200k positions/s:
   11,000 opening positions at 4,096 sims is ~45M evaluations, a few minutes,
   under a dollar.
-- **Agreement metric**: `ludometer/human/agreement.py` (top-1/top-3 rate of
+- **Agreement metric**: `/Users/remi/ludometer/ludometer/human/agreement.py` (top-1/top-3 rate of
   a net's move against the expert's, by game quartile). August numbers for
   the older nets: ~40% top-1 overall, 33% in the first quartile, 48% in the
   last. Rerun it for Porcelain first; it is the baseline of this study.
-- **Fine-tuning with rehearsal**: `ludometer/train/finetune.py` (human rows
+- **Fine-tuning with rehearsal**: `/Users/remi/ludometer/ludometer/train/finetune.py` (human rows
   mixed with the net's own replay buffer; `policy_mask` per row decides
   which rows carry a policy target). Porcelain's polish buffer
-  (`runs/porc_w-p0905-2038/checkpoints/replay.npz`, 1.2M positions) is the
+  (`/Users/remi/ludometer/runs/porc_w-p0905-2038/checkpoints/replay.npz`, 1.2M positions) is the
   natural rehearsal set.
 - **Gates**: `ludometer.eval.gauntlet --games N --workers 8 ... ?think=1.0`
-  on this Mac, JSON into `runs/gates/`. 100 games to screen, ≥300 to claim.
+  on this Mac, JSON into `/Users/remi/ludometer/runs/gates/`. 100 games to screen, ≥300 to claim.
   The comparison that matters for this study is *against Porcelain*, at
   matched think time; the fixed-sims ladder is only a sanity check.
-- **The engine and the rules**: `ludometer/azul/engine.py` (module docstring
+- **The engine and the rules**: `/Users/remi/ludometer/ludometer/azul/engine.py` (module docstring
   has the state layout; `wall_col(color, row) = (color + row) % 5`).
 
 ## 3. Experiments, in order
 
 Each has a measurable answer and a stop rule. Write the results, including
-the negative ones, in `NOTES_FOR_REMI.md` as you go.
+the negative ones, in `/Users/remi/ludometer/NOTES_FOR_REMI.md` as you go.
 
 **E1. The opening atlas (measure, no training).** For every expert decision
 in round 1 (moves 1-3; then all of rounds 1-2), label the position with
@@ -94,21 +94,21 @@ its own best move (the "value loss" it assigns to the human choice). Then:
   mover's side. This measures the net's own valuation, not the truth, but a
   gap between (a) and (b) is itself informative.
 
-Cost: cents. Output: a short markdown atlas under `docs/opening/` plus the
+Cost: cents. Output: a short markdown atlas under `/Users/remi/ludometer/docs/opening/` plus the
 numbers in the notes. Stop rule: if agreement in round 1 is already above
 60% and the value losses are small, the hypothesis is weak; say so and
 move to E4.
 
 **E2. Human openings, net calculation (the cleanest test of "use it").**
 Build an opening policy from the experts alone: a small imitation net (the
-`hp1` recipe in `configs/hp1.json` was pure behaviour cloning on the whole
+`hp1` recipe in `/Users/remi/ludometer/configs/hp1.json` was pure behaviour cloning on the whole
 game; here train only on round-1 decisions of the higher-rated seat, ~11k
 rows, minutes on the Mac). Then an agent that plays the imitation policy
 (sampled or argmax) for moves 1-k of round 1 and hands over to Porcelain's
 search for the rest. Gate that agent against plain Porcelain at `think=1.0`,
 100 games per k for k in {1, 2, 3, whole round 1}. No retraining of the
 strong net, so any gain or loss is attributable to the opening choice
-alone. Implement it as an agent in `ludometer/agents/` (a wrapper holding
+alone. Implement it as an agent in `/Users/remi/ludometer/ludometer/agents/` (a wrapper holding
 two agents and a move counter), registered so the gauntlet can spec it.
 
 Stop rule: if every k loses by more than the noise, the human opening
@@ -146,13 +146,13 @@ opening, with the capacity difference respected (map row r to row 4-r only
 for the *draft* decision of which colour to take, never for the placement).
 
 **E5. If E2 or E3 wins: fold it into the next student.** The pretraining
-cycle (`scripts/porcelain_pretrain.sh`) consumes one replay file; add the
+cycle (`/Users/remi/ludometer/scripts/porcelain_pretrain.sh`) consumes one replay file; add the
 expert opening rows (policy-masked to rounds 1-2) to the corpus with a
 sampling weight, or run the E3 fine-tune as the last step of the cycle,
 and gate the student against Porcelain. This is the point where the $50
 buys something: a corpus from the stronger teacher (see the roadmap, step
 1) plus the opening prior is the Lapis Lazuli candidate. Coordinate through
-`NOTES_FOR_REMI.md` with whoever runs the teacher polish.
+`/Users/remi/ludometer/NOTES_FOR_REMI.md` with whoever runs the teacher polish.
 
 ## 4. Traps
 
@@ -169,8 +169,8 @@ buys something: a corpus from the stronger teacher (see the roadmap, step
 - **The engines.** Rust and Python trees are exact twins (gauntlet 45-2-53);
   use `engine=rust` freely for speed, keep the Python one for anything you
   want to step through.
-- **Other agents.** The BGA crawl runs daily from `data/human/`; a teacher
-  polish may be running from `runs/big_t`. `ps` before claiming cores;
+- **Other agents.** The BGA crawl runs daily from `/Users/remi/ludometer/data/human/`; a teacher
+  polish may be running from `/Users/remi/ludometer/runs/big_t`. `ps` before claiming cores;
   `nice -n 10` anything long; never touch a running run's directory.
 
 ## 5. What a good report looks like
@@ -179,6 +179,6 @@ Numbers first: the agreement table by move and round, the value-loss
 distribution, the E2 gauntlets per k, the E3 screens. Then the twenty
 disagreements as a player would read them. Then one paragraph: is the
 hypothesis confirmed, where exactly, and what it is worth in Elo. Rémi
-reads `NOTES_FOR_REMI.md`; the atlas goes under `docs/opening/`; anything
+reads `/Users/remi/ludometer/NOTES_FOR_REMI.md`; the atlas goes under `/Users/remi/ludometer/docs/opening/`; anything
 that would embarrass the source of the expert games stays out of public
 pages.
