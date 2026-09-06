@@ -1330,7 +1330,7 @@ async function askHint() {
     suggestion = { source: move.source, color: move.color, dest: move.dest };
     sel = { source: move.source, color: move.color };
     render();
-    say(strongestBot().name + " would " + move.text);
+    say(strongestBot().name + " would " + move.text.replace(/^took /, "take "));
   } catch (err) {
     say(err.message);
   } finally {
