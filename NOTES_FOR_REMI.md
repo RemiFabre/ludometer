@@ -101,6 +101,14 @@ teacher; policy target = the search's visit distribution, value target = half ga
 half the search's root value. No self-play polish yet: that is Phase B, running tonight,
 toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
 
+**04:35, first Lapis Lazuli gate: +109, not enough.** The polished checkpoint at 96,768 games
+(2630 ± 31 on the ladder, the run's best) played Porcelain 300 games at matched think time:
+**193-5-102 (65%), +109 Elo** (`runs/gates/porc_w-p0905-2038-ckpt-096768_vs_porcelain_300.json`).
+Honest ~2673, bar 2714. Self-play polish bought +109 in 100k games and is flattening in the
+low 60s at wall clock; the learner continues toward 250k games in case it drifts further.
+Next lever, generation 2: a fresh student pretrained on Porcelain's own 2048-sim corpus
+(`rlx_teacher2`, two Rust L4 jobs until ~06:45), first cycle started on the partial corpus.
+
 **03:30, the big teacher seed rates 2500 ± 39** (`runs/big_t/checkpoints/ckpt-000000.pt`, 19.5M
 params, 4 supervised epochs on the generation-1 corpus): identical to Porcelain, which is the
 expected result: the corpus sets the ceiling, a bigger body cannot exceed its teacher by

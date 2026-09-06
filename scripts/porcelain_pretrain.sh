@@ -16,10 +16,10 @@ RUN="${CFG}-p${STAMP}"
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
 echo "== pull"
-uv run python -m ludometer.cloud.corpus pull --run rlx_teacher rlx_bga 2>&1 | grep corpus || true
+uv run python -m ludometer.cloud.corpus pull --run ${CORPUS_RUNS:-rlx_teacher rlx_bga} 2>&1 | grep corpus || true
 echo "== build"
-uv run python -m ludometer.cloud.corpus build --run rlx_teacher rlx_bga --out data/cloud/porcelain_corpus.npz 2>&1 | grep corpus
-uv run python -m ludometer.cloud.corpus stats --run rlx_teacher rlx_bga 2>&1 | grep -E '"games"|"positions"|"jobs"' | tr -d ' ,' | paste -sd' ' -
+uv run python -m ludometer.cloud.corpus build --run ${CORPUS_RUNS:-rlx_teacher rlx_bga} --out ${CORPUS_OUT:-data/cloud/porcelain_corpus.npz} 2>&1 | grep corpus
+uv run python -m ludometer.cloud.corpus stats --run ${CORPUS_RUNS:-rlx_teacher rlx_bga} 2>&1 | grep -E '"games"|"positions"|"jobs"' | tr -d ' ,' | paste -sd' ' -
 
 echo "== pretrain + rate: runs/$RUN"
 nice -n 5 uv run python -m ludometer.train.run --config "configs/$CFG.json" --run "$RUN" --max-games 0 \
