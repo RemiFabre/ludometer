@@ -101,6 +101,18 @@ teacher; policy target = the search's visit distribution, value target = half ga
 half the search's root value. No self-play polish yet: that is Phase B, running tonight,
 toward Lapis Lazuli (+150 over Porcelain). Fleet spend at ship time: about $25.
 
+**05:40, generation 2 does not beat generation 1 + polish.** A fresh W160 student pretrained
+4 epochs on 90,112 games of Porcelain playing itself at 2048 sims (4.9M positions, Rust
+fleet) rates 2571 ± 45 on the ladder but plays Porcelain **51-2-47 at matched think time**:
+parity. Distilling the shipped net's own longer search reproduces its real-time strength, it
+does not exceed it; the +203 of generation 1 came from a teacher that was genuinely stronger
+than the student body could be at wall clock (7M net, human-tuned), and Porcelain is not
+that relative to itself. The polished checkpoint (+109) stays the best. Last cheap try on the
+Mac: fine-tune the polished checkpoint on the generation-2 labels with its own buffer as
+rehearsal. Recommendation for Lapis Lazuli after that: a genuinely stronger teacher, i.e. the
+19.5M seed (`runs/big_t`) polished on the fleet at 2048 sims for a night, then distilled.
+Budget: $61 spent, $12 committed, $17 headroom.
+
 **04:35, first Lapis Lazuli gate: +109, not enough.** The polished checkpoint at 96,768 games
 (2630 ± 31 on the ladder, the run's best) played Porcelain 300 games at matched think time:
 **193-5-102 (65%), +109 Elo** (`runs/gates/porc_w-p0905-2038-ckpt-096768_vs_porcelain_300.json`).
