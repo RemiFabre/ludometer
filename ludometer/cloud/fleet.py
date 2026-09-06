@@ -103,12 +103,21 @@ if [ -n "${RLX_ASSET:-}" ]; then
 python - <<'PY'
 import os
 from huggingface_hub import hf_hub_download
-p = hf_hub_download(os.environ["RLX_SRC_REPO"], os.environ["RLX_ASSET"], repo_type="dataset", local_dir="/work/assets")
-print("[rl-experiment] asset", p)
+# comma-separated: the first is the positions file, the rest are extras
+for name in os.environ["RLX_ASSET"].split(","):
+    p = hf_hub_download(os.environ["RLX_SRC_REPO"], name, repo_type="dataset", local_dir="/work/assets")
+    print("[rl-experiment] asset", p)
 PY
+RLX_ASSET="${RLX_ASSET%%,*}"
 fi
 if [ "${RLX_ENTRY:-generator}" = "bench" ]; then
   exec python -m ludometer.cloud.bench --run "$RLX_RUN" --weights "$RLX_WEIGHTS" $RLX_EXTRA
+fi
+if [ "${RLX_ENTRY:-generator}" = "atlas" ]; then
+  mkdir -p /work/out
+  exec python -m ludometer.opening.atlas label --positions "/work/assets/$RLX_ASSET" \
+    --net "$RLX_RUN=hub:$RLX_RUN" --weights "$RLX_WEIGHTS" --device cuda --workers "$RLX_WORKERS" \
+    --upload "$RLX_SHARDS" --out "/work/out/atlas-$RLX_RUN-$RLX_TAG.npz" $RLX_EXTRA
 fi
 if [ "${RLX_ENTRY:-generator}" = "label" ]; then
   exec python -m ludometer.cloud.label run --positions "/work/assets/$RLX_ASSET" --run "$RLX_RUN" \
@@ -439,7 +448,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     l.add_argument("--dry-run", action="store_true")
     l.add_argument(
-        "--entry", default="generator", choices=["generator", "label", "bench"]
+        "--entry", default="generator", choices=["generator", "label", "bench", "atlas"]
     )
     l.add_argument(
         "--asset",

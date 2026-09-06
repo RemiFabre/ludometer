@@ -132,3 +132,31 @@ def test_label_game_yields_a_full_record(tmp_path: Path) -> None:
         write_shard(tmp_path / "s.npz", [rec], {"source": "bga"})
     )
     assert meta["source"] == "bga" and back.seed == game.table_id
+
+
+def test_label_game_round_filter_keeps_only_the_opening() -> None:
+    torch.manual_seed(0)
+    net = make_net(TINY)
+    net.eval()
+    labeler = BatchLabeler(
+        BatchEvaluator(net, device="cpu"),
+        MCTSConfig(sims=4, chance_children=2),
+        slots=8,
+        sims=4,
+        seed=1,
+    )
+    game, encoded = _random_game(6)
+    states, _movers, _final = replay_positions(game)
+    rounds = [s.round_index for s in states]
+    assert max(rounds) >= 1  # a full game has several rounds
+    rec = label_game(labeler, game, rounds=(0, 0))
+    want = [i for i, r in enumerate(rounds) if r == 0]
+    assert len(rec) == len(want) and rec.decisions == len(want)
+    np.testing.assert_array_equal(rec.states, np.stack([encoded[i] for i in want]))
+    # the game-level fields still describe the whole game
+    assert rec.outcome == game.outcome and rec.scores == game.scores
+    both = label_game(labeler, game, rounds=(0, 1))
+    assert len(both) == sum(1 for r in rounds if r <= 1)
+    from ludometer.cloud.label import _parse_rounds
+
+    assert _parse_rounds("") is None and _parse_rounds("0-1") == (0, 1) and _parse_rounds("2") == (2, 2)

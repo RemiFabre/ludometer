@@ -248,8 +248,20 @@ class BatchLabeler:
         return [o for o in out if o is not None]
 
 
-def label_game(labeler: BatchLabeler, game: PositionGame) -> GameRecord:
+def label_game(
+    labeler: BatchLabeler, game: PositionGame, rounds: tuple[int, int] | None = None
+) -> GameRecord:
+    """Label one game; ``rounds=(lo, hi)`` keeps only the positions whose
+    ``round_index`` is in that range (the opening study), the record's game-level
+    fields (outcome, scores, walls) still describe the whole game."""
     states, movers, final = replay_positions(game)
+    if rounds is not None:
+        lo, hi = rounds
+        keep = [i for i, s in enumerate(states) if lo <= s.round_index <= hi]
+        if not keep:
+            raise ValueError(f"table {game.table_id}: no positions in rounds {lo}-{hi}")
+        states = [states[i] for i in keep]
+        movers = [movers[i] for i in keep]
     encoded = np.stack([s.encode() for s in states]).astype(np.float32)
     labels = labeler.label(states)
     policies = np.stack([p for p, _v, _m in labels]).astype(np.float32)
@@ -292,6 +304,7 @@ def _worker(args: tuple[Any, ...]) -> list[GameRecord]:  # pragma: no cover - su
         games_json,
         device,
         half,
+        rounds,
     ) = args
     import torch
 
@@ -307,7 +320,7 @@ def _worker(args: tuple[Any, ...]) -> list[GameRecord]:  # pragma: no cover - su
     out = []
     for d in games_json:
         try:
-            out.append(label_game(labeler, PositionGame.from_json(d)))
+            out.append(label_game(labeler, PositionGame.from_json(d), rounds))
         except ValueError as exc:
             print(f"[label] skipped: {exc}", flush=True)
     return out
@@ -339,7 +352,23 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--block", type=int, default=16, help="games per shard")
     r.add_argument("--device", default="cpu")
     r.add_argument("--half", action="store_true")
+    r.add_argument(
+        "--rounds",
+        default="",
+        help="only positions whose round_index is in this range, e.g. 0-1 (default: all)",
+    )
     return p
+
+
+def _parse_rounds(text: str) -> tuple[int, int] | None:
+    if not text:
+        return None
+    lo, _, hi = text.partition("-")
+    lo_i = int(lo)
+    hi_i = int(hi) if hi else lo_i
+    if hi_i < lo_i or lo_i < 0:
+        raise ValueError(f"bad --rounds {text!r}")
+    return lo_i, hi_i
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -361,11 +390,13 @@ def _run(args: argparse.Namespace) -> int:
     sims = args.sims or cfg.sims
     mcts_config = cfg.selfplay_config().mcts
     tag = args.tag or f"label-{os.getpid()}"
+    rounds = _parse_rounds(args.rounds)
     k, n = (int(x) for x in args.part.split("/"))
     games = load_positions(args.positions)[k::n]
     workers = args.workers or max(1, os.cpu_count() or 1)
     print(
-        f"[rl-experiment] label {len(games)} games (part {k}/{n}) with {args.run} at {sims} sims, "
+        f"[rl-experiment] label {len(games)} games (part {k}/{n}) with {args.run} at {sims} sims"
+        + (f", rounds {rounds[0]}-{rounds[1]}" if rounds else "") + ", "
         f"{workers} workers x {args.games} slots",
         flush=True,
     )
@@ -392,6 +423,7 @@ def _run(args: argparse.Namespace) -> int:
                     [g.to_json() for g in chunk],
                     args.device,
                     args.half,
+                    rounds,
                 )
                 for i, chunk in enumerate(chunks)
             )
@@ -407,6 +439,7 @@ def _run(args: argparse.Namespace) -> int:
                     "block": i,
                     "weights_version": version,
                     "sims": sims,
+                    "rounds": list(rounds) if rounds else None,
                     "games": len(records),
                     "positions": positions,
                     "evals": 0,

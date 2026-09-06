@@ -169,6 +169,40 @@ def _parse_sims(query: str, default: int) -> int:
     return _parse_options(query, default)[0]
 
 
+def _load_hybrid(spec: str, seed: int | None):
+    """``hybrid:<opening ckpt>|<main ckpt>?k=<n|all>&temp=<t>&sims=&think=&engine=``."""
+    rest = spec[len("hybrid:") :]
+    paths, _, query = rest.partition("?")
+    opening_path, sep, main_path = paths.partition("|")
+    if not sep or not opening_path or not main_path:
+        raise ValueError("hybrid spec needs two checkpoints: hybrid:<opening>|<main>?k=3")
+    k: int | None = 3
+    temperature = 0.0
+    main_query = []
+    for part in query.split("&"):
+        if not part:
+            continue
+        key, _, value = part.partition("=")
+        if key == "k":
+            k = None if value == "all" else int(value)
+        elif key == "temp":
+            temperature = float(value)
+        else:
+            main_query.append(part)
+    sims, think, engine = _parse_options_engine("&".join(main_query), DEFAULT_SIMS)
+    from ludometer.agents.hybrid import HybridOpeningAgent, PolicyAgent
+    from ludometer.train.mcts_agent import MCTSAgent, _cached_net  # lazy: needs torch
+
+    opening = PolicyAgent(_cached_net(opening_path, "cpu"), temperature=temperature, seed=seed)
+    extra = {} if engine is None else {"engine": engine}
+    main = MCTSAgent.from_checkpoint(main_path, sims=sims, seed=seed, **extra)
+    main.set_time_budget(think)
+    agent = HybridOpeningAgent(opening, main, k=k, name=f"hybrid:k={'all' if k is None else k}")
+    agent.spec_info = {"kind": "hybrid", "spec": spec, "k": k, "opening": opening_path, "main": main_path,
+                       "sims": sims, "think_s": think, "engine": main.engine, "temperature": temperature}
+    return agent
+
+
 def load_agent(spec: str, seed: int | None = None):
     """Build the agent described by ``spec`` (see the module docstring)."""
     if not isinstance(spec, str):
@@ -203,6 +237,8 @@ def load_agent(spec: str, seed: int | None = None):
             "think_s": think,
         }
         return agent
+    if spec.startswith("hybrid:"):
+        return _load_hybrid(spec, seed)
     if spec.startswith("mcts:"):
         rest = spec[len("mcts:") :]
         path, _, query = rest.partition("?")

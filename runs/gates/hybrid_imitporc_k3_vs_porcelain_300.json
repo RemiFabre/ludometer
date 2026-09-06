@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "hyb_k3": "hybrid:runs/imit_r1_porc/checkpoints/best.pt|runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?k=3&think=1.0&engine=rust",
+    "porcelain": "mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?think=1.0&engine=rust"
+  },
+  "games": 300,
+  "matches": [
+    {
+      "a": "hyb_k3",
+      "b": "porcelain",
+      "n_games": 300,
+      "wins": 137,
+      "draws": 4,
+      "losses": 159,
+      "win_rate": 0.4633333333333333,
+      "mean_score_diff": -1.45,
+      "mean_score_a": 41.98,
+      "mean_score_b": 43.43,
+      "mean_moves": 54.28,
+      "base_seed": 21260907,
+      "truncated": 0
+    }
+  ],
+  "elo": {
+    "hyb_k3": -12.740903892307752,
+    "porcelain": 12.740903892307752
+  },
+  "elo_err": {
+    "hyb_k3": 707106.7825992772,
+    "porcelain": 707106.7825992772
+  },
+  "anchors": {}
+}

@@ -4,6 +4,80 @@ Running log of decisions, findings and things you should know. Newest entries on
 
 ---
 
+## 2026-09-06 — Opening task force: the experts do not out-plan the net where it can be measured; the net's confidence is what was wrong
+
+The study Rémi asked for (`docs/STRATEGY_TASKFORCE.md`) is done through E4; the full report with
+the tables and the 20 disagreements as a player reads them is `docs/opening/README.md`
+(`porcelain.md` and `teacher7m.md` carry the boards). Cloud spend **$2.59** of the $50 (two L4
+jobs, one cancelled attempt); everything else ran on the Mac. Gates still running at the time of
+writing: 300 games for the disagreement-only fine-tune and for the rounds 1-2 fine-tune
+(`runs/opening/gate_queue3.log`, `gate_queue4.log`); the README's E3 table gets them when they land.
+
+**E1, the atlas.** Every position of the 3,795 expert games in rounds 1-2 (86,613, both seats;
+45,876 expert decisions) searched by Porcelain at 4,096 sims with no root noise, and by the 7M
+teacher on an L4. Porcelain's own pick matches the expert's move **29.5% on move 1, 36% on move
+2, 39% on move 3, then 49 / 67 / 80 / 87%** as round 1 runs out of tiles (the "calculator" shape);
+34.8% over moves 1-3, 49.4% over round 1, 52% over round 2. The other seat agrees 32% and is
+charged twice the loss, and the sub-2200 experts agree 43% against 49-54% for the rest:
+**agreement with the net tracks strength**, which cuts against the hypothesis. Raw-prior
+agreement over the whole game (114,885 expert decisions) is Cobalt 40.8%, Porcelain 48.5%, Lapis
+Lazuli 50.3% (first quartile 35.8 / 45.2 / 49.6%); August's nets were at 33% in the first
+quartile. Value loss of the expert's move by Porcelain's root Q, round 1: median 0, p90 0.205,
+mean 0.058 (+0.7 points by the margin head); the net calls a third of the experts' *first* moves a
+clear mistake (> 0.10). The disagreements are mostly about **which colour to start** (73%
+different colour, 31% center-vs-factory, 17% same colour other row, floor-vs-build under 5%).
+
+**Who is right.** Three checks, all on the net's own terms. (a) The 7M teacher at 16,384 sims
+sides with the expert in 4.8% of Porcelain's 2,000 clearest disagreements (4.2% at 4,096; loss
+0.361 -> 0.352): deeper search does not drift toward the human. (b) A full 4,096-sim search from
+the two child positions of all 11,092 round-1 disagreements keeps the gap (mean 0.109, correlation
+0.57 with the root Q) but **prefers the expert's move in 19%** of them (33% of the coin-flip ones,
+6% of the > 0.30 ones). (c) The 20 largest disagreements played out Porcelain-vs-Porcelain at
+think=1.0, 20 games per branch, same seeds: the net's move scores **+0.14 share / +7 points**,
+better in 12 positions, worse in 5. The root Q had called those gaps 0.78 on average, i.e. the
+net's confidence in its opening judgement is **about five times overstated** on moves the search
+never explores (they carry the value head's first guess), while its direction is right on average.
+In one of the five the expert's "blunder" won 95% of the play-outs.
+
+**E2, human opening then Porcelain's calculation.** Imitation nets on the 24,619 round-1 expert
+decisions (`ludometer.opening.imitation`, 10% held out): from scratch 53.0% held-out top-1,
+from Porcelain's weights **62.3%** (Porcelain's prior on the same rows 50.8%, Lapis 56.8%). The
+hybrid agent (`hybrid:<opening>|<main>?k=3&think=1.0&engine=rust`, `ludometer/agents/hybrid.py`)
+plays the imitation argmax for its first k own decisions of round 1, then Porcelain's search.
+Wall-clock vs Porcelain: **k=1 44%, k=2 50%, k=3 56.5% (100) then 46.3% (300; pooled 48.9%), whole
+round 40%**, from-scratch k=3 49.5%, sampled k=3 41%. Parity for one to three moves, a clear loss
+for the whole round. The human opening does not beat the net's own by the net's own follow-up.
+
+**E3, fine-tune Porcelain with rehearsal** (`finetune.py`, lr 5e-5, polish buffer 1:3, 4 min per
+run): round-1 rows 53% / 53% at 100 games (ft-1000 / ft-4000), **151-4-145 (51%) over 300** for
+ft-4000; rounds 1-2 rows 54.5% (100); the round-1 disagreements only 55-1-44 (100, 300 running).
+The fine-tune does what it is told (Porcelain's first-quartile raw agreement 45% -> 57%, later
+quartiles unchanged) and buys nothing measurable at matched think time.
+
+**E4, symmetry** (`ludometer.opening.symmetry`): the 180° rotation (colours 0,4,3,2,1, rows
+reversed) is exact on the wall and wrong on the pattern lines; where it applies (6,268 positions,
+all 3,795 first moves among them) the raw net changes its draft (colour + source) in 76% of the
+first moves, and **so does its own 1,024-sim search (76%)**; Lapis 79% both ways. The asymmetry is
+the game's (the 1-tile line is worth one tile, the 5-tile line is not), not a generalisation gap.
+Nothing to augment with.
+
+**Verdict.** Not confirmed where it would earn Elo. The opening is where the net and the experts
+differ most, and the net is over-confident about it, but nothing the net can compute (deeper
+search, a stronger teacher, child searches, play-outs) sides with the experts on average, and
+neither the human opening nor a human-leaning fine-tune moves the wall-clock gate off parity.
+What the expert games are good for stays what Porcelain already used them for: positions to
+search, and a diagnostic that rises with strength. E5 (fold the prior into the next student) has
+no winner to fold; I did not spend the remaining $47 on it. Two things worth a follow-up if you
+want one: (1) the 19% of disagreements where the child search prefers the expert are a natural
+training set for a *value* correction (the miscalibration is in Q, not in the policy), and (2)
+the atlas tooling labels 86k positions for $2 on an L4, so the same measurement on Lapis Lazuli or
+on the polished 19.5M teacher is an hour's work (`fleet launch --entry atlas`).
+
+Tools: `ludometer/opening/{atlas,report,playout,imitation,symmetry}.py`, `ludometer/agents/hybrid.py`
+and the `hybrid:` spec, `ludometer.cloud.label --rounds`, `fleet --entry atlas` (multi-asset
+bootstrap), `tests/test_opening.py` (6 tests) and a `--rounds` test in `tests/test_label.py`. Data
+under `data/cloud/opening/` (the report JSONs there carry the source's table ids; the docs do not).
+
 ## 2026-09-06 — **Rust engine for Azul self-play**: bit-exact twin of the Python engine, tree walk 200x faster
 
 Done overnight from `docs/RUST_ENGINE.md` (plan: `docs/superpowers/plans/2026-09-06-rust-engine.md`).

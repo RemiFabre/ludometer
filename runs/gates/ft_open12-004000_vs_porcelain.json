@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "ft12_4000": "mcts:runs/ft_open12/checkpoints/ft-004000.pt?think=1.0&engine=rust",
+    "porcelain": "mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?think=1.0&engine=rust"
+  },
+  "games": 100,
+  "matches": [
+    {
+      "a": "ft12_4000",
+      "b": "porcelain",
+      "n_games": 100,
+      "wins": 53,
+      "draws": 3,
+      "losses": 44,
+      "win_rate": 0.545,
+      "mean_score_diff": 1.34,
+      "mean_score_a": 43.68,
+      "mean_score_b": 42.34,
+      "mean_moves": 54.42,
+      "base_seed": 21260906,
+      "truncated": 0
+    }
+  ],
+  "elo": {
+    "ft12_4000": 15.59860502193777,
+    "porcelain": -15.59860502193777
+  },
+  "elo_err": {
+    "ft12_4000": 707106.7634331101,
+    "porcelain": 707106.7634331101
+  },
+  "anchors": {}
+}
