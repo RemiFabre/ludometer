@@ -28,13 +28,19 @@ the two long reports with the boards are `porcelain.md` and `teacher7m.md`.*
   cleanest test, an imitation policy for the first *k* moves handing over to
   Porcelain, scores 44%, 50%, 49% (400 games) and 40% for k = 1, 2, 3 and the
   whole round; fine-tuning Porcelain toward the expert's round-1 choices with
-  rehearsal lands at 51% over 300 games. Parity, not a gain.
+  rehearsal lands at 51% over 300 games; toward rounds 1-2 at 54.5% over 400,
+  and toward the round-1 *disagreements only* at 56.5% over 400 (+45 ± 17
+  Elo). A small, replicated gain from the fine-tune, far from a rung.
 - **The 180° board rotation is not a usable symmetry**: it swaps the 1-tile and
   5-tile lines, and the search itself changes its draft in three quarters of the
   rotated positions. The net's asymmetry is the game's.
 - **Verdict: the hypothesis is not confirmed at the level where it would earn
-  Elo.** The opening is where the net and the experts differ most, but the
-  disagreement is not a measurable weakness of the net against itself. What the
+  a rung, but it is not empty either.** The opening is where the net and the
+  experts differ most; the human opening as a *policy* does not beat the net's,
+  and the net's own checks side with it on average, yet nudging Porcelain
+  toward the experts on exactly the positions where they disagree is worth
+  +30 to +45 Elo at matched think time, cheaply. That is the piece worth
+  folding into the next student (E5), as the last fine-tune of the cycle. What the
   study did find is that agreement with the experts rises with net strength
   (Cobalt 41%, Porcelain 48%, Lapis Lazuli 50% raw top-1 over the whole game),
   so the expert games remain a good *diagnostic*, and a good source of searched
@@ -236,13 +242,19 @@ buffer as rehearsal (1:3), lr 5e-5, checkpoints at 500/1000/2000/4000 steps
 |---|---|---|---|---|---|
 | round-1 expert decisions (24,619) | 1000 | 54.8% | 100 | 51-4-45 | 53% |
 | | 4000 | 57.1% | 100 + 300 | 53-0-47, then 151-4-145 | 53%, then 51% (pooled 51.5%) |
-| rounds 1-2 (48,149) | 4000 | | 100 | 53-3-44 | 54.5% |
+| rounds 1-2 (48,149) | 4000 | | 100, then 300 | 53-3-44, then 161-5-134 | 54.5%, then 54.5% (pooled 54.5% over 400, +31 ± 17 Elo; another 300 running) |
 | round-1 disagreements only (11,889) | 2000 | | 100 | 53-1-46 | 54% |
-| | 4000 | | 100, then 300 | 55-1-44, then (running) | 56% |
+| | 4000 | | 100, then 300 | 55-1-44, then 167-7-126 | 56%, then 56.8% (pooled **56.5% over 400, +45 ± 17 Elo**; another 300 running) |
 
 The fine-tune does what it is asked (Porcelain's first-quartile raw agreement
-goes from 45% to 57% with the later quartiles unchanged) and it does not
-change wall-clock strength: parity within the noise of 400 games.
+goes from 45% to 57% with the later quartiles unchanged). The round-1 rows
+give parity within the noise of 400 games. The rounds 1-2 rows give 54.5%
+over 400 games (about +30 Elo, 1.8 standard errors from parity) and the
+round-1 *disagreement* rows, i.e. only the positions where Porcelain's search
+did not pick the expert's move, give 56.5% over 400 (about +45 Elo, 2.6
+standard errors). Two variants above parity is a small real effect, not the
++150 a rung needs; both are being extended to 700 games, and the rounds 1-2
+disagreement variant is in the queue.
 
 ## 5. Symmetry (E4)
 
