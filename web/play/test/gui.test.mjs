@@ -1127,6 +1127,35 @@ async function checkBotSwitch(page, label, errors) {
   if (!options.every((o) => /\d+ Elo/.test(o))) {
     errors.push(`${label}: menu options lack an Elo — ${options.join(", ")}`);
   }
+  // experimental entries (bots.json "experimental": true) stay out of the menu
+  // until Settings says otherwise, and never take the default slot
+  const exp = await page.eval(`
+    const m = await (await fetch("model/bots.json", { cache: "no-cache" })).json();
+    const ids = () => [...document.getElementById("bot").options].map((o) => o.value);
+    const hidden = m.bots.filter((b) => b.experimental).map((b) => b.id);
+    const before = ids();
+    const selected = document.getElementById("bot").value;
+    document.querySelector('.flag[data-experimental="true"]').click();
+    const on = ids();
+    document.querySelector('.flag[data-experimental="false"]').click();
+    const off = ids();
+    return { hidden, before, on, off, selected };
+  `);
+  if (exp.hidden.length) {
+    if (exp.hidden.some((id) => exp.before.includes(id))) {
+      errors.push(`${label}: an experimental opponent is listed by default — ${exp.before.join(", ")}`);
+    }
+    if (!exp.hidden.every((id) => exp.on.includes(id))) {
+      errors.push(`${label}: turning experimental opponents on did not list them — ${exp.on.join(", ")}`);
+    }
+    if (exp.hidden.some((id) => exp.off.includes(id))) {
+      errors.push(`${label}: turning experimental opponents off left them listed — ${exp.off.join(", ")}`);
+    }
+    if (exp.hidden.includes(exp.selected)) {
+      errors.push(`${label}: the default opponent is an experimental one — ${exp.selected}`);
+    }
+    console.log(`    ${label}: experimental opponents (${exp.hidden.join(", ")}) hidden by default, shown on demand`);
+  }
   await page.eval(`
     const sel = document.getElementById("bot");
     sel.value = "brick";

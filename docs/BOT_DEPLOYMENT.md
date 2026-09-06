@@ -22,18 +22,29 @@ commit.*
    an extra opponent and Rémi declined.)
 3. Weaker rungs may be added to fill Elo gaps in the ladder without any
    gate beyond their honest rating; they must slot into the naming order.
+4. **Experimental opponents** (since 2026-09-06). A net that beats the
+   current strongest at matched think time over ≥300 games, but by less
+   than +150, may ship with `"experimental": true` in its bots.json entry.
+   The page hides it unless the player turns on "Experimental opponents"
+   in Settings (off by default, stored like every other preference), it
+   never becomes the default opponent or the adviser, and its Elo is the
+   gated number. It takes the next reserved name. First one: Lapis Lazuli,
+   run porc_w-p0905-2038/ckpt-096768, 193-5-102 vs Porcelain (+109, honest
+   2673). Promoting it to a regular rung means clearing the +150 bar with a
+   fresh ≥300-game gate, then dropping the flag.
 
 ## Names
 
 The ladder is ceramics, from raw ground to precious glaze, weakest first:
 
     Sand · Clay · Brick · Ochre · Charcoal · Ice · Cobalt · Porcelain
+    (+ Lapis Lazuli, experimental, hidden behind the Settings switch)
 
 (Porcelain shipped 2026-09-05: run porc_w-p0905-2038, honest 2564, 229-0-71
 over 300 games vs Cobalt at matched think time.) Reserved for future
 STRONGER-than-current bots, in this order:
 
-    Lapis Lazuli  →  Ultramarine
+    Ultramarine
 
 (Also recorded in `web/player/model/bots.json` under
 `reserved_for_future_nets`, with suggested swatch colours.) Rules:

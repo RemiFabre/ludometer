@@ -1,0 +1,47 @@
+{
+  "run": "porc_w-p0905-2038",
+  "checkpoint": "ckpt-096768",
+  "elo": 2673.0,
+  "games": 96768,
+  "exported_at": "2026-09-06T09:26:46Z",
+  "input_size": 182,
+  "action_space": 180,
+  "net_config": {
+    "arch": "structured",
+    "input_size": 182,
+    "action_space": 180,
+    "embed": 160,
+    "layers": 1,
+    "heads": 5,
+    "ffn_mult": 2,
+    "body": 1536,
+    "body_blocks": 1,
+    "value_hidden": 160,
+    "policy_rank": 40,
+    "policy_global": true,
+    "margin_head": true,
+    "aux_heads": false,
+    "version": 2
+  },
+  "num_params": 3915019,
+  "outputs": [
+    "policy",
+    "value",
+    "margin"
+  ],
+  "has_margin": true,
+  "has_aux": false,
+  "opset": 17,
+  "onnx_bytes": 15793356,
+  "onnx_sha256": "6712a2a60e71166a29465ce7d39201fff2109074d23909f98185f5f6157567d0",
+  "parity": {
+    "checked": true,
+    "n": 100,
+    "policy_max_abs_diff": 1.3589859008789062e-05,
+    "value_max_abs_diff": 3.3080577850341797e-06,
+    "tol": 0.0001,
+    "margin_max_abs_diff": 1.5497207641601562e-06
+  },
+  "source_checkpoint": "runs/porc_w-p0905-2038/checkpoints/ckpt-096768.pt",
+  "torch_reference": "/Users/remi/ludometer/web/player/test/fixtures/torch_reference.json.gz"
+}
