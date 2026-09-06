@@ -71,6 +71,13 @@ Elo 2564 (+203; the bar was +150), with no self-play polish at all. Fleet
 spend at ship time about $25. Phase B (on-policy polish, fleet plays the
 student) runs overnight toward Lapis Lazuli, +150 over Porcelain.
 
+## 0c. The night after (2026-09-06, 06:00)
+
+Lapis Lazuli not reached. Best: +109 over Porcelain (polish, 300 games). Generation-2
+distillation of Porcelain's own 2048-sim play: parity. Fleet moved to the Rust engine
+at 01:50 (17× per L4 job). Total spend $70.39. Reading and recommendation in
+NOTES_FOR_REMI.md, top entry.
+
 ## 1. Where things stand (checked today, not inherited)
 
 - Cobalt = run4/ckpt-037888, 1.81M params, 2361 on the fixed-sims ladder,

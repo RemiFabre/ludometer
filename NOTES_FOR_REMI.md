@@ -85,6 +85,41 @@ and (2) are in (ludometer-1a was told; they plan rlx_teacher2 and the porc_w gen
 (5) The GUI still runs the Python engine; `engine_rs.AzulState` attributes are copies, so
 the hand-editing tests/GUI paths (`state.factories[0][0] = 1; recount()`) stay Python-only.
 
+## 2026-09-06 — Morning report: Lapis Lazuli not reached, +109 is where every route lands
+
+**Shipped**: Porcelain (last night). **Not shipped**: Lapis Lazuli, whose bar is +150 over
+Porcelain at matched think time over 300 games. Best result: the self-play-polished checkpoint
+`runs/porc_w-p0905-2038/checkpoints/ckpt-096768.pt` at **193-5-102 (65%), +109** over Porcelain
+(`runs/gates/porc_w-p0905-2038-ckpt-096768_vs_porcelain_300.json`), honest ~2673.
+
+What was tried overnight, all against Porcelain at `think=1.0`, 100-game screens unless noted:
+- Self-play polish of Porcelain's net (Phase B), 145k games, fleet on the Rust engine from
+  01:50: screens 44 → 51 → 56 → 60 → 58 → 64 → 62 → 62%; ladder 2496 → 2630 (best) → 2608.
+  Plateau in the low 60s from ~70k games on. The 300-game gate above is its best checkpoint.
+- Six-epoch pretraining on the generation-1 corpus: 50-3-47 (parity).
+- Generation 2: a fresh W160 student on 90k games of Porcelain playing itself at 2048 sims
+  (4.9M positions): ladder 2571, **51-2-47 at wall clock**: parity. Distilling a net's own
+  longer search reproduces its real-time strength; it does not exceed it.
+- Fine-tuning the polished checkpoint on the generation-2 labels: 58-4-38 and 60-2-38.
+- The 19.5M teacher seed (`runs/big_t/checkpoints/ckpt-000000.pt`) pretrained on the
+  generation-1 corpus rates 2500, the corpus's ceiling; it was not polished (budget kept).
+
+**Reading**: generation 1 gained +203 because the teacher (7M net, human-tuned, searched at
+1024 sims) was far stronger than anything the 3.9M student body could reach on its own.
+Porcelain is now within ~100 Elo of what its own search can teach it, so every route that
+uses Porcelain as its own teacher converges on the same +100. Lapis Lazuli needs a teacher
+that is genuinely stronger at equal search: the recommendation is the 19.5M seed, polished
+on the fleet for a night with the Rust engine at 2048 sims (a 19.5M net is nearly free on
+an L4 now), then distilled into the W160 body with the same cycle script. Rough cost: $10-15
+of L4 hours plus a day; the Rust engine makes the games 8x cheaper than last night's.
+
+**State this morning**: fleet cancelled (nothing running, **$70.39 spent** of the $100 cap),
+learner and screener stopped, corpora on disk (`data/cloud/corpus1_full.npz`,
+`data/cloud/corpus2.npz`) and on the hub. The other session (ludometer-d1) delivered the
+Rust engine: 17x per L4 job, exact against the Python engine; see `docs/RUST_ENGINE.md` §9.
+The polished +109 checkpoint is not deployed (bar not met); it is the natural seed for the
+next student if you decide the bar can be relaxed for an intermediate rung.
+
 ## 2026-09-05 — **Porcelain shipped**: 229-0-71 vs Cobalt over 300 games at matched think time
 
 **It is live** on https://remifabre-faience.static.hf.space/ (and the GitHub Pages stub),

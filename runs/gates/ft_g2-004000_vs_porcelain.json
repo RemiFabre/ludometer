@@ -1,0 +1,33 @@
+{
+  "agents": {
+    "cand": "mcts:runs/ft_g2/checkpoints/ft-004000.pt?think=1.0",
+    "porcelain": "mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?think=1.0"
+  },
+  "games": 100,
+  "matches": [
+    {
+      "a": "cand",
+      "b": "porcelain",
+      "n_games": 100,
+      "wins": 60,
+      "draws": 2,
+      "losses": 38,
+      "win_rate": 0.61,
+      "mean_score_diff": 2.47,
+      "mean_score_a": 45.15,
+      "mean_score_b": 42.68,
+      "mean_moves": 54.05,
+      "base_seed": 21260906,
+      "truncated": 0
+    }
+  ],
+  "elo": {
+    "cand": 38.6532863910596,
+    "porcelain": -38.6532863910596
+  },
+  "elo_err": {
+    "cand": 707106.7825992771,
+    "porcelain": 707106.7825992772
+  },
+  "anchors": {}
+}

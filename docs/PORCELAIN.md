@@ -8,6 +8,12 @@ same rule applied to the new strongest: Lapis Lazuli must beat Porcelain by ≥ 
 wall-clock honest over ≥ 300 games** (~2714). Everything below this line was written
 before the ship and is kept as the record.
 
+**2026-09-06, the first night after:** self-play polish of Porcelain's net reached +109
+(193-5-102 over 300 games, `runs/porc_w-p0905-2038/checkpoints/ckpt-096768.pt`); distilling
+Porcelain's own 2048-sim play into a fresh student gave parity; both are in
+NOTES_FOR_REMI.md with the reading. The road to Lapis Lazuli is a genuinely stronger
+teacher: the 19.5M seed in `runs/big_t`, polished on the Rust fleet, then distilled.
+
 *A handoff for the agent whose job is to produce the browser player's next
 top opponent. Written 2026-09-05 by the agent that built the player's bot
 ladder and deployment pipeline. The goal is fixed; the road is yours.*
