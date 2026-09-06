@@ -28,9 +28,10 @@ the two long reports with the boards are `porcelain.md` and `teacher7m.md`.*
   cleanest test, an imitation policy for the first *k* moves handing over to
   Porcelain, scores 44%, 50%, 49% (400 games) and 40% for k = 1, 2, 3 and the
   whole round; fine-tuning Porcelain toward the expert's round-1 choices with
-  rehearsal lands at 51% over 300 games; toward rounds 1-2 at 54.5% over 400,
-  and toward the round-1 *disagreements only* at 56.5% over 400 (+45 ± 17
-  Elo). A small, replicated gain from the fine-tune, far from a rung.
+  rehearsal lands at 51% over 300 games; toward rounds 1-2 at 52% over 700;
+  toward the round-1 *disagreements only* at 54.1% over 700 (+28 ± 13 Elo,
+  a +45 after 400 games that regressed). At most a few tens of Elo, far from
+  a rung.
 - **The 180° board rotation is not a usable symmetry**: it swaps the 1-tile and
   5-tile lines, and the search itself changes its draft in three quarters of the
   rotated positions. The net's asymmetry is the game's.
@@ -39,8 +40,9 @@ the two long reports with the boards are `porcelain.md` and `teacher7m.md`.*
   experts differ most; the human opening as a *policy* does not beat the net's,
   and the net's own checks side with it on average, yet nudging Porcelain
   toward the experts on exactly the positions where they disagree is worth
-  +30 to +45 Elo at matched think time, cheaply. That is the piece worth
-  folding into the next student (E5), as the last fine-tune of the cycle. What the
+  about +28 ± 13 Elo at matched think time over 700 games, for four minutes
+  of GPU. That is the only piece worth carrying into the next student (E5),
+  as the last fine-tune of the cycle, and it is a hint, not a lever. What the
   study did find is that agreement with the experts rises with net strength
   (Cobalt 41%, Porcelain 48%, Lapis Lazuli 50% raw top-1 over the whole game),
   so the expert games remain a good *diagnostic*, and a good source of searched
@@ -242,19 +244,23 @@ buffer as rehearsal (1:3), lr 5e-5, checkpoints at 500/1000/2000/4000 steps
 |---|---|---|---|---|---|
 | round-1 expert decisions (24,619) | 1000 | 54.8% | 100 | 51-4-45 | 53% |
 | | 4000 | 57.1% | 100 + 300 | 53-0-47, then 151-4-145 | 53%, then 51% (pooled 51.5%) |
-| rounds 1-2 (48,149) | 4000 | | 100, then 300 | 53-3-44, then 161-5-134 | 54.5%, then 54.5% (pooled 54.5% over 400, +31 ± 17 Elo; another 300 running) |
+| rounds 1-2 (48,149) | 4000 | | 100 + 300 + 300 | 53-3-44, 161-5-134, 141-10-149 | 54.5%, 54.5%, 48.7% (pooled **52.0% over 700, +14 ± 13 Elo**) |
 | round-1 disagreements only (11,889) | 2000 | | 100 | 53-1-46 | 54% |
-| | 4000 | | 100, then 300 | 55-1-44, then 167-7-126 | 56%, then 56.8% (pooled **56.5% over 400, +45 ± 17 Elo**; another 300 running) |
+| | 4000 | | 100 + 300 + 300 | 55-1-44, 167-7-126, 149-7-144 | 56%, 56.8%, 50.8% (pooled **54.1% over 700, +28 ± 13 Elo**) |
+| rounds 1-2 disagreements only (22,610) | 4000 | | 100 | 48-2-50 | 49% |
 
 The fine-tune does what it is asked (Porcelain's first-quartile raw agreement
 goes from 45% to 57% with the later quartiles unchanged). The round-1 rows
-give parity within the noise of 400 games. The rounds 1-2 rows give 54.5%
-over 400 games (about +30 Elo, 1.8 standard errors from parity) and the
-round-1 *disagreement* rows, i.e. only the positions where Porcelain's search
-did not pick the expert's move, give 56.5% over 400 (about +45 Elo, 2.6
-standard errors). Two variants above parity is a small real effect, not the
-+150 a rung needs; both are being extended to 700 games, and the rounds 1-2
-disagreement variant is in the queue.
+give parity within the noise of 400 games. The rounds 1-2 rows looked like
++30 Elo after 400 games and came back to 52% after 700 (+14 ± 13): noise.
+The round-1 *disagreement* rows, i.e. only the positions where Porcelain's
+search did not pick the expert's move, looked like +45 after 400 games and
+settled at 54.1% over 700 (+28 ± 13, 2.1 standard errors); the rounds 1-2
+disagreement variant screened at 49%. The honest reading of E3: the human
+opening as a fine-tuning target is worth at most a few tens of Elo, the best
+variant is a 2-sigma +28, and every variant regressed toward parity as its
+gate grew. Cheap enough to carry as the last step of the next student's cycle
+(E5), not a result to build on.
 
 ## 5. Symmetry (E4)
 

@@ -50,11 +50,12 @@ for the whole round. The human opening does not beat the net's own by the net's 
 
 **E3, fine-tune Porcelain with rehearsal** (`finetune.py`, lr 5e-5, polish buffer 1:3, 4 min per
 run): round-1 rows 53% / 53% at 100 games (ft-1000 / ft-4000), **151-4-145 (51%) over 300** for
-ft-4000; **rounds 1-2 rows 53-3-44 (100) then 161-5-134 (300), 54.5% pooled over 400, about +30
-± 17 Elo** (another 300 running); **the round-1 disagreements only (the 11,889 positions where
+ft-4000; rounds 1-2 rows 53-3-44 (100), 161-5-134 (300), then 141-10-149 (300 more): **52% over
+700, +14 ± 13, the +30 after 400 was noise**; **the round-1 disagreements only (the 11,889 positions where
 Porcelain's search did not pick the expert's move): 55-1-44 (100) then 167-7-126 (300), 56.5%
-pooled over 400, about +45 ± 17 Elo**, 2.6 SE from parity (another 300 running, and the rounds 1-2
-disagreement variant `runs/ft_open12d` queued). The fine-tune does what it is told (Porcelain's
+over 400, then 149-7-144 (300 more): **54.1% over 700, +28 ± 13 Elo**, 2.1 SE from parity; the
+rounds 1-2 disagreement variant (`runs/ft_open12d`, 22,610 rows) screened 48-2-50. Every E3
+variant regressed toward parity as its gate grew. The fine-tune does what it is told (Porcelain's
 first-quartile raw agreement 45% -> 57%, later quartiles unchanged); the round-1 rows as a whole buy
 nothing at matched think time, the disagreement rows buy a small, replicated gain, well short of a rung.
 
@@ -69,11 +70,11 @@ Nothing to augment with.
 and the experts differ most, and the net is over-confident about it, but nothing the net can
 compute (deeper search, a stronger teacher, child searches, play-outs) sides with the experts on
 average, and the human opening as a policy (E2) does not beat the net's own. What does move the
-gate is E3 on the *disagreements*: fine-tuning Porcelain toward the expert's move on exactly the
-round-1 positions where its search chose otherwise, with rehearsal, is worth +45 ± 17 Elo over 400
-games (+30 for rounds 1-2 rows); four minutes of Mac GPU. That is small, replicated, and cheap,
-so it is the piece for E5: run it as the last step of the pretraining cycle on the next student
-and gate. I did not spend the remaining $47 on a teacher polish; that is the roadmap's step 1 and
+gate at all is E3 on the *disagreements*: fine-tuning Porcelain toward the expert's move on exactly
+the round-1 positions where its search chose otherwise, with rehearsal, is worth +28 ± 13 Elo over
+700 games (+14 ± 13 for the rounds 1-2 rows, +7 for round 1 as a whole); four minutes of Mac GPU.
+Small, 2 sigma, and shrinking as the gates grew, so it is a hint for E5 (run it as the last step of
+the next student's cycle and gate), not a lever. I did not spend the remaining $47 on a teacher polish; that is the roadmap's step 1 and
 the other agent's call. Two follow-ups if you want them: (1) the 19% of disagreements where the
 child search prefers the expert are a natural training set for a *value* correction (the
 miscalibration is in Q, not in the policy); (2) the atlas labels 86k positions for $2 on an L4,
