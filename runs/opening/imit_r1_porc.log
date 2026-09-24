@@ -1,0 +1,24 @@
+[imitation] rounds (0, 0): 24,619 expert decisions, 22,157 train / 2,462 held out; device mps
+[imitation] init from runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt (3,915,019 params)
+[imitation] before training: held-out top1 0.508 top3 0.781 nll 1.719
+[imitation] epoch   1: train CE 1.420  held-out top1 0.594 top3 0.854 nll 1.211 *
+[imitation] epoch   2: train CE 1.296  held-out top1 0.599 top3 0.859 nll 1.184 *
+[imitation] epoch   3: train CE 1.258  held-out top1 0.608 top3 0.865 nll 1.157 *
+[imitation] epoch   4: train CE 1.227  held-out top1 0.616 top3 0.867 nll 1.139 *
+[imitation] epoch   5: train CE 1.205  held-out top1 0.608 top3 0.866 nll 1.144
+[imitation] epoch   6: train CE 1.186  held-out top1 0.612 top3 0.872 nll 1.129
+[imitation] epoch   7: train CE 1.167  held-out top1 0.617 top3 0.871 nll 1.131 *
+[imitation] epoch   8: train CE 1.153  held-out top1 0.623 top3 0.872 nll 1.125 *
+[imitation] epoch   9: train CE 1.139  held-out top1 0.609 top3 0.867 nll 1.131
+[imitation] epoch  10: train CE 1.127  held-out top1 0.610 top3 0.867 nll 1.129
+[imitation] epoch  11: train CE 1.116  held-out top1 0.613 top3 0.871 nll 1.121
+[imitation] epoch  12: train CE 1.108  held-out top1 0.613 top3 0.870 nll 1.128
+[imitation] epoch  13: train CE 1.099  held-out top1 0.615 top3 0.871 nll 1.123
+[imitation] epoch  14: train CE 1.093  held-out top1 0.613 top3 0.870 nll 1.126
+[imitation] epoch  15: train CE 1.085  held-out top1 0.617 top3 0.870 nll 1.122
+[imitation] epoch  16: train CE 1.083  held-out top1 0.613 top3 0.872 nll 1.120
+[imitation] epoch  17: train CE 1.080  held-out top1 0.614 top3 0.870 nll 1.123
+[imitation] epoch  18: train CE 1.076  held-out top1 0.612 top3 0.870 nll 1.123
+[imitation] epoch  19: train CE 1.076  held-out top1 0.613 top3 0.870 nll 1.122
+[imitation] epoch  20: train CE 1.074  held-out top1 0.613 top3 0.870 nll 1.122
+[imitation] best epoch 8: held-out top1 0.623 top3 0.872 nll 1.125 -> runs/imit_r1_porc/checkpoints/best.pt

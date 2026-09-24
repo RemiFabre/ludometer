@@ -1,0 +1,19 @@
+== pull
+[corpus] 20/25 pulled
+[corpus] rlx_teacher: 41 had, 25 new, 66 on the hub
+[corpus] 20/69 pulled
+[corpus] 40/69 pulled
+[corpus] 60/69 pulled
+[corpus] rlx_bga: 115 had, 69 new, 184 on the hub
+== build
+[corpus] wrote data/cloud/porcelain_corpus.npz: 1,989,606 positions from 37,136 games (1,932,164 with a search value, 1,989,606 policy targets)
+"games":34192 "positions":1828534 "jobs":13 "games":2944 "positions":161072 "jobs":2
+== pretrain + rate: runs/porc_w-p0905-1948
+pretrain epoch 2/4: loss 2.0733 (p 1.6583 v 0.2409 m 0.1742) in 839s
+pretrain epoch 3/4: loss 2.0102 (p 1.6175 v 0.2240 m 0.1687) in 1225s
+pretrain epoch 4/4: loss 1.9684 (p 1.5910 v 0.2125 m 0.1648) in 1680s
+eval ckpt-000000: elo +2478.9 +/- 38.0 over 280 games in 216s | random 1.00 greedy 1.00 heuristic 0.95 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.93 mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100 0.95 mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100 0.75 mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100 0.78
+== wall-clock screen vs Cobalt (100 games)
+cand vs cobalt: 67-4-29 (0.69) scores 47.4-39.2
+cand       +69.1 +/- 707106.8      100 games
+cobalt     -69.1 +/- 707106.8      100 games

@@ -1,0 +1,244 @@
+restored replay buffer: 3000000 positions
+resumed porc_w-p0905-2038 at 0 games / 0 steps
+run porc_w-p0905-2038: device=mps selfplay=hub(RemiFabre/rl-experiment-shards <- fleet, weights -> model:RemiFabre/rl-experiment-weights) arch=structured net=1L160+1x1536 params=3,915,019 target=100000 games
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 15.7MB / 15.7MB, 1.55MB/s  
+New Data Upload               : 100%|██████████| 96.6kB / 96.6kB, 9.56kB/s  [A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 15.7MB / 15.7MB, 1.47MB/s  
+New Data Upload               : 100%|██████████| 96.6kB / 96.6kB, 9.09kB/s  
+  ...0000gn/T/tmp4m2x8dus/w.pt: 100%|██████████| 15.7MB / 15.7MB            
+[hub] published weights v2 to model:RemiFabre/rl-experiment-weights
+iter 1: 256 games (24.3 games/min, 13587 moves) | 53 steps in 1.2s | loss 1.9591 (p 1.5821 v 0.2100 m 0.1670) | buffer 3000000 | games 256 | lag {0: 1536} skipped 0
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:   4%|▍         |  597kB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:   4%|▍         |  597kB / 15.7MB            [A[AProcessing Files (0 / 1)      :   4%|▍         |  597kB / 15.7MB, 58.8kB/s  
+New Data Upload               :   4%|▍         |  597kB / 15.7MB, 58.8kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:   4%|▍         |  597kB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:   8%|▊         | 1.19MB / 15.7MB            [A[AProcessing Files (0 / 1)      :   8%|▊         | 1.19MB / 15.7MB,  116kB/s  
+New Data Upload               :   8%|▊         | 1.19MB / 15.7MB,  116kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  11%|█▏        | 1.79MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  11%|█▏        | 1.79MB / 15.7MB,  173kB/s  
+New Data Upload               :  11%|█▏        | 1.79MB / 15.7MB,  173kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  19%|█▉        | 2.99MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  19%|█▉        | 2.99MB / 15.7MB,  287kB/s  
+New Data Upload               :  19%|█▉        | 2.99MB / 15.7MB,  287kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  34%|███▍      | 5.38MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  34%|███▍      | 5.38MB / 15.7MB,  516kB/s  
+New Data Upload               :  34%|███▍      | 5.38MB / 15.7MB,  516kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  53%|█████▎    | 8.36MB / 15.7MB,  799kB/s  
+New Data Upload               :  53%|█████▎    | 8.36MB / 15.7MB,  799kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  53%|█████▎    | 8.36MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  57%|█████▋    | 8.96MB / 15.7MB,  676kB/s  
+New Data Upload               :  57%|█████▋    | 8.96MB / 15.7MB,  676kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  57%|█████▋    | 8.96MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  61%|██████    | 9.56MB / 15.7MB,  661kB/s  
+New Data Upload               :  61%|██████    | 9.56MB / 15.7MB,  661kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  61%|██████    | 9.56MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  65%|██████▍   | 10.2MB / 15.7MB,  670kB/s  
+New Data Upload               :  65%|██████▍   | 10.2MB / 15.7MB,  670kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  65%|██████▍   | 10.2MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  69%|██████▊   | 10.8MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  69%|██████▊   | 10.8MB / 15.7MB,  678kB/s  
+New Data Upload               :  69%|██████▊   | 10.8MB / 15.7MB,  678kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  69%|██████▊   | 10.8MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  69%|██████▊   | 10.8MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  69%|██████▊   | 10.8MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  69%|██████▊   | 10.8MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  72%|███████▏  | 11.3MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  72%|███████▏  | 11.3MB / 15.7MB,  700kB/s  
+New Data Upload               :  72%|███████▏  | 11.3MB / 15.7MB,  700kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  72%|███████▏  | 11.3MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  72%|███████▏  | 11.3MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  72%|███████▏  | 11.3MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  76%|███████▌  | 11.9MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  76%|███████▌  | 11.9MB / 15.7MB,  725kB/s  
+New Data Upload               :  76%|███████▌  | 11.9MB / 15.7MB,  725kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  76%|███████▌  | 11.9MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  76%|███████▌  | 11.9MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  76%|███████▌  | 11.9MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  80%|████████  | 12.5MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  80%|████████  | 12.5MB / 15.7MB,  750kB/s  
+New Data Upload               :  80%|████████  | 12.5MB / 15.7MB,  750kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  80%|████████  | 12.5MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  80%|████████  | 12.5MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  84%|████████▍ | 13.1MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  84%|████████▍ | 13.1MB / 15.7MB,  779kB/s  
+New Data Upload               :  84%|████████▍ | 13.1MB / 15.7MB,  779kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  84%|████████▍ | 13.1MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  88%|████████▊ | 13.7MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  88%|████████▊ | 13.7MB / 15.7MB,  815kB/s  
+New Data Upload               :  88%|████████▊ | 13.7MB / 15.7MB,  815kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  88%|████████▊ | 13.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  88%|████████▊ | 13.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  91%|█████████▏| 14.3MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  91%|█████████▏| 14.3MB / 15.7MB,  842kB/s  
+New Data Upload               :  91%|█████████▏| 14.3MB / 15.7MB,  842kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  91%|█████████▏| 14.3MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  95%|█████████▌| 14.9MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  95%|█████████▌| 14.9MB / 15.7MB,  877kB/s  
+New Data Upload               :  95%|█████████▌| 14.9MB / 15.7MB,  877kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt:  95%|█████████▌| 14.9MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 15.7MB / 15.7MB,  923kB/s  
+New Data Upload               : 100%|█████████▉| 15.7MB / 15.7MB,  923kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 15.7MB / 15.7MB,  874kB/s  
+New Data Upload               : 100%|██████████| 15.7MB / 15.7MB,  874kB/s  [A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 15.7MB / 15.7MB,  853kB/s  
+New Data Upload               : 100%|██████████| 15.7MB / 15.7MB,  853kB/s  
+  ...0000gn/T/tmpni_a70tg/w.pt: 100%|██████████| 15.7MB / 15.7MB            
+[hub] published weights v3 to model:RemiFabre/rl-experiment-weights
+iter 2: 256 games (1117124964.7 games/min, 14049 moves) | 55 steps in 1.0s | loss 1.9685 (p 1.5792 v 0.2206 m 0.1687) | buffer 3000000 | games 512 | lag {0: 1536} skipped 0
+iter 3: 256 games (1185372078.7 games/min, 13558 moves) | 53 steps in 1.0s | loss 1.9780 (p 1.5945 v 0.2166 m 0.1669) | buffer 3000000 | games 768 | lag {0: 1536} skipped 0
+iter 4: 256 games (1340540877.6 games/min, 13974 moves) | 55 steps in 1.0s | loss 1.9685 (p 1.5879 v 0.2138 m 0.1668) | buffer 3000000 | games 1024 | lag {0: 1536} skipped 0
+iter 5: 256 games (1258118423.7 games/min, 13590 moves) | 53 steps in 1.0s | loss 1.9750 (p 1.5931 v 0.2172 m 0.1647) | buffer 3000000 | games 1280 | lag {0: 1536} skipped 0
+iter 6: 256 games (1018380637.0 games/min, 14061 moves) | 55 steps in 1.0s | loss 1.9587 (p 1.5756 v 0.2170 m 0.1661) | buffer 3000000 | games 1536 | lag {0: 1536} skipped 0
+iter 7: 256 games (9500.3 games/min, 13552 moves) | 53 steps in 1.0s | loss 1.9835 (p 1.6089 v 0.2119 m 0.1626) | buffer 3000000 | games 1792 | lag {0: 1536, 1: 512} skipped 0
+iter 8: 256 games (1237027895.5 games/min, 14100 moves) | 55 steps in 1.0s | loss 1.9670 (p 1.5863 v 0.2172 m 0.1635) | buffer 3000000 | games 2048 | lag {0: 1536, 1: 512} skipped 0
+eval ckpt-002048: elo +2465.1 +/- 30.8 over 320 games in 211s | random 1.00 greedy 1.00 heuristic 1.00 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.90 mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100 0.97 mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100 0.78 mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100 0.57 ckpt-000000 0.54
+
+SIGTERM received: finishing the current chunk and shutting down
+iter 9: 0 games (0.0 games/min, 0 moves) | 0 steps in 0.0s | loss 0.0000 (p 0.0000 v 0.0000 m 0.0000) | buffer 3000000 | games 2048 | lag {0: 1536, 1: 512} skipped 0
+done: 2048 games, 432 steps, 34.5 min

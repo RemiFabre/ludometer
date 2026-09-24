@@ -1,0 +1,11 @@
+{
+  "run": "mid1",
+  "state": "done",
+  "started": "2026-08-21T04:29:33Z",
+  "updated": "2026-08-21T11:25:25Z",
+  "ended": "2026-08-21T11:25:25Z",
+  "error": null,
+  "games": 8000,
+  "steps": 2504,
+  "note": "stopped (target reached)"
+}

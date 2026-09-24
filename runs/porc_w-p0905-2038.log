@@ -1,0 +1,80 @@
+run porc_w-p0905-2038: device=mps selfplay=hub(RemiFabre/rl-experiment-shards <- fleet, weights -> model:RemiFabre/rl-experiment-weights) arch=structured net=1L160+1x1536 params=3,915,019 target=0 games
+pretrain: loaded 3,000,000 positions from data/cloud/porcelain_corpus.npz (3,000,000 with a margin target)
+pretrain epoch 1/4: loss 2.2171 (p 1.7607 v 0.2715 m 0.1849) in 233s
+pretrain epoch 2/4: loss 2.0597 (p 1.6515 v 0.2354 m 0.1728) in 465s
+pretrain epoch 3/4: loss 2.0047 (p 1.6136 v 0.2225 m 0.1686) in 698s
+pretrain epoch 4/4: loss 1.9681 (p 1.5892 v 0.2133 m 0.1656) in 930s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:   4%|▍         |  604kB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:   4%|▍         |  604kB / 15.7MB            [A[AProcessing Files (0 / 1)      :   4%|▍         |  604kB / 15.7MB, 59.4kB/s  
+New Data Upload               :   4%|▍         |  604kB / 15.7MB, 59.4kB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:   4%|▍         |  604kB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:   4%|▍         |  604kB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  12%|█▏        | 1.81MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  12%|█▏        | 1.81MB / 15.7MB,  175kB/s  
+New Data Upload               :  12%|█▏        | 1.81MB / 15.7MB,  175kB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  19%|█▉        | 3.02MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  19%|█▉        | 3.02MB / 15.7MB,  291kB/s  
+New Data Upload               :  19%|█▉        | 3.02MB / 15.7MB,  291kB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  39%|███▊      | 6.04MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  39%|███▊      | 6.04MB / 15.7MB,  581kB/s  
+New Data Upload               :  39%|███▊      | 6.04MB / 15.7MB,  581kB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  58%|█████▊    | 9.06MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  58%|█████▊    | 9.06MB / 15.7MB,  867kB/s  
+New Data Upload               :  58%|█████▊    | 9.06MB / 15.7MB,  867kB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  58%|█████▊    | 9.06MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  58%|█████▊    | 9.06MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  58%|█████▊    | 9.06MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  58%|█████▊    | 9.06MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  73%|███████▎  | 11.5MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  73%|███████▎  | 11.5MB / 15.7MB, 1.05MB/s  
+New Data Upload               :  73%|███████▎  | 11.5MB / 15.7MB, 1.05MB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  73%|███████▎  | 11.5MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  77%|███████▋  | 12.1MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  77%|███████▋  | 12.1MB / 15.7MB, 1.09MB/s  
+New Data Upload               :  77%|███████▋  | 12.1MB / 15.7MB, 1.09MB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  77%|███████▋  | 12.1MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  77%|███████▋  | 12.1MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  81%|████████  | 12.7MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  81%|████████  | 12.7MB / 15.7MB, 1.11MB/s  
+New Data Upload               :  81%|████████  | 12.7MB / 15.7MB, 1.11MB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt:  92%|█████████▏| 14.5MB / 15.7MB            [A[AProcessing Files (0 / 1)      :  92%|█████████▏| 14.5MB / 15.7MB, 1.27MB/s  
+New Data Upload               :  92%|█████████▏| 14.5MB / 15.7MB, 1.27MB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 15.7MB / 15.7MB, 1.37MB/s  
+New Data Upload               : 100%|█████████▉| 15.7MB / 15.7MB, 1.37MB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|█████████▉| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 15.7MB / 15.7MB, 1.30MB/s  
+New Data Upload               : 100%|██████████| 15.7MB / 15.7MB, 1.30MB/s  [A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[A
+
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|██████████| 15.7MB / 15.7MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 15.7MB / 15.7MB, 1.27MB/s  
+New Data Upload               : 100%|██████████| 15.7MB / 15.7MB, 1.27MB/s  
+  ...0000gn/T/tmp7cuar_bc/w.pt: 100%|██████████| 15.7MB / 15.7MB            
+[hub] published weights v1 to model:RemiFabre/rl-experiment-weights
+eval ckpt-000000: elo +2496.0 +/- 39.0 over 280 games in 173s | random 1.00 greedy 1.00 heuristic 1.00 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.93 mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100 0.91 mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100 0.82 mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100 0.74
+done: 0 games, 0 steps, 18.6 min

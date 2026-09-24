@@ -1,0 +1,46 @@
+[imitation] rounds (0, 0): 24,619 expert decisions, 22,157 train / 2,462 held out; device mps
+[imitation] fresh net 2,088,619 params
+[imitation] baseline porcelain: held-out top1 0.508 top3 0.781 nll 1.719
+[imitation] baseline lapis: held-out top1 0.568 top3 0.824 nll 1.420
+[imitation] before training: held-out top1 0.000 top3 0.002 nll 5.201
+[imitation] epoch   1: train CE 2.473  held-out top1 0.446 top3 0.728 nll 1.818 *
+[imitation] epoch   2: train CE 1.832  held-out top1 0.471 top3 0.748 nll 1.703 *
+[imitation] epoch   3: train CE 1.709  held-out top1 0.500 top3 0.776 nll 1.603 *
+[imitation] epoch   4: train CE 1.589  held-out top1 0.506 top3 0.796 nll 1.528 *
+[imitation] epoch   5: train CE 1.519  held-out top1 0.474 top3 0.762 nll 1.635
+[imitation] epoch   6: train CE 1.442  held-out top1 0.511 top3 0.790 nll 1.556 *
+[imitation] epoch   7: train CE 1.380  held-out top1 0.498 top3 0.799 nll 1.548
+[imitation] epoch   8: train CE 1.321  held-out top1 0.529 top3 0.808 nll 1.457 *
+[imitation] epoch   9: train CE 1.252  held-out top1 0.517 top3 0.794 nll 1.511
+[imitation] epoch  10: train CE 1.188  held-out top1 0.530 top3 0.808 nll 1.465 *
+[imitation] epoch  11: train CE 1.115  held-out top1 0.511 top3 0.797 nll 1.535
+[imitation] epoch  12: train CE 1.034  held-out top1 0.526 top3 0.813 nll 1.524
+[imitation] epoch  13: train CE 0.958  held-out top1 0.517 top3 0.790 nll 1.623
+[imitation] epoch  14: train CE 0.862  held-out top1 0.511 top3 0.791 nll 1.621
+[imitation] epoch  15: train CE 0.771  held-out top1 0.509 top3 0.786 nll 1.668
+[imitation] epoch  16: train CE 0.679  held-out top1 0.510 top3 0.802 nll 1.668
+[imitation] epoch  17: train CE 0.600  held-out top1 0.502 top3 0.778 nll 1.758
+[imitation] epoch  18: train CE 0.511  held-out top1 0.510 top3 0.785 nll 1.768
+[imitation] epoch  19: train CE 0.437  held-out top1 0.506 top3 0.785 nll 1.829
+[imitation] epoch  20: train CE 0.375  held-out top1 0.506 top3 0.781 nll 1.879
+[imitation] epoch  21: train CE 0.311  held-out top1 0.512 top3 0.781 nll 1.947
+[imitation] epoch  22: train CE 0.258  held-out top1 0.506 top3 0.786 nll 1.989
+[imitation] epoch  23: train CE 0.210  held-out top1 0.503 top3 0.779 nll 2.040
+[imitation] epoch  24: train CE 0.171  held-out top1 0.503 top3 0.787 nll 2.082
+[imitation] epoch  25: train CE 0.139  held-out top1 0.506 top3 0.794 nll 2.132
+[imitation] epoch  26: train CE 0.113  held-out top1 0.509 top3 0.786 nll 2.196
+[imitation] epoch  27: train CE 0.090  held-out top1 0.503 top3 0.790 nll 2.248
+[imitation] epoch  28: train CE 0.073  held-out top1 0.503 top3 0.784 nll 2.297
+[imitation] epoch  29: train CE 0.059  held-out top1 0.500 top3 0.790 nll 2.324
+[imitation] epoch  30: train CE 0.048  held-out top1 0.500 top3 0.789 nll 2.369
+[imitation] epoch  31: train CE 0.040  held-out top1 0.504 top3 0.791 nll 2.407
+[imitation] epoch  32: train CE 0.034  held-out top1 0.507 top3 0.787 nll 2.449
+[imitation] epoch  33: train CE 0.030  held-out top1 0.508 top3 0.793 nll 2.473
+[imitation] epoch  34: train CE 0.026  held-out top1 0.512 top3 0.788 nll 2.504
+[imitation] epoch  35: train CE 0.023  held-out top1 0.506 top3 0.787 nll 2.521
+[imitation] epoch  36: train CE 0.022  held-out top1 0.507 top3 0.792 nll 2.537
+[imitation] epoch  37: train CE 0.020  held-out top1 0.505 top3 0.790 nll 2.552
+[imitation] epoch  38: train CE 0.019  held-out top1 0.505 top3 0.790 nll 2.556
+[imitation] epoch  39: train CE 0.019  held-out top1 0.507 top3 0.790 nll 2.558
+[imitation] epoch  40: train CE 0.019  held-out top1 0.506 top3 0.790 nll 2.558
+[imitation] best epoch 10: held-out top1 0.530 top3 0.808 nll 1.465 -> runs/imit_r1/checkpoints/best.pt

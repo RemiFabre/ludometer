@@ -1,0 +1,7 @@
+[corpus] wrote data/cloud/porcelain_corpus.npz: 3,486,133 positions from 65,123 games (3,383,378 with a search value, 3,486,133 policy targets)
+== pretrain + rate: runs/porc_w-p0905-2038
+pretrain epoch 2/4: loss 2.0597 (p 1.6515 v 0.2354 m 0.1728) in 465s
+pretrain epoch 3/4: loss 2.0047 (p 1.6136 v 0.2225 m 0.1686) in 698s
+pretrain epoch 4/4: loss 1.9681 (p 1.5892 v 0.2133 m 0.1656) in 930s
+eval ckpt-000000: elo +2496.0 +/- 39.0 over 280 games in 173s | random 1.00 greedy 1.00 heuristic 1.00 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.93 m
+cand vs cobalt: 229-0-71 (0.76) scores 48.2-37.9

@@ -1,0 +1,11 @@
+{
+  "run": "porc_w6-p0905-2235",
+  "state": "done",
+  "started": "2026-09-05T20:38:15Z",
+  "updated": "2026-09-05T21:18:31Z",
+  "ended": "2026-09-05T21:18:25Z",
+  "error": null,
+  "games": 0,
+  "steps": 0,
+  "note": "stopped (target reached)"
+}

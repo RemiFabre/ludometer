@@ -1,0 +1,401 @@
+run big_t: device=mps selfplay=hub(RemiFabre/rl-experiment-shards <- fleet, weights -> model:RemiFabre/rl-experiment-weights) arch=structured net=6L384+1x2560 params=19,514,939 target=0 games
+pretrain: loaded 3,000,000 positions from data/cloud/corpus1_full.npz (3,000,000 with a margin target)
+pretrain epoch 1/4: loss 2.1787 (p 1.7292 v 0.2659 m 0.1836) in 2591s
+pretrain epoch 2/4: loss 2.0197 (p 1.6207 v 0.2282 m 0.1708) in 5436s
+pretrain epoch 3/4: loss 1.9716 (p 1.5884 v 0.2163 m 0.1669) in 8106s
+pretrain epoch 4/4: loss 1.9390 (p 1.5672 v 0.2077 m 0.1641) in 10638s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:   1%|          |  592kB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:   1%|          |  592kB / 78.1MB            [A[AProcessing Files (0 / 1)      :   1%|          |  592kB / 78.1MB, 57.9kB/s  
+New Data Upload               :   1%|          |  592kB / 78.1MB, 57.9kB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:   1%|          |  592kB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:   2%|▏         | 1.76MB / 78.1MB            [A[AProcessing Files (0 / 1)      :   2%|▏         | 1.76MB / 78.1MB,  170kB/s  
+New Data Upload               :   2%|▏         | 1.76MB / 78.1MB,  170kB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:   4%|▍         | 2.94MB / 78.1MB            [A[AProcessing Files (0 / 1)      :   4%|▍         | 2.94MB / 78.1MB,  283kB/s  
+New Data Upload               :   4%|▍         | 2.94MB / 78.1MB,  283kB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:   6%|▌         | 4.70MB / 78.1MB            [A[AProcessing Files (0 / 1)      :   6%|▌         | 4.70MB / 78.1MB,  450kB/s  
+New Data Upload               :   6%|▌         | 4.70MB / 78.1MB,  450kB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  10%|▉         | 7.64MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  10%|▉         | 7.64MB / 78.1MB,  729kB/s  
+New Data Upload               :  10%|▉         | 7.64MB / 78.1MB,  729kB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  14%|█▍        | 11.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  14%|█▍        | 11.2MB / 78.1MB, 1.06MB/s  
+New Data Upload               :  14%|█▍        | 11.2MB / 78.1MB, 1.06MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  14%|█▍        | 11.2MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  14%|█▍        | 11.2MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  16%|█▌        | 12.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  16%|█▌        | 12.3MB / 78.1MB, 1.14MB/s  
+New Data Upload               :  16%|█▌        | 12.3MB / 78.1MB, 1.14MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  17%|█▋        | 13.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        | 13.5MB / 78.1MB, 1.24MB/s  
+New Data Upload               :  17%|█▋        | 13.5MB / 78.1MB, 1.24MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  18%|█▊        | 14.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  18%|█▊        | 14.0MB / 78.1MB, 1.28MB/s  
+New Data Upload               :  18%|█▊        | 14.0MB / 78.1MB, 1.28MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  18%|█▊        | 14.0MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  19%|█▊        | 14.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  19%|█▊        | 14.6MB / 78.1MB, 1.31MB/s  
+New Data Upload               :  19%|█▊        | 14.6MB / 78.1MB, 1.31MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  19%|█▉        | 15.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  19%|█▉        | 15.2MB / 78.1MB, 1.35MB/s  
+New Data Upload               :  19%|█▉        | 15.2MB / 78.1MB, 1.35MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  20%|██        | 15.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  20%|██        | 15.8MB / 78.1MB, 1.39MB/s  
+New Data Upload               :  20%|██        | 15.8MB / 78.1MB, 1.39MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  22%|██▏       | 16.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  22%|██▏       | 16.9MB / 78.1MB, 1.48MB/s  
+New Data Upload               :  22%|██▏       | 16.9MB / 78.1MB, 1.48MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  22%|██▏       | 17.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  22%|██▏       | 17.5MB / 78.1MB, 1.52MB/s  
+New Data Upload               :  22%|██▏       | 17.5MB / 78.1MB, 1.52MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  23%|██▎       | 18.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  23%|██▎       | 18.1MB / 78.1MB, 1.56MB/s  
+New Data Upload               :  23%|██▎       | 18.1MB / 78.1MB, 1.56MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  24%|██▍       | 18.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  24%|██▍       | 18.6MB / 78.1MB, 1.60MB/s  
+New Data Upload               :  24%|██▍       | 18.6MB / 78.1MB, 1.60MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  25%|██▍       | 19.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  25%|██▍       | 19.2MB / 78.1MB, 1.63MB/s  
+New Data Upload               :  25%|██▍       | 19.2MB / 78.1MB, 1.63MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  25%|██▌       | 19.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  25%|██▌       | 19.8MB / 78.1MB, 1.67MB/s  
+New Data Upload               :  25%|██▌       | 19.8MB / 78.1MB, 1.67MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  26%|██▋       | 20.5MB / 78.1MB, 1.72MB/s  
+New Data Upload               :  26%|██▋       | 20.5MB / 78.1MB, 1.72MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  26%|██▋       | 20.5MB / 78.1MB, 1.66MB/s  
+New Data Upload               :  26%|██▋       | 20.5MB / 78.1MB, 1.66MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  26%|██▋       | 20.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  27%|██▋       | 21.1MB / 78.1MB, 1.54MB/s  
+New Data Upload               :  27%|██▋       | 21.1MB / 78.1MB, 1.54MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  27%|██▋       | 21.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  28%|██▊       | 21.7MB / 78.1MB, 1.47MB/s  
+New Data Upload               :  28%|██▊       | 21.7MB / 78.1MB, 1.47MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  28%|██▊       | 21.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▊       | 22.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  29%|██▊       | 22.3MB / 78.1MB, 1.43MB/s  
+New Data Upload               :  29%|██▊       | 22.3MB / 78.1MB, 1.43MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▊       | 22.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▊       | 22.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▊       | 22.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▊       | 22.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▊       | 22.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▉       | 22.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  29%|██▉       | 22.9MB / 78.1MB, 1.40MB/s  
+New Data Upload               :  29%|██▉       | 22.9MB / 78.1MB, 1.40MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▉       | 22.9MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▉       | 22.9MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  29%|██▉       | 22.9MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  30%|███       | 23.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  30%|███       | 23.5MB / 78.1MB, 1.40MB/s  
+New Data Upload               :  30%|███       | 23.5MB / 78.1MB, 1.40MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  30%|███       | 23.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  30%|███       | 23.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  30%|███       | 23.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  30%|███       | 23.5MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  31%|███       | 24.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  31%|███       | 24.1MB / 78.1MB, 1.39MB/s  
+New Data Upload               :  31%|███       | 24.1MB / 78.1MB, 1.39MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  31%|███       | 24.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  31%|███       | 24.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  32%|███▏      | 24.7MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  32%|███▏      | 24.7MB / 78.1MB, 1.40MB/s  
+New Data Upload               :  32%|███▏      | 24.7MB / 78.1MB, 1.40MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  32%|███▏      | 24.7MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  32%|███▏      | 25.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  32%|███▏      | 25.3MB / 78.1MB, 1.43MB/s  
+New Data Upload               :  32%|███▏      | 25.3MB / 78.1MB, 1.43MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  32%|███▏      | 25.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  32%|███▏      | 25.3MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  33%|███▎      | 25.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  33%|███▎      | 25.9MB / 78.1MB, 1.44MB/s  
+New Data Upload               :  33%|███▎      | 25.9MB / 78.1MB, 1.44MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  33%|███▎      | 25.9MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  34%|███▍      | 26.4MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  34%|███▍      | 26.4MB / 78.1MB, 1.46MB/s  
+New Data Upload               :  34%|███▍      | 26.4MB / 78.1MB, 1.46MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  34%|███▍      | 26.4MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  35%|███▍      | 27.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  35%|███▍      | 27.0MB / 78.1MB, 1.49MB/s  
+New Data Upload               :  35%|███▍      | 27.0MB / 78.1MB, 1.49MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  35%|███▍      | 27.0MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  35%|███▌      | 27.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  35%|███▌      | 27.6MB / 78.1MB, 1.51MB/s  
+New Data Upload               :  35%|███▌      | 27.6MB / 78.1MB, 1.51MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  35%|███▌      | 27.6MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  36%|███▌      | 28.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  36%|███▌      | 28.2MB / 78.1MB, 1.53MB/s  
+New Data Upload               :  36%|███▌      | 28.2MB / 78.1MB, 1.53MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  37%|███▋      | 28.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  37%|███▋      | 28.8MB / 78.1MB, 1.57MB/s  
+New Data Upload               :  37%|███▋      | 28.8MB / 78.1MB, 1.57MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  37%|███▋      | 28.8MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  38%|███▊      | 29.4MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  38%|███▊      | 29.4MB / 78.1MB, 1.59MB/s  
+New Data Upload               :  38%|███▊      | 29.4MB / 78.1MB, 1.59MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  38%|███▊      | 30.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  38%|███▊      | 30.0MB / 78.1MB, 1.62MB/s  
+New Data Upload               :  38%|███▊      | 30.0MB / 78.1MB, 1.62MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  38%|███▊      | 30.0MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  39%|███▉      | 30.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  39%|███▉      | 30.6MB / 78.1MB, 1.64MB/s  
+New Data Upload               :  39%|███▉      | 30.6MB / 78.1MB, 1.64MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  40%|███▉      | 31.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  40%|███▉      | 31.2MB / 78.1MB, 1.68MB/s  
+New Data Upload               :  40%|███▉      | 31.2MB / 78.1MB, 1.68MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  41%|████      | 31.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  41%|████      | 31.8MB / 78.1MB, 1.71MB/s  
+New Data Upload               :  41%|████      | 31.8MB / 78.1MB, 1.71MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  41%|████▏     | 32.4MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  41%|████▏     | 32.4MB / 78.1MB, 1.74MB/s  
+New Data Upload               :  41%|████▏     | 32.4MB / 78.1MB, 1.74MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  41%|████▏     | 32.4MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  42%|████▏     | 33.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  42%|████▏     | 33.0MB / 78.1MB, 1.76MB/s  
+New Data Upload               :  42%|████▏     | 33.0MB / 78.1MB, 1.76MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  43%|████▎     | 33.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  43%|████▎     | 33.6MB / 78.1MB, 1.79MB/s  
+New Data Upload               :  43%|████▎     | 33.6MB / 78.1MB, 1.79MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  44%|████▎     | 34.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  44%|████▎     | 34.1MB / 78.1MB, 1.83MB/s  
+New Data Upload               :  44%|████▎     | 34.1MB / 78.1MB, 1.83MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  44%|████▍     | 34.7MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  44%|████▍     | 34.7MB / 78.1MB, 1.86MB/s  
+New Data Upload               :  44%|████▍     | 34.7MB / 78.1MB, 1.86MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  45%|████▌     | 35.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  45%|████▌     | 35.3MB / 78.1MB, 1.89MB/s  
+New Data Upload               :  45%|████▌     | 35.3MB / 78.1MB, 1.89MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  46%|████▌     | 35.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  46%|████▌     | 35.9MB / 78.1MB, 1.92MB/s  
+New Data Upload               :  46%|████▌     | 35.9MB / 78.1MB, 1.92MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  47%|████▋     | 36.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  47%|████▋     | 36.5MB / 78.1MB, 1.95MB/s  
+New Data Upload               :  47%|████▋     | 36.5MB / 78.1MB, 1.95MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  48%|████▊     | 37.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  48%|████▊     | 37.1MB / 78.1MB, 1.98MB/s  
+New Data Upload               :  48%|████▊     | 37.1MB / 78.1MB, 1.98MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  49%|████▉     | 38.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  49%|████▉     | 38.3MB / 78.1MB, 2.06MB/s  
+New Data Upload               :  49%|████▉     | 38.3MB / 78.1MB, 2.06MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  50%|████▉     | 38.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  50%|████▉     | 38.9MB / 78.1MB, 2.09MB/s  
+New Data Upload               :  50%|████▉     | 38.9MB / 78.1MB, 2.09MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  51%|█████     | 39.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  51%|█████     | 39.5MB / 78.1MB, 2.12MB/s  
+New Data Upload               :  51%|█████     | 39.5MB / 78.1MB, 2.12MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  52%|█████▏    | 40.7MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  52%|█████▏    | 40.7MB / 78.1MB, 2.20MB/s  
+New Data Upload               :  52%|█████▏    | 40.7MB / 78.1MB, 2.20MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  53%|█████▎    | 41.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  53%|█████▎    | 41.3MB / 78.1MB, 2.22MB/s  
+New Data Upload               :  53%|█████▎    | 41.3MB / 78.1MB, 2.22MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  54%|█████▎    | 41.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  54%|█████▎    | 41.8MB / 78.1MB, 2.25MB/s  
+New Data Upload               :  54%|█████▎    | 41.8MB / 78.1MB, 2.25MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  55%|█████▌    | 43.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  55%|█████▌    | 43.0MB / 78.1MB, 2.33MB/s  
+New Data Upload               :  55%|█████▌    | 43.0MB / 78.1MB, 2.33MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  57%|█████▋    | 44.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  57%|█████▋    | 44.2MB / 78.1MB, 2.40MB/s  
+New Data Upload               :  57%|█████▋    | 44.2MB / 78.1MB, 2.40MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  57%|█████▋    | 44.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  57%|█████▋    | 44.8MB / 78.1MB, 2.43MB/s  
+New Data Upload               :  57%|█████▋    | 44.8MB / 78.1MB, 2.43MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  58%|█████▊    | 45.4MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  58%|█████▊    | 45.4MB / 78.1MB, 2.45MB/s  
+New Data Upload               :  58%|█████▊    | 45.4MB / 78.1MB, 2.45MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  60%|█████▉    | 46.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  60%|█████▉    | 46.6MB / 78.1MB, 2.53MB/s  
+New Data Upload               :  60%|█████▉    | 46.6MB / 78.1MB, 2.53MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  60%|██████    | 47.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  60%|██████    | 47.2MB / 78.1MB, 2.55MB/s  
+New Data Upload               :  60%|██████    | 47.2MB / 78.1MB, 2.55MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  63%|██████▎   | 49.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  63%|██████▎   | 49.0MB / 78.1MB, 2.67MB/s  
+New Data Upload               :  63%|██████▎   | 49.0MB / 78.1MB, 2.67MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  64%|██████▍   | 50.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  64%|██████▍   | 50.1MB / 78.1MB, 2.74MB/s  
+New Data Upload               :  64%|██████▍   | 50.1MB / 78.1MB, 2.74MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  66%|██████▌   | 51.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  66%|██████▌   | 51.3MB / 78.1MB, 2.81MB/s  
+New Data Upload               :  66%|██████▌   | 51.3MB / 78.1MB, 2.81MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  66%|██████▋   | 51.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  66%|██████▋   | 51.9MB / 78.1MB, 2.84MB/s  
+New Data Upload               :  66%|██████▋   | 51.9MB / 78.1MB, 2.84MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  68%|██████▊   | 53.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  68%|██████▊   | 53.1MB / 78.1MB, 2.91MB/s  
+New Data Upload               :  68%|██████▊   | 53.1MB / 78.1MB, 2.91MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  70%|██████▉   | 54.3MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  70%|██████▉   | 54.3MB / 78.1MB, 2.97MB/s  
+New Data Upload               :  70%|██████▉   | 54.3MB / 78.1MB, 2.97MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  72%|███████▏  | 56.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  72%|███████▏  | 56.1MB / 78.1MB, 3.09MB/s  
+New Data Upload               :  72%|███████▏  | 56.1MB / 78.1MB, 3.09MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  73%|███████▎  | 57.2MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  73%|███████▎  | 57.2MB / 78.1MB, 3.15MB/s  
+New Data Upload               :  73%|███████▎  | 57.2MB / 78.1MB, 3.15MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  75%|███████▍  | 58.4MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  75%|███████▍  | 58.4MB / 78.1MB, 3.22MB/s  
+New Data Upload               :  75%|███████▍  | 58.4MB / 78.1MB, 3.22MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  76%|███████▋  | 59.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  76%|███████▋  | 59.6MB / 78.1MB, 3.29MB/s  
+New Data Upload               :  76%|███████▋  | 59.6MB / 78.1MB, 3.29MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  78%|███████▊  | 60.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  78%|███████▊  | 60.8MB / 78.1MB, 3.35MB/s  
+New Data Upload               :  78%|███████▊  | 60.8MB / 78.1MB, 3.35MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  79%|███████▉  | 62.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  79%|███████▉  | 62.0MB / 78.1MB, 3.41MB/s  
+New Data Upload               :  79%|███████▉  | 62.0MB / 78.1MB, 3.41MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  82%|████████▏ | 63.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  82%|████████▏ | 63.8MB / 78.1MB, 3.53MB/s  
+New Data Upload               :  82%|████████▏ | 63.8MB / 78.1MB, 3.53MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  84%|████████▍ | 65.5MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  84%|████████▍ | 65.5MB / 78.1MB, 3.64MB/s  
+New Data Upload               :  84%|████████▍ | 65.5MB / 78.1MB, 3.64MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  85%|████████▌ | 66.7MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  85%|████████▌ | 66.7MB / 78.1MB, 3.70MB/s  
+New Data Upload               :  85%|████████▌ | 66.7MB / 78.1MB, 3.70MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  87%|████████▋ | 67.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  87%|████████▋ | 67.9MB / 78.1MB, 3.76MB/s  
+New Data Upload               :  87%|████████▋ | 67.9MB / 78.1MB, 3.76MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  89%|████████▉ | 69.7MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  89%|████████▉ | 69.7MB / 78.1MB, 3.87MB/s  
+New Data Upload               :  89%|████████▉ | 69.7MB / 78.1MB, 3.87MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  91%|█████████ | 70.9MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  91%|█████████ | 70.9MB / 78.1MB, 3.93MB/s  
+New Data Upload               :  91%|█████████ | 70.9MB / 78.1MB, 3.93MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  92%|█████████▏| 72.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  92%|█████████▏| 72.1MB / 78.1MB, 3.99MB/s  
+New Data Upload               :  92%|█████████▏| 72.1MB / 78.1MB, 3.99MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  92%|█████████▏| 72.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  96%|█████████▌| 75.0MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  96%|█████████▌| 75.0MB / 78.1MB, 4.15MB/s  
+New Data Upload               :  96%|█████████▌| 75.0MB / 78.1MB, 4.15MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  97%|█████████▋| 75.6MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  97%|█████████▋| 75.6MB / 78.1MB, 4.16MB/s  
+New Data Upload               :  97%|█████████▋| 75.6MB / 78.1MB, 4.16MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt:  98%|█████████▊| 76.8MB / 78.1MB            [A[AProcessing Files (0 / 1)      :  98%|█████████▊| 76.8MB / 78.1MB, 4.21MB/s  
+New Data Upload               :  98%|█████████▊| 76.8MB / 78.1MB, 4.21MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 78.1MB / 78.1MB, 4.28MB/s  
+New Data Upload               : 100%|█████████▉| 78.1MB / 78.1MB, 4.28MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|█████████▉| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|██████████| 78.1MB / 78.1MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 78.1MB / 78.1MB, 3.97MB/s  
+New Data Upload               : 100%|██████████| 78.1MB / 78.1MB, 3.97MB/s  [A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|██████████| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|██████████| 78.1MB / 78.1MB            [A[A
+
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|██████████| 78.1MB / 78.1MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 78.1MB / 78.1MB, 3.90MB/s  
+New Data Upload               : 100%|██████████| 78.1MB / 78.1MB, 3.90MB/s  
+  ...0000gn/T/tmpq3va3dto/w.pt: 100%|██████████| 78.1MB / 78.1MB            
+[hub] published weights v1 to model:RemiFabre/rl-experiment-weights
+eval ckpt-000000: elo +2500.4 +/- 39.3 over 280 games in 2439s | random 1.00 greedy 1.00 heuristic 0.94 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.93 mcts:runs/run2/checkpoints/ckpt-023040.pt?sims=100 0.97 mcts:runs/run3/checkpoints/ckpt-020992.pt?sims=100 0.80 mcts:runs/run4/checkpoints/ckpt-037888.pt?sims=100 0.78
+done: 0 games, 0 steps, 218.5 min

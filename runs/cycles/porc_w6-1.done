@@ -1,0 +1,8 @@
+[corpus] wrote data/cloud/porcelain_corpus.npz: 6,386,038 positions from 119,395 games (6,193,244 with a search value, 6,386,038 policy targets)
+"games":115600 "positions":6178346 "jobs":48 "games":3795 "positions":207692 "jobs":2
+== pretrain + rate: runs/porc_w6-p0905-2235
+pretrain epoch 4/6: loss 1.9851 (p 1.5994 v 0.2186 m 0.1671) in 1175s
+pretrain epoch 5/6: loss 1.9593 (p 1.5820 v 0.2123 m 0.1649) in 1530s
+pretrain epoch 6/6: loss 1.9413 (p 1.5702 v 0.2078 m 0.1633) in 1928s
+eval ckpt-000000: elo +2496.0 +/- 39.0 over 280 games in 467s | random 1.00 greedy 1.00 heuristic 0.99 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.93 m
+cand vs porcelain: 50-3-47 (0.52) scores 41.9-40.5

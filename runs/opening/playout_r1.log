@@ -1,0 +1,42 @@
+[playout] 20 positions x 20 games x 2 branches = 800 games, mcts:runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt?think=1.0&engine=rust, 6 workers
+[playout] 40/800 games, 3.3 min
+[playout] 80/800 games, 6.8 min
+[playout] 120/800 games, 11.8 min
+[playout] 160/800 games, 15.5 min
+[playout] 200/800 games, 18.9 min
+[playout] 240/800 games, 22.2 min
+[playout] 280/800 games, 25.3 min
+[playout] 320/800 games, 28.5 min
+[playout] 360/800 games, 31.4 min
+[playout] 400/800 games, 35.1 min
+[playout] 440/800 games, 38.4 min
+[playout] 480/800 games, 41.7 min
+[playout] 520/800 games, 46.0 min
+[playout] 560/800 games, 50.0 min
+[playout] 600/800 games, 53.9 min
+[playout] 640/800 games, 58.1 min
+[playout] 680/800 games, 61.6 min
+[playout] 720/800 games, 65.6 min
+[playout] 760/800 games, 69.5 min
+[playout] 800/800 games, 72.9 min
+[playout] net's move scores +0.143 (share) / +7.00 points better than the expert's on average over 20 positions; net better in 12, expert better in 5; the search's own Q gap averaged 0.771 (+8.53 pts). 72.9 min -> data/cloud/opening/playout_porcelain_r1.json
+  # 1 r1 m5: Q loss 0.978 | played out: expert 0.95 (+10.7) net 0.15 (-11.4) delta -0.80±0.09
+  # 2 r1 m5: Q loss 0.950 | played out: expert 0.15 (-14.9) net 0.55 (+3.5) delta +0.40±0.11
+  # 3 r1 m1: Q loss 0.884 | played out: expert 0.55 (+2.3) net 0.65 (+8.9) delta +0.10±0.16
+  # 4 r1 m2: Q loss 0.861 | played out: expert 0.33 (-2.6) net 0.85 (+15.2) delta +0.53±0.14
+  # 5 r1 m5: Q loss 0.797 | played out: expert 0.25 (-7.4) net 0.90 (+13.3) delta +0.65±0.11
+  # 6 r1 m4: Q loss 0.785 | played out: expert 0.70 (+4.0) net 0.40 (-8.9) delta -0.30±0.18
+  # 7 r1 m6: Q loss 0.782 | played out: expert 0.50 (+1.1) net 0.50 (+0.9) delta +0.00±0.18
+  # 8 r1 m4: Q loss 0.765 | played out: expert 0.20 (-5.3) net 0.10 (-8.9) delta -0.10±0.12
+  # 9 r1 m4: Q loss 0.755 | played out: expert 0.50 (-4.0) net 0.85 (+8.3) delta +0.35±0.13
+  #10 r1 m5: Q loss 0.748 | played out: expert 0.95 (+18.9) net 0.57 (+1.9) delta -0.38±0.13
+  #11 r1 m4: Q loss 0.746 | played out: expert 0.15 (-9.2) net 1.00 (+19.0) delta +0.85±0.08
+  #12 r1 m3: Q loss 0.724 | played out: expert 0.10 (-12.2) net 1.00 (+15.9) delta +0.90±0.07
+  #13 r1 m2: Q loss 0.722 | played out: expert 0.30 (-8.9) net 0.50 (-0.7) delta +0.20±0.14
+  #14 r1 m4: Q loss 0.720 | played out: expert 0.70 (+8.2) net 1.00 (+47.0) delta +0.30±0.11
+  #15 r1 m2: Q loss 0.718 | played out: expert 0.50 (+2.4) net 0.60 (+6.4) delta +0.10±0.18
+  #16 r1 m6: Q loss 0.715 | played out: expert 0.85 (+7.3) net 0.90 (+13.4) delta +0.05±0.09
+  #17 r1 m3: Q loss 0.702 | played out: expert 0.05 (-7.5) net 0.30 (-8.8) delta +0.25±0.10
+  #18 r1 m3: Q loss 0.692 | played out: expert 0.10 (-18.2) net 0.10 (-10.4) delta +0.00±0.10
+  #19 r1 m2: Q loss 0.686 | played out: expert 0.45 (-0.8) net 0.45 (+2.0) delta +0.00±0.19
+  #20 r1 m3: Q loss 0.686 | played out: expert 0.50 (+1.6) net 0.25 (-1.4) delta -0.25±0.12

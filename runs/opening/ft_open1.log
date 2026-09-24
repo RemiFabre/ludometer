@@ -1,0 +1,5 @@
+base runs/porc_w-p0905-2038/checkpoints/ckpt-000000.pt on mps; human rows 24,619 (24,619 policy), rehearsal rows 1,200,000; batch 64+192, lr 5e-05
+saved ft-000500: {'step': 500, 'loss_p': 1.5382, 'loss_v': 0.6186, 'loss_m': 0.1578, 'loss_a': 0.0, 't': 25.6}
+saved ft-001000: {'step': 1000, 'loss_p': 1.5004, 'loss_v': 0.6132, 'loss_m': 0.1548, 'loss_a': 0.0, 't': 49.9}
+saved ft-002000: {'step': 2000, 'loss_p': 1.4799, 'loss_v': 0.6044, 'loss_m': 0.152, 'loss_a': 0.0, 't': 97.9}
+saved ft-004000: {'step': 4000, 'loss_p': 1.4605, 'loss_v': 0.6023, 'loss_m': 0.1511, 'loss_a': 0.0, 't': 208.3}

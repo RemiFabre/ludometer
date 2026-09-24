@@ -1,0 +1,179 @@
+run uno1: device=mps selfplay=batched(32x4 on auto) arch=mlp net=3x512 params=944,318 target=120000 games
+eval ckpt-000000: elo +87.3 +/- 62.9 over 96 games in 56s | uno:random 0.62 uno:greedy 0.09 uno:heuristic 0.31
+iter 1: 1024 games (1539.5 games/min, 50219 moves) | 196 steps in 1.9s | loss 2.4852 (p 1.5656 v 0.9196) | buffer 50219 | games 1024
+iter 2: 1024 games (1670.7 games/min, 48950 moves) | 191 steps in 0.6s | loss 1.5709 (p 0.6801 v 0.8907) | buffer 99169 | games 2048
+eval ckpt-002048: elo +120.9 +/- 44.5 over 128 games in 94s | uno:random 0.78 uno:greedy 0.19 uno:heuristic 0.28 ckpt-000000 0.44
+iter 3: 1024 games (1788.8 games/min, 46806 moves) | 183 steps in 0.6s | loss 1.4795 (p 0.5886 v 0.8909) | buffer 145975 | games 3072
+iter 4: 1024 games (1568.7 games/min, 50499 moves) | 197 steps in 0.6s | loss 1.4493 (p 0.5534 v 0.8958) | buffer 196474 | games 4096
+eval ckpt-004096: elo +225.1 +/- 48.3 over 128 games in 91s | uno:random 0.81 uno:greedy 0.09 uno:heuristic 0.34 ckpt-002048 0.62
+iter 5: 1024 games (1664.8 games/min, 48573 moves) | 190 steps in 0.6s | loss 1.4277 (p 0.5324 v 0.8953) | buffer 245047 | games 5120
+iter 6: 1024 games (1695.8 games/min, 48508 moves) | 189 steps in 0.6s | loss 1.4150 (p 0.5147 v 0.9002) | buffer 293555 | games 6144
+eval ckpt-006144: elo +209.1 +/- 46.6 over 128 games in 88s | uno:random 0.78 uno:greedy 0.12 uno:heuristic 0.31 ckpt-004096 0.47
+iter 7: 1024 games (1705.2 games/min, 47455 moves) | 185 steps in 0.6s | loss 1.4054 (p 0.5032 v 0.9022) | buffer 341010 | games 7168
+iter 8: 1024 games (1722.6 games/min, 48595 moves) | 190 steps in 0.6s | loss 1.3922 (p 0.4885 v 0.9036) | buffer 389605 | games 8192
+eval ckpt-008192: elo +291.6 +/- 39.0 over 160 games in 123s | uno:random 0.91 uno:greedy 0.22 uno:heuristic 0.28 ckpt-006144 0.53 ckpt-004096 0.62
+iter 9: 1024 games (1737.3 games/min, 46562 moves) | 182 steps in 0.6s | loss 1.3899 (p 0.4802 v 0.9097) | buffer 400000 | games 9216
+iter 10: 1024 games (1782.5 games/min, 47448 moves) | 185 steps in 0.6s | loss 1.3840 (p 0.4747 v 0.9093) | buffer 400000 | games 10240
+eval ckpt-010240: elo +183.9 +/- 47.1 over 128 games in 84s | uno:random 0.72 uno:greedy 0.12 uno:heuristic 0.31 ckpt-008192 0.38
+iter 11: 1024 games (1778.7 games/min, 44745 moves) | 175 steps in 0.5s | loss 1.3847 (p 0.4733 v 0.9114) | buffer 400000 | games 11264
+iter 12: 1024 games (1851.9 games/min, 46114 moves) | 180 steps in 0.6s | loss 1.3770 (p 0.4645 v 0.9125) | buffer 400000 | games 12288
+eval ckpt-012288: elo +216.1 +/- 37.5 over 160 games in 122s | uno:random 0.75 uno:greedy 0.12 uno:heuristic 0.38 ckpt-010240 0.47 ckpt-008192 0.50
+iter 13: 1024 games (1786.0 games/min, 46550 moves) | 182 steps in 0.6s | loss 1.3665 (p 0.4602 v 0.9063) | buffer 400000 | games 13312
+iter 14: 1024 games (1702.7 games/min, 47022 moves) | 184 steps in 0.6s | loss 1.3642 (p 0.4544 v 0.9098) | buffer 400000 | games 14336
+eval ckpt-014336: elo +261.1 +/- 38.0 over 160 games in 118s | uno:random 0.81 uno:greedy 0.16 uno:heuristic 0.34 ckpt-012288 0.47 ckpt-008192 0.56
+iter 15: 1024 games (1655.4 games/min, 44684 moves) | 175 steps in 0.7s | loss 1.3591 (p 0.4515 v 0.9076) | buffer 400000 | games 15360
+iter 16: 1024 games (1696.0 games/min, 45813 moves) | 179 steps in 0.6s | loss 1.3552 (p 0.4501 v 0.9052) | buffer 400000 | games 16384
+eval ckpt-016384: elo +366.8 +/- 40.6 over 160 games in 143s | uno:random 0.94 uno:greedy 0.22 uno:heuristic 0.47 ckpt-014336 0.56 ckpt-008192 0.66
+iter 17: 1024 games (1764.0 games/min, 45907 moves) | 179 steps in 0.6s | loss 1.3495 (p 0.4455 v 0.9039) | buffer 400000 | games 17408
+iter 18: 1024 games (1619.3 games/min, 46117 moves) | 180 steps in 0.7s | loss 1.3412 (p 0.4410 v 0.9001) | buffer 400000 | games 18432
+eval ckpt-018432: elo +296.3 +/- 50.1 over 128 games in 101s | uno:random 0.78 uno:greedy 0.25 uno:heuristic 0.28 ckpt-016384 0.47
+iter 19: 1024 games (1718.6 games/min, 46425 moves) | 181 steps in 0.6s | loss 1.3545 (p 0.4471 v 0.9074) | buffer 400000 | games 19456
+iter 20: 1024 games (1736.1 games/min, 46492 moves) | 182 steps in 0.6s | loss 1.3476 (p 0.4387 v 0.9089) | buffer 400000 | games 20480
+eval ckpt-020480: elo +348.8 +/- 39.4 over 160 games in 126s | uno:random 0.88 uno:greedy 0.16 uno:heuristic 0.38 ckpt-018432 0.59 ckpt-016384 0.47
+iter 21: 1024 games (1736.8 games/min, 46050 moves) | 180 steps in 0.6s | loss 1.3487 (p 0.4423 v 0.9064) | buffer 400000 | games 21504
+iter 22: 1024 games (1858.4 games/min, 45092 moves) | 176 steps in 0.6s | loss 1.3367 (p 0.4339 v 0.9028) | buffer 400000 | games 22528
+eval ckpt-022528: elo +397.9 +/- 40.1 over 160 games in 124s | uno:random 0.94 uno:greedy 0.16 uno:heuristic 0.44 ckpt-020480 0.50 ckpt-016384 0.59
+iter 23: 1024 games (1851.0 games/min, 46020 moves) | 180 steps in 0.6s | loss 1.3328 (p 0.4298 v 0.9031) | buffer 400000 | games 23552
+iter 24: 1024 games (1842.1 games/min, 44679 moves) | 175 steps in 0.6s | loss 1.3388 (p 0.4324 v 0.9064) | buffer 400000 | games 24576
+eval ckpt-024576: elo +301.8 +/- 50.9 over 128 games in 87s | uno:random 0.91 uno:greedy 0.19 uno:heuristic 0.25 ckpt-022528 0.31
+iter 25: 1024 games (1769.1 games/min, 46810 moves) | 183 steps in 0.6s | loss 1.3394 (p 0.4330 v 0.9064) | buffer 400000 | games 25600
+iter 26: 1024 games (1815.4 games/min, 46019 moves) | 180 steps in 0.6s | loss 1.3321 (p 0.4307 v 0.9013) | buffer 400000 | games 26624
+eval ckpt-026624: elo +310.6 +/- 39.1 over 160 games in 121s | uno:random 0.88 uno:greedy 0.16 uno:heuristic 0.34 ckpt-024576 0.38 ckpt-022528 0.50
+iter 27: 1024 games (1792.0 games/min, 46149 moves) | 180 steps in 0.6s | loss 1.3307 (p 0.4303 v 0.9004) | buffer 400000 | games 27648
+iter 28: 1024 games (1834.9 games/min, 44901 moves) | 175 steps in 0.6s | loss 1.3299 (p 0.4297 v 0.9002) | buffer 400000 | games 28672
+eval ckpt-028672: elo +358.7 +/- 39.6 over 160 games in 121s | uno:random 0.88 uno:greedy 0.25 uno:heuristic 0.59 ckpt-026624 0.50 ckpt-022528 0.53
+iter 29: 1024 games (1820.7 games/min, 45746 moves) | 179 steps in 0.6s | loss 1.3300 (p 0.4227 v 0.9073) | buffer 400000 | games 29696
+iter 30: 1024 games (1800.1 games/min, 45267 moves) | 177 steps in 0.6s | loss 1.3246 (p 0.4276 v 0.8969) | buffer 400000 | games 30720
+eval ckpt-030720: elo +369.8 +/- 39.6 over 160 games in 130s | uno:random 0.91 uno:greedy 0.28 uno:heuristic 0.28 ckpt-028672 0.47 ckpt-022528 0.50
+iter 31: 1024 games (1785.9 games/min, 45421 moves) | 177 steps in 0.6s | loss 1.3200 (p 0.4253 v 0.8946) | buffer 400000 | games 31744
+iter 32: 1024 games (1773.3 games/min, 45290 moves) | 177 steps in 0.6s | loss 1.3242 (p 0.4270 v 0.8973) | buffer 400000 | games 32768
+eval ckpt-032768: elo +365.5 +/- 39.5 over 160 games in 132s | uno:random 0.91 uno:greedy 0.25 uno:heuristic 0.44 ckpt-030720 0.38 ckpt-022528 0.56
+iter 33: 1024 games (1895.1 games/min, 43991 moves) | 172 steps in 0.5s | loss 1.3103 (p 0.4210 v 0.8893) | buffer 400000 | games 33792
+iter 34: 1024 games (1924.8 games/min, 43120 moves) | 168 steps in 0.5s | loss 1.3085 (p 0.4220 v 0.8865) | buffer 400000 | games 34816
+eval ckpt-034816: elo +520.3 +/- 44.3 over 160 games in 139s | uno:random 0.94 uno:greedy 0.16 uno:heuristic 0.38 ckpt-032768 0.66 ckpt-022528 0.75
+iter 35: 1024 games (1800.0 games/min, 44360 moves) | 173 steps in 0.5s | loss 1.3092 (p 0.4236 v 0.8855) | buffer 400000 | games 35840
+iter 36: 1024 games (1754.9 games/min, 45176 moves) | 176 steps in 0.6s | loss 1.3176 (p 0.4288 v 0.8888) | buffer 400000 | games 36864
+eval ckpt-036864: elo +544.0 +/- 56.7 over 128 games in 90s | uno:random 1.00 uno:greedy 0.38 uno:heuristic 0.28 ckpt-034816 0.50
+iter 37: 1024 games (1777.6 games/min, 45593 moves) | 178 steps in 0.6s | loss 1.3144 (p 0.4203 v 0.8941) | buffer 400000 | games 37888
+iter 38: 1024 games (1867.7 games/min, 44367 moves) | 173 steps in 0.6s | loss 1.3119 (p 0.4190 v 0.8929) | buffer 400000 | games 38912
+eval ckpt-038912: elo +455.6 +/- 55.9 over 128 games in 85s | uno:random 0.84 uno:greedy 0.28 uno:heuristic 0.41 ckpt-036864 0.47
+iter 39: 1024 games (1871.9 games/min, 44423 moves) | 174 steps in 0.6s | loss 1.3028 (p 0.4163 v 0.8865) | buffer 400000 | games 39936
+iter 40: 1024 games (1850.5 games/min, 43713 moves) | 171 steps in 0.6s | loss 1.3123 (p 0.4219 v 0.8904) | buffer 400000 | games 40960
+eval ckpt-040960: elo +465.3 +/- 41.2 over 160 games in 125s | uno:random 0.94 uno:greedy 0.34 uno:heuristic 0.59 ckpt-038912 0.50 ckpt-036864 0.41
+iter 41: 1024 games (1860.7 games/min, 44710 moves) | 175 steps in 0.6s | loss 1.3148 (p 0.4232 v 0.8916) | buffer 400000 | games 41984
+iter 42: 1024 games (1814.9 games/min, 45823 moves) | 179 steps in 0.6s | loss 1.3201 (p 0.4233 v 0.8968) | buffer 400000 | games 43008
+eval ckpt-043008: elo +489.3 +/- 41.2 over 160 games in 126s | uno:random 0.97 uno:greedy 0.28 uno:heuristic 0.44 ckpt-040960 0.44 ckpt-036864 0.50
+iter 43: 1024 games (1876.0 games/min, 44281 moves) | 173 steps in 0.6s | loss 1.3012 (p 0.4133 v 0.8880) | buffer 400000 | games 44032
+iter 44: 1024 games (1826.7 games/min, 44091 moves) | 172 steps in 0.6s | loss 1.3138 (p 0.4194 v 0.8944) | buffer 400000 | games 45056
+eval ckpt-045056: elo +490.5 +/- 41.2 over 160 games in 133s | uno:random 0.94 uno:greedy 0.41 uno:heuristic 0.34 ckpt-043008 0.47 ckpt-036864 0.47
+iter 45: 1024 games (1779.7 games/min, 44230 moves) | 173 steps in 0.6s | loss 1.3027 (p 0.4169 v 0.8858) | buffer 400000 | games 46080
+iter 46: 1024 games (1781.1 games/min, 43610 moves) | 170 steps in 0.6s | loss 1.3036 (p 0.4167 v 0.8869) | buffer 400000 | games 47104
+eval ckpt-047104: elo +510.6 +/- 41.3 over 160 games in 126s | uno:random 0.91 uno:greedy 0.12 uno:heuristic 0.38 ckpt-045056 0.47 ckpt-036864 0.56
+iter 47: 1024 games (1736.4 games/min, 45712 moves) | 179 steps in 0.7s | loss 1.3031 (p 0.4157 v 0.8875) | buffer 400000 | games 48128
+iter 48: 1024 games (1736.1 games/min, 44527 moves) | 174 steps in 0.6s | loss 1.3009 (p 0.4175 v 0.8833) | buffer 400000 | games 49152
+eval ckpt-049152: elo +590.1 +/- 42.5 over 160 games in 134s | uno:random 1.00 uno:greedy 0.12 uno:heuristic 0.53 ckpt-047104 0.38 ckpt-036864 0.78
+iter 49: 1024 games (1716.6 games/min, 44545 moves) | 174 steps in 0.6s | loss 1.3029 (p 0.4156 v 0.8874) | buffer 400000 | games 50176
+iter 50: 1024 games (1686.4 games/min, 43993 moves) | 172 steps in 0.6s | loss 1.3006 (p 0.4183 v 0.8823) | buffer 400000 | games 51200
+eval ckpt-051200: elo +567.5 +/- 57.1 over 128 games in 91s | uno:random 0.91 uno:greedy 0.28 uno:heuristic 0.59 ckpt-049152 0.53
+iter 51: 1024 games (1675.4 games/min, 45544 moves) | 178 steps in 0.6s | loss 1.2910 (p 0.4132 v 0.8778) | buffer 400000 | games 52224
+iter 52: 1024 games (1816.9 games/min, 43589 moves) | 170 steps in 0.6s | loss 1.2943 (p 0.4094 v 0.8848) | buffer 400000 | games 53248
+eval ckpt-053248: elo +577.5 +/- 41.7 over 160 games in 132s | uno:random 0.84 uno:greedy 0.12 uno:heuristic 0.44 ckpt-051200 0.56 ckpt-049152 0.56
+iter 53: 1024 games (1436.3 games/min, 44572 moves) | 174 steps in 0.7s | loss 1.2904 (p 0.4149 v 0.8756) | buffer 400000 | games 54272
+iter 54: 1024 games (1569.5 games/min, 44429 moves) | 174 steps in 0.6s | loss 1.2965 (p 0.4113 v 0.8852) | buffer 400000 | games 55296
+eval ckpt-055296: elo +532.1 +/- 41.8 over 160 games in 133s | uno:random 0.88 uno:greedy 0.28 uno:heuristic 0.47 ckpt-053248 0.53 ckpt-049152 0.41
+iter 55: 1024 games (1701.0 games/min, 42900 moves) | 168 steps in 0.6s | loss 1.2970 (p 0.4139 v 0.8830) | buffer 400000 | games 56320
+iter 56: 1024 games (1763.1 games/min, 45709 moves) | 179 steps in 0.7s | loss 1.2925 (p 0.4094 v 0.8832) | buffer 400000 | games 57344
+eval ckpt-057344: elo +571.0 +/- 41.8 over 160 games in 121s | uno:random 0.97 uno:greedy 0.28 uno:heuristic 0.53 ckpt-055296 0.50 ckpt-049152 0.53
+iter 57: 1024 games (1799.1 games/min, 43738 moves) | 171 steps in 0.6s | loss 1.2951 (p 0.4119 v 0.8832) | buffer 400000 | games 58368
+iter 58: 1024 games (1815.5 games/min, 44311 moves) | 173 steps in 0.6s | loss 1.2989 (p 0.4117 v 0.8873) | buffer 400000 | games 59392
+eval ckpt-059392: elo +498.8 +/- 42.1 over 160 games in 129s | uno:random 0.84 uno:greedy 0.22 uno:heuristic 0.50 ckpt-057344 0.44 ckpt-049152 0.44
+iter 59: 1024 games (1795.1 games/min, 43849 moves) | 171 steps in 0.5s | loss 1.2961 (p 0.4103 v 0.8858) | buffer 400000 | games 60416
+iter 60: 1024 games (1745.8 games/min, 43518 moves) | 170 steps in 0.6s | loss 1.2950 (p 0.4113 v 0.8837) | buffer 400000 | games 61440
+eval ckpt-061440: elo +535.5 +/- 41.7 over 160 games in 129s | uno:random 0.94 uno:greedy 0.25 uno:heuristic 0.41 ckpt-059392 0.56 ckpt-049152 0.44
+iter 61: 1024 games (1778.0 games/min, 43096 moves) | 168 steps in 0.5s | loss 1.3000 (p 0.4166 v 0.8833) | buffer 400000 | games 62464
+iter 62: 1024 games (1879.1 games/min, 43587 moves) | 170 steps in 0.5s | loss 1.2823 (p 0.4045 v 0.8778) | buffer 400000 | games 63488
+eval ckpt-063488: elo +572.6 +/- 41.8 over 160 games in 126s | uno:random 0.94 uno:greedy 0.38 uno:heuristic 0.59 ckpt-061440 0.50 ckpt-049152 0.56
+iter 63: 1024 games (1561.6 games/min, 45373 moves) | 177 steps in 0.7s | loss 1.2887 (p 0.4051 v 0.8836) | buffer 400000 | games 64512
+iter 64: 1024 games (1753.7 games/min, 42618 moves) | 166 steps in 0.6s | loss 1.2895 (p 0.4066 v 0.8829) | buffer 400000 | games 65536
+eval ckpt-065536: elo +549.9 +/- 41.7 over 160 games in 128s | uno:random 1.00 uno:greedy 0.28 uno:heuristic 0.56 ckpt-063488 0.44 ckpt-049152 0.44
+iter 65: 1024 games (1899.4 games/min, 43237 moves) | 169 steps in 0.6s | loss 1.2896 (p 0.4073 v 0.8823) | buffer 400000 | games 66560
+iter 66: 1024 games (1829.6 games/min, 43936 moves) | 172 steps in 0.6s | loss 1.2916 (p 0.4071 v 0.8844) | buffer 400000 | games 67584
+eval ckpt-067584: elo +539.3 +/- 41.6 over 160 games in 123s | uno:random 0.88 uno:greedy 0.31 uno:heuristic 0.56 ckpt-065536 0.47 ckpt-049152 0.53
+iter 67: 1024 games (1914.5 games/min, 42347 moves) | 165 steps in 0.5s | loss 1.2879 (p 0.4042 v 0.8837) | buffer 400000 | games 68608
+iter 68: 1024 games (1791.8 games/min, 43653 moves) | 171 steps in 0.6s | loss 1.2885 (p 0.4077 v 0.8808) | buffer 400000 | games 69632
+eval ckpt-069632: elo +544.3 +/- 41.6 over 160 games in 121s | uno:random 0.84 uno:greedy 0.34 uno:heuristic 0.47 ckpt-067584 0.50 ckpt-049152 0.56
+iter 69: 1024 games (1892.0 games/min, 42749 moves) | 167 steps in 0.6s | loss 1.2912 (p 0.4083 v 0.8829) | buffer 400000 | games 70656
+iter 70: 1024 games (1841.0 games/min, 43188 moves) | 169 steps in 0.5s | loss 1.2931 (p 0.4066 v 0.8865) | buffer 400000 | games 71680
+eval ckpt-071680: elo +607.2 +/- 42.3 over 160 games in 116s | uno:random 0.94 uno:greedy 0.22 uno:heuristic 0.47 ckpt-069632 0.47 ckpt-049152 0.69
+iter 71: 1024 games (1795.5 games/min, 44363 moves) | 173 steps in 0.6s | loss 1.2845 (p 0.4021 v 0.8824) | buffer 400000 | games 72704
+iter 72: 1024 games (1881.4 games/min, 43247 moves) | 169 steps in 0.5s | loss 1.2895 (p 0.4080 v 0.8815) | buffer 400000 | games 73728
+eval ckpt-073728: elo +582.5 +/- 57.4 over 128 games in 86s | uno:random 0.91 uno:greedy 0.25 uno:heuristic 0.59 ckpt-071680 0.53
+iter 73: 1024 games (1893.9 games/min, 42065 moves) | 164 steps in 0.6s | loss 1.2922 (p 0.4124 v 0.8798) | buffer 400000 | games 74752
+iter 74: 1024 games (1825.2 games/min, 44000 moves) | 172 steps in 0.6s | loss 1.2950 (p 0.4096 v 0.8854) | buffer 400000 | games 75776
+eval ckpt-075776: elo +612.8 +/- 42.0 over 160 games in 121s | uno:random 0.94 uno:greedy 0.25 uno:heuristic 0.47 ckpt-073728 0.50 ckpt-071680 0.59
+iter 75: 1024 games (1811.8 games/min, 43106 moves) | 168 steps in 0.7s | loss 1.2918 (p 0.4105 v 0.8812) | buffer 400000 | games 76800
+iter 76: 1024 games (1880.4 games/min, 41532 moves) | 162 steps in 0.6s | loss 1.2929 (p 0.4119 v 0.8810) | buffer 400000 | games 77824
+eval ckpt-077824: elo +625.9 +/- 58.1 over 128 games in 81s | uno:random 0.94 uno:greedy 0.31 uno:heuristic 0.50 ckpt-075776 0.56
+iter 77: 1024 games (1801.9 games/min, 43028 moves) | 168 steps in 0.6s | loss 1.2930 (p 0.4123 v 0.8807) | buffer 400000 | games 78848
+iter 78: 1024 games (1665.6 games/min, 43888 moves) | 171 steps in 0.5s | loss 1.2929 (p 0.4095 v 0.8833) | buffer 400000 | games 79872
+eval ckpt-079872: elo +560.8 +/- 57.8 over 128 games in 88s | uno:random 0.91 uno:greedy 0.22 uno:heuristic 0.47 ckpt-077824 0.47
+iter 79: 1024 games (1802.0 games/min, 42056 moves) | 164 steps in 0.6s | loss 1.2886 (p 0.4078 v 0.8808) | buffer 400000 | games 80896
+iter 80: 1024 games (1806.9 games/min, 42915 moves) | 168 steps in 0.5s | loss 1.2884 (p 0.4087 v 0.8797) | buffer 400000 | games 81920
+eval ckpt-081920: elo +550.7 +/- 42.0 over 160 games in 118s | uno:random 1.00 uno:greedy 0.34 uno:heuristic 0.44 ckpt-079872 0.50 ckpt-077824 0.34
+iter 81: 1024 games (1830.4 games/min, 41838 moves) | 163 steps in 0.5s | loss 1.2895 (p 0.4059 v 0.8836) | buffer 400000 | games 82944
+iter 82: 1024 games (1864.2 games/min, 42497 moves) | 166 steps in 0.6s | loss 1.2899 (p 0.4089 v 0.8810) | buffer 400000 | games 83968
+eval ckpt-083968: elo +545.9 +/- 42.0 over 160 games in 117s | uno:random 0.91 uno:greedy 0.31 uno:heuristic 0.53 ckpt-081920 0.41 ckpt-077824 0.53
+iter 83: 1024 games (1946.1 games/min, 41534 moves) | 162 steps in 0.6s | loss 1.2963 (p 0.4124 v 0.8839) | buffer 400000 | games 84992
+iter 84: 1024 games (1852.2 games/min, 43620 moves) | 170 steps in 0.6s | loss 1.2890 (p 0.4062 v 0.8828) | buffer 400000 | games 86016
+eval ckpt-086016: elo +604.6 +/- 42.2 over 160 games in 126s | uno:random 0.97 uno:greedy 0.28 uno:heuristic 0.53 ckpt-083968 0.69 ckpt-077824 0.38
+iter 85: 1024 games (1464.3 games/min, 43684 moves) | 171 steps in 0.7s | loss 1.2964 (p 0.4082 v 0.8882) | buffer 400000 | games 87040
+iter 86: 1024 games (1861.6 games/min, 42767 moves) | 167 steps in 0.5s | loss 1.2955 (p 0.4080 v 0.8875) | buffer 400000 | games 88064
+eval ckpt-088064: elo +632.2 +/- 42.1 over 160 games in 125s | uno:random 0.94 uno:greedy 0.41 uno:heuristic 0.56 ckpt-086016 0.66 ckpt-077824 0.44
+iter 87: 1024 games (1898.1 games/min, 43033 moves) | 168 steps in 0.5s | loss 1.2887 (p 0.4068 v 0.8819) | buffer 400000 | games 89088
+iter 88: 1024 games (1372.7 games/min, 42550 moves) | 166 steps in 0.5s | loss 1.2922 (p 0.4052 v 0.8869) | buffer 400000 | games 90112
+eval ckpt-090112: elo +566.3 +/- 57.9 over 128 games in 85s | uno:random 0.88 uno:greedy 0.41 uno:heuristic 0.50 ckpt-088064 0.50
+iter 89: 1024 games (1890.3 games/min, 43561 moves) | 170 steps in 0.5s | loss 1.2906 (p 0.4047 v 0.8859) | buffer 400000 | games 91136
+iter 90: 1024 games (1849.2 games/min, 44107 moves) | 172 steps in 0.5s | loss 1.2966 (p 0.4106 v 0.8860) | buffer 400000 | games 92160
+eval ckpt-092160: elo +627.4 +/- 42.3 over 160 games in 115s | uno:random 1.00 uno:greedy 0.22 uno:heuristic 0.50 ckpt-090112 0.62 ckpt-088064 0.44
+iter 91: 1024 games (1888.9 games/min, 43651 moves) | 171 steps in 0.5s | loss 1.2930 (p 0.4029 v 0.8901) | buffer 400000 | games 93184
+iter 92: 1024 games (1855.3 games/min, 42165 moves) | 165 steps in 0.5s | loss 1.2960 (p 0.4058 v 0.8902) | buffer 400000 | games 94208
+eval ckpt-094208: elo +635.8 +/- 42.1 over 160 games in 122s | uno:random 0.94 uno:greedy 0.09 uno:heuristic 0.41 ckpt-092160 0.41 ckpt-088064 0.66
+iter 93: 1024 games (1921.0 games/min, 43590 moves) | 170 steps in 0.5s | loss 1.2868 (p 0.4013 v 0.8855) | buffer 400000 | games 95232
+iter 94: 1024 games (2013.4 games/min, 41051 moves) | 160 steps in 0.5s | loss 1.2947 (p 0.4074 v 0.8873) | buffer 400000 | games 96256
+eval ckpt-096256: elo +646.8 +/- 58.3 over 128 games in 84s | uno:random 0.97 uno:greedy 0.28 uno:heuristic 0.47 ckpt-094208 0.53
+iter 95: 1024 games (1915.4 games/min, 42949 moves) | 168 steps in 0.5s | loss 1.2907 (p 0.4069 v 0.8838) | buffer 400000 | games 97280
+iter 96: 1024 games (1990.2 games/min, 41960 moves) | 164 steps in 0.5s | loss 1.2919 (p 0.4044 v 0.8876) | buffer 400000 | games 98304
+eval ckpt-098304: elo +637.4 +/- 58.2 over 128 games in 85s | uno:random 0.97 uno:greedy 0.31 uno:heuristic 0.47 ckpt-096256 0.50
+iter 97: 1024 games (1971.1 games/min, 42612 moves) | 166 steps in 0.5s | loss 1.2843 (p 0.4047 v 0.8796) | buffer 400000 | games 99328
+iter 98: 1024 games (2014.2 games/min, 41145 moves) | 161 steps in 0.5s | loss 1.2874 (p 0.4017 v 0.8856) | buffer 400000 | games 100352
+eval ckpt-100352: elo +565.6 +/- 42.6 over 160 games in 118s | uno:random 0.94 uno:greedy 0.12 uno:heuristic 0.44 ckpt-098304 0.34 ckpt-096256 0.47
+iter 99: 1024 games (1803.2 games/min, 42442 moves) | 166 steps in 0.6s | loss 1.2899 (p 0.4067 v 0.8832) | buffer 400000 | games 101376
+iter 100: 1024 games (1848.3 games/min, 42308 moves) | 165 steps in 0.5s | loss 1.2957 (p 0.4068 v 0.8889) | buffer 400000 | games 102400
+eval ckpt-102400: elo +531.5 +/- 42.5 over 160 games in 113s | uno:random 1.00 uno:greedy 0.41 uno:heuristic 0.62 ckpt-100352 0.31 ckpt-096256 0.44
+iter 101: 1024 games (1898.1 games/min, 42696 moves) | 167 steps in 0.5s | loss 1.2956 (p 0.4051 v 0.8906) | buffer 400000 | games 103424
+iter 102: 1024 games (1635.2 games/min, 43536 moves) | 170 steps in 0.5s | loss 1.2912 (p 0.4039 v 0.8873) | buffer 400000 | games 104448
+eval ckpt-104448: elo +566.6 +/- 42.3 over 160 games in 120s | uno:random 0.91 uno:greedy 0.25 uno:heuristic 0.50 ckpt-102400 0.44 ckpt-096256 0.56
+iter 103: 1024 games (1823.1 games/min, 42982 moves) | 168 steps in 0.5s | loss 1.2965 (p 0.4100 v 0.8865) | buffer 400000 | games 105472
+iter 104: 1024 games (1789.2 games/min, 43960 moves) | 172 steps in 0.5s | loss 1.3003 (p 0.4101 v 0.8902) | buffer 400000 | games 106496
+eval ckpt-106496: elo +593.5 +/- 42.1 over 160 games in 118s | uno:random 0.91 uno:greedy 0.38 uno:heuristic 0.59 ckpt-104448 0.56 ckpt-096256 0.47
+iter 105: 1024 games (1957.6 games/min, 42081 moves) | 164 steps in 0.5s | loss 1.2940 (p 0.4075 v 0.8864) | buffer 400000 | games 107520
+iter 106: 1024 games (1871.3 games/min, 43203 moves) | 169 steps in 0.5s | loss 1.2967 (p 0.4093 v 0.8873) | buffer 400000 | games 108544
+eval ckpt-108544: elo +616.5 +/- 42.1 over 160 games in 117s | uno:random 0.91 uno:greedy 0.34 uno:heuristic 0.75 ckpt-106496 0.56 ckpt-096256 0.50
+iter 107: 1024 games (1828.9 games/min, 42219 moves) | 165 steps in 0.6s | loss 1.2981 (p 0.4109 v 0.8872) | buffer 400000 | games 109568
+iter 108: 1024 games (1921.9 games/min, 42647 moves) | 167 steps in 0.6s | loss 1.2898 (p 0.4065 v 0.8833) | buffer 400000 | games 110592
+eval ckpt-110592: elo +607.1 +/- 42.0 over 160 games in 111s | uno:random 0.94 uno:greedy 0.38 uno:heuristic 0.34 ckpt-108544 0.44 ckpt-096256 0.53
+iter 109: 1024 games (1875.7 games/min, 42924 moves) | 168 steps in 0.6s | loss 1.2880 (p 0.4044 v 0.8836) | buffer 400000 | games 111616
+iter 110: 1024 games (1748.2 games/min, 42667 moves) | 167 steps in 0.6s | loss 1.2900 (p 0.4050 v 0.8850) | buffer 400000 | games 112640
+eval ckpt-112640: elo +633.1 +/- 42.1 over 160 games in 116s | uno:random 0.91 uno:greedy 0.34 uno:heuristic 0.62 ckpt-110592 0.47 ckpt-096256 0.62
+iter 111: 1024 games (1903.2 games/min, 41603 moves) | 163 steps in 0.5s | loss 1.2953 (p 0.4045 v 0.8908) | buffer 400000 | games 113664
+iter 112: 1024 games (1866.4 games/min, 42505 moves) | 166 steps in 0.5s | loss 1.2877 (p 0.4038 v 0.8839) | buffer 400000 | games 114688
+eval ckpt-114688: elo +645.5 +/- 42.1 over 160 games in 117s | uno:random 0.94 uno:greedy 0.44 uno:heuristic 0.56 ckpt-112640 0.44 ckpt-096256 0.62
+iter 113: 1024 games (2005.0 games/min, 41368 moves) | 162 steps in 0.5s | loss 1.2861 (p 0.3996 v 0.8865) | buffer 400000 | games 115712
+iter 114: 1024 games (1947.4 games/min, 43003 moves) | 168 steps in 0.5s | loss 1.2815 (p 0.4005 v 0.8810) | buffer 400000 | games 116736
+eval ckpt-116736: elo +661.7 +/- 42.2 over 160 games in 112s | uno:random 0.97 uno:greedy 0.25 uno:heuristic 0.56 ckpt-114688 0.56 ckpt-096256 0.50
+iter 115: 1024 games (1840.4 games/min, 42574 moves) | 166 steps in 0.5s | loss 1.2841 (p 0.3996 v 0.8845) | buffer 400000 | games 117760
+iter 116: 1024 games (1791.3 games/min, 42113 moves) | 165 steps in 0.5s | loss 1.2866 (p 0.4038 v 0.8828) | buffer 400000 | games 118784
+eval ckpt-118784: elo +651.0 +/- 58.4 over 128 games in 82s | uno:random 0.97 uno:greedy 0.31 uno:heuristic 0.41 ckpt-116736 0.50
+iter 117: 1024 games (1847.6 games/min, 41192 moves) | 161 steps in 0.5s | loss 1.2875 (p 0.4045 v 0.8830) | buffer 400000 | games 119808
+iter 118: 192 games (1577.2 games/min, 7673 moves) | 30 steps in 0.1s | loss 1.2918 (p 0.4109 v 0.8809) | buffer 400000 | games 120000
+done: 120000 games, 20240 steps, 179.2 min

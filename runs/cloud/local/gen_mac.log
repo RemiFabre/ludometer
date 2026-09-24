@@ -1,0 +1,57 @@
+[rl-experiment 17:58:22] block 64 raised to 768 (6 x 128)
+[rl-experiment 17:58:22] run rlx_teacher tag mac-1758: 6 drivers x 128 games, sims 1024, shards -> dataset:RemiFabre/rl-experiment-shards, weights <- model:RemiFabre/rl-experiment-weights
+[rl-experiment 17:58:26] weights v1 loaded; playing
+[rl-experiment 17:59:27]   ... 0/768 games done, 1,052,544 positions this block, 17,422 positions/s
+[rl-experiment 18:00:27]   ... 0/768 games done, 2,126,336 positions this block, 17,612 positions/s
+[rl-experiment 18:01:27]   ... 0/768 games done, 3,155,072 positions this block, 17,455 positions/s
+[rl-experiment 18:02:28]   ... 0/768 games done, 4,219,904 positions this block, 17,473 positions/s
+[rl-experiment 18:03:28]   ... 0/768 games done, 5,229,952 positions this block, 17,310 positions/s
+[rl-experiment 18:04:28]   ... 0/768 games done, 6,256,768 positions this block, 17,272 positions/s
+[rl-experiment 18:05:29]   ... 0/768 games done, 7,284,608 positions this block, 17,235 positions/s
+[rl-experiment 18:06:29]   ... 0/768 games done, 8,319,744 positions this block, 17,236 positions/s
+[rl-experiment 18:07:30]   ... 0/768 games done, 9,378,176 positions this block, 17,260 positions/s
+[rl-experiment 18:08:30]   ... 0/768 games done, 10,439,936 positions this block, 17,300 positions/s
+[rl-experiment 18:09:30]   ... 0/768 games done, 11,495,040 positions this block, 17,318 positions/s
+[rl-experiment 18:10:30]   ... 0/768 games done, 12,555,647 positions this block, 17,345 positions/s
+[rl-experiment 18:11:30]   ... 8/768 games done, 13,630,077 positions this block, 17,387 positions/s
+[rl-experiment 18:12:30]   ... 30/768 games done, 14,712,861 positions this block, 17,433 positions/s
+[rl-experiment 18:13:30]   ... 108/768 games done, 15,826,898 positions this block, 17,504 positions/s
+[rl-experiment 18:14:31]   ... 267/768 games done, 16,950,502 positions this block, 17,576 positions/s
+[rl-experiment 18:15:31]   ... 467/768 games done, 18,051,616 positions this block, 17,618 positions/s
+[rl-experiment 18:16:31]   ... 689/768 games done, 19,039,961 positions this block, 17,552 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmplw0owudm/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmplw0owudm/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.13MB, 51.7kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.13MB, 51.7kB/s  [A
+
+  ...n/T/tmplw0owudm/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmplw0owudm/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmplw0owudm/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmplw0owudm/shard.npz:  50%|█████     | 1.57MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  50%|█████     | 1.57MB / 3.13MB,  152kB/s  
+New Data Upload               :  50%|█████     | 1.57MB / 3.13MB,  152kB/s  [A
+
+  ...n/T/tmplw0owudm/shard.npz:  84%|████████▍ | 2.62MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  84%|████████▍ | 2.62MB / 3.13MB,  252kB/s  
+New Data Upload               :  84%|████████▍ | 2.62MB / 3.13MB,  252kB/s  [A
+
+  ...n/T/tmplw0owudm/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.13MB / 3.13MB,  299kB/s  
+New Data Upload               : 100%|█████████▉| 3.13MB / 3.13MB,  299kB/s  [A
+
+  ...n/T/tmplw0owudm/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmplw0owudm/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmplw0owudm/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  290kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  290kB/s  [A
+
+  ...n/T/tmplw0owudm/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  287kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  287kB/s  
+  ...n/T/tmplw0owudm/shard.npz: 100%|██████████| 3.13MB / 3.13MB            
+[rl-experiment 18:17:11] block 0: 768 games, 41004 positions, 17,175 evals/s, 41.1 games/min, v1; total 768 games in 18.8 min
+/Users/remi/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 21 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

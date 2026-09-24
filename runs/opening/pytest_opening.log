@@ -1,0 +1,39 @@
+.....F
+=================================== FAILURES ===================================
+_____________ test_rotation_is_an_involution_and_maps_legal_moves ______________
+
+    def test_rotation_is_an_involution_and_maps_legal_moves() -> None:
+        from ludometer.opening.symmetry import action_map, rotate
+    
+        amap = action_map()
+        assert sorted(amap.tolist()) == list(range(ACTION_SPACE))
+        assert np.array_equal(amap[amap], np.arange(ACTION_SPACE))  # an involution on actions
+        for a in range(ACTION_SPACE):
+            s, c, d = decode_action(a)
+            s2, c2, d2 = decode_action(int(amap[a]))
+            assert s2 == s and c2 == (-c) % 5 and (d2 == d if d == 5 else d2 == 4 - d)
+        rng = np.random.default_rng(2)
+        checked = 0
+        for seed in range(20):
+            state = AzulState.new_game(seed=seed)
+            for _ in range(int(rng.integers(0, 12))):
+                if state.is_terminal:
+                    break
+                state.apply(int(rng.choice(state.legal_actions())))
+            rot = rotate(state)
+            if rot is None:
+                continue
+            back = rotate(rot)
+            assert back is not None and np.array_equal(back.encode(), state.encode())
+>           assert sorted(amap[state.legal_actions()].tolist()) == sorted(rot.legal_actions())
+E           assert [150, 151, 15...157, 161, ...] == [150, 151, 15...157, 161, ...]
+E             
+E             At index 8 diff: 173 != 171
+E             Right contains one more item: 173
+E             Use -v to get more diff
+
+tests/test_opening.py:193: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_opening.py::test_rotation_is_an_involution_and_maps_legal_moves
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 5 passed in 1.97s

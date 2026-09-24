@@ -1,0 +1,23 @@
+[symmetry] 86,613 positions; empty boards 3,795, empty walls 44,208
+
+porcelain: 6,268 of 86,613 positions admit the transform
+                                           slice      n      KL   medKL     TV  top1 chg  draft KL  draft top1 chg   |dV|   p(top1) before/after
+                   empty boards (exact symmetry)  3,795   7.274   7.411  0.964     99.5%     2.968           76.2%  0.028 0.63 / 0.01
+       empty walls, some pattern lines (round 1)  2,312   5.099   4.969  0.907     98.9%     2.450           80.8%  0.378 0.59 / 0.01
+   round 2 (walls in play, transform admissible)    161   2.861   2.534  0.736     92.5%     1.065           67.7%  0.386 0.48 / 0.06
+                                  all admissible  6,268   6.358   6.425  0.937     99.1%     2.728           77.6%  0.167 0.61 / 0.01
+            SEARCH empty boards (exact symmetry)  1,000  17.529  19.946  0.944     93.4%     9.252           75.7%  0.091 0.75 / 0.05
+SEARCH empty walls, some pattern lines (round 1)  1,000   9.510   6.215  0.917     97.6%     4.801           81.0%  0.314 0.63 / 0.02
+SEARCH round 2 (walls in play, transform admissible)    161   6.516   4.296  0.786     87.0%     2.705           68.3%  0.413 0.57 / 0.10
+
+lapis: 6,268 of 86,613 positions admit the transform
+                                           slice      n      KL   medKL     TV  top1 chg  draft KL  draft top1 chg   |dV|   p(top1) before/after
+                   empty boards (exact symmetry)  3,795   5.059   5.309  0.782     81.2%     3.779           79.4%  0.040 0.63 / 0.18
+       empty walls, some pattern lines (round 1)  2,312   2.989   2.683  0.730     88.5%     1.633           81.5%  0.275 0.48 / 0.10
+   round 2 (walls in play, transform admissible)    161   2.921   2.185  0.682     84.5%     1.416           72.7%  0.385 0.52 / 0.15
+                                  all admissible  6,268   4.241   3.882  0.760     84.0%     2.927           80.0%  0.135 0.57 / 0.15
+            SEARCH empty boards (exact symmetry)  1,000  13.007  18.772  0.797     81.7%    10.989           79.4%  0.098 0.73 / 0.18
+SEARCH empty walls, some pattern lines (round 1)  1,000   6.281   4.583  0.794     88.8%     3.438           80.4%  0.298 0.62 / 0.10
+SEARCH round 2 (walls in play, transform admissible)    161   6.761   3.888  0.746     85.7%     3.605           75.2%  0.431 0.62 / 0.13
+
+wrote data/cloud/opening/symmetry.json

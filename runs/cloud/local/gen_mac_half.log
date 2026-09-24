@@ -1,0 +1,410 @@
+[rl-experiment 18:18:17] block 64 raised to 768 (6 x 128)
+[rl-experiment 18:18:17] run rlx_teacher tag mach-1818: 6 drivers x 128 games, sims 1024, shards -> dataset:RemiFabre/rl-experiment-shards, weights <- model:RemiFabre/rl-experiment-weights
+[rl-experiment 18:18:20] weights v1 loaded; playing
+[rl-experiment 18:19:20]   ... 0/768 games done, 711,040 positions this block, 11,807 positions/s
+[rl-experiment 18:20:20]   ... 0/768 games done, 1,024,896 positions this block, 8,518 positions/s
+[rl-experiment 18:21:20]   ... 0/768 games done, 1,481,344 positions this block, 8,209 positions/s
+[rl-experiment 18:22:21]   ... 0/768 games done, 2,938,752 positions this block, 12,210 positions/s
+[rl-experiment 18:23:21]   ... 0/768 games done, 4,413,696 positions this block, 14,678 positions/s
+[rl-experiment 18:24:21]   ... 0/768 games done, 5,898,880 positions this block, 16,343 positions/s
+[rl-experiment 18:25:21]   ... 0/768 games done, 7,377,408 positions this block, 17,525 positions/s
+[rl-experiment 18:26:21]   ... 0/768 games done, 8,854,016 positions this block, 18,387 positions/s
+[rl-experiment 18:27:22]   ... 0/768 games done, 10,346,240 positions this block, 19,094 positions/s
+[rl-experiment 18:28:22]   ... 0/768 games done, 11,841,152 positions this block, 19,658 positions/s
+[rl-experiment 18:29:22]   ... 2/768 games done, 13,348,057 positions this block, 20,148 positions/s
+[rl-experiment 18:30:22]   ... 27/768 games done, 14,827,209 positions this block, 20,519 positions/s
+[rl-experiment 18:31:23]   ... 147/768 games done, 16,276,560 positions this block, 20,793 positions/s
+[rl-experiment 18:32:23]   ... 371/768 games done, 17,653,493 positions this block, 20,940 positions/s
+[rl-experiment 18:33:23]   ... 614/768 games done, 18,907,201 positions this block, 20,937 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.12MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.12MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.12MB, 51.8kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.12MB, 51.8kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.12MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.12MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  34%|███▎      | 1.05MB / 3.12MB            [A[AProcessing Files (0 / 1)      :  34%|███▎      | 1.05MB / 3.12MB,  101kB/s  
+New Data Upload               :  34%|███▎      | 1.05MB / 3.12MB,  101kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  50%|█████     | 1.57MB / 3.12MB            [A[AProcessing Files (0 / 1)      :  50%|█████     | 1.57MB / 3.12MB,  151kB/s  
+New Data Upload               :  50%|█████     | 1.57MB / 3.12MB,  151kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.12MB / 3.12MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.12MB / 3.12MB,  300kB/s  
+New Data Upload               : 100%|█████████▉| 3.12MB / 3.12MB,  300kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.12MB / 3.12MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.12MB / 3.12MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.12MB / 3.12MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.12MB / 3.12MB,  291kB/s  
+New Data Upload               : 100%|██████████| 3.12MB / 3.12MB,  291kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.12MB / 3.12MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.12MB / 3.12MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.12MB / 3.12MB,  287kB/s  
+New Data Upload               : 100%|██████████| 3.12MB / 3.12MB,  287kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.12MB / 3.12MB            
+[rl-experiment 18:34:24] block 0: 768 games, 40929 positions, 20,162 evals/s, 47.9 games/min, v1; total 768 games in 16.1 min
+[rl-experiment 18:35:25]   ... 0/768 games done, 1,540,097 positions this block, 25,401 positions/s
+[rl-experiment 18:36:26]   ... 0/768 games done, 3,045,633 positions this block, 25,141 positions/s
+[rl-experiment 18:37:26]   ... 0/768 games done, 4,528,513 positions this block, 24,966 positions/s
+[rl-experiment 18:38:26]   ... 0/768 games done, 6,020,225 positions this block, 24,932 positions/s
+[rl-experiment 18:39:26]   ... 0/768 games done, 7,478,145 positions this block, 24,798 positions/s
+[rl-experiment 18:40:26]   ... 0/768 games done, 8,949,377 positions this block, 24,740 positions/s
+[rl-experiment 18:41:27]   ... 0/768 games done, 10,431,873 positions this block, 24,693 positions/s
+[rl-experiment 18:42:28]   ... 0/768 games done, 11,908,992 positions this block, 24,639 positions/s
+[rl-experiment 18:43:29]   ... 6/768 games done, 13,401,456 positions this block, 24,639 positions/s
+[rl-experiment 18:44:29]   ... 36/768 games done, 14,890,810 positions this block, 24,652 positions/s
+[rl-experiment 18:45:29]   ... 140/768 games done, 16,348,822 positions this block, 24,620 positions/s
+[rl-experiment 18:46:29]   ... 360/768 games done, 17,772,559 positions this block, 24,544 positions/s
+[rl-experiment 18:47:29]   ... 625/768 games done, 19,048,755 positions this block, 24,290 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.14MB, 51.8kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.14MB, 51.8kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.14MB            [A[AProcessing Files (0 / 1)      :  33%|███▎      | 1.05MB / 3.14MB,  101kB/s  
+New Data Upload               :  33%|███▎      | 1.05MB / 3.14MB,  101kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  84%|████████▎ | 2.62MB / 3.14MB            [A[AProcessing Files (0 / 1)      :  84%|████████▎ | 2.62MB / 3.14MB,  252kB/s  
+New Data Upload               :  84%|████████▎ | 2.62MB / 3.14MB,  252kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.14MB / 3.14MB,  300kB/s  
+New Data Upload               : 100%|█████████▉| 3.14MB / 3.14MB,  300kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.14MB / 3.14MB,  290kB/s  
+New Data Upload               : 100%|██████████| 3.14MB / 3.14MB,  290kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.14MB / 3.14MB,  285kB/s  
+New Data Upload               : 100%|██████████| 3.14MB / 3.14MB,  285kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            
+[rl-experiment 18:48:14] block 1: 768 games, 41125 positions, 23,590 evals/s, 55.7 games/min, v1; total 1536 games in 29.9 min
+[rl-experiment 18:49:15]   ... 0/768 games done, 1,518,898 positions this block, 25,260 positions/s
+[rl-experiment 18:50:16]   ... 0/768 games done, 3,034,546 positions this block, 25,096 positions/s
+[rl-experiment 18:51:16]   ... 0/768 games done, 4,515,122 positions this block, 24,870 positions/s
+[rl-experiment 18:52:16]   ... 0/768 games done, 5,994,930 positions this block, 24,806 positions/s
+[rl-experiment 18:53:16]   ... 0/768 games done, 7,466,930 positions this block, 24,750 positions/s
+[rl-experiment 18:54:17]   ... 0/768 games done, 8,941,874 positions this block, 24,682 positions/s
+[rl-experiment 18:55:17]   ... 0/768 games done, 10,435,634 positions this block, 24,678 positions/s
+[rl-experiment 18:56:18]   ... 0/768 games done, 11,929,009 positions this block, 24,677 positions/s
+[rl-experiment 18:57:18]   ... 5/768 games done, 13,411,677 positions this block, 24,676 positions/s
+[rl-experiment 18:58:18]   ... 27/768 games done, 14,886,879 positions this block, 24,658 positions/s
+[rl-experiment 18:59:19]   ... 134/768 games done, 16,355,301 positions this block, 24,628 positions/s
+[rl-experiment 19:00:19]   ... 362/768 games done, 17,783,528 positions this block, 24,553 positions/s
+[rl-experiment 19:01:19]   ... 618/768 games done, 19,074,580 positions this block, 24,314 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.14MB, 51.7kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.14MB, 51.7kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.14MB            [A[AProcessing Files (0 / 1)      :  33%|███▎      | 1.05MB / 3.14MB,  101kB/s  
+New Data Upload               :  33%|███▎      | 1.05MB / 3.14MB,  101kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  67%|██████▋   | 2.10MB / 3.14MB            [A[AProcessing Files (0 / 1)      :  67%|██████▋   | 2.10MB / 3.14MB,  201kB/s  
+New Data Upload               :  67%|██████▋   | 2.10MB / 3.14MB,  201kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.14MB / 3.14MB,  300kB/s  
+New Data Upload               : 100%|█████████▉| 3.14MB / 3.14MB,  300kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.14MB / 3.14MB,  290kB/s  
+New Data Upload               : 100%|██████████| 3.14MB / 3.14MB,  290kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.14MB / 3.14MB,  284kB/s  
+New Data Upload               : 100%|██████████| 3.14MB / 3.14MB,  284kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            
+[rl-experiment 19:02:22] block 2: 768 games, 41091 positions, 23,216 evals/s, 54.7 games/min, v1; total 2304 games in 44.0 min
+[rl-experiment 19:03:22]   ... 0/768 games done, 1,530,776 positions this block, 25,333 positions/s
+[rl-experiment 19:04:22]   ... 0/768 games done, 3,038,616 positions this block, 25,209 positions/s
+[rl-experiment 19:05:23]   ... 0/768 games done, 4,519,960 positions this block, 24,928 positions/s
+[rl-experiment 19:06:24]   ... 0/768 games done, 6,007,192 positions this block, 24,817 positions/s
+[rl-experiment 19:07:24]   ... 0/768 games done, 7,485,336 positions this block, 24,771 positions/s
+[rl-experiment 19:08:24]   ... 0/768 games done, 8,949,528 positions this block, 24,702 positions/s
+[rl-experiment 19:09:24]   ... 0/768 games done, 10,412,184 positions this block, 24,634 positions/s
+[rl-experiment 19:10:25]   ... 0/768 games done, 11,891,607 positions this block, 24,633 positions/s
+[rl-experiment 19:11:25]   ... 4/768 games done, 13,375,892 positions this block, 24,617 positions/s
+[rl-experiment 19:12:26]   ... 37/768 games done, 14,854,439 positions this block, 24,604 positions/s
+[rl-experiment 19:13:26]   ... 127/768 games done, 16,315,782 positions this block, 24,575 positions/s
+[rl-experiment 19:14:26]   ... 364/768 games done, 17,741,392 positions this block, 24,499 positions/s
+[rl-experiment 19:15:26]   ... 627/768 games done, 19,011,365 positions this block, 24,239 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  525kB / 3.13MB, 51.8kB/s  
+New Data Upload               :  17%|█▋        |  525kB / 3.13MB, 51.8kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  34%|███▎      | 1.05MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  34%|███▎      | 1.05MB / 3.13MB,  101kB/s  
+New Data Upload               :  34%|███▎      | 1.05MB / 3.13MB,  101kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  50%|█████     | 1.57MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  50%|█████     | 1.57MB / 3.13MB,  151kB/s  
+New Data Upload               :  50%|█████     | 1.57MB / 3.13MB,  151kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.13MB / 3.13MB,  301kB/s  
+New Data Upload               : 100%|█████████▉| 3.13MB / 3.13MB,  301kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  292kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  292kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  289kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  289kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            
+[rl-experiment 19:16:09] block 3: 768 games, 41052 positions, 23,590 evals/s, 55.9 games/min, v1; total 3072 games in 57.8 min
+[rl-experiment 19:17:10]   ... 0/768 games done, 1,528,557 positions this block, 25,276 positions/s
+[rl-experiment 19:18:10]   ... 0/768 games done, 3,031,917 positions this block, 25,117 positions/s
+[rl-experiment 19:19:11]   ... 0/768 games done, 4,514,029 positions this block, 24,881 positions/s
+[rl-experiment 19:20:11]   ... 0/768 games done, 6,003,437 positions this block, 24,858 positions/s
+[rl-experiment 19:21:12]   ... 0/768 games done, 7,401,069 positions this block, 24,528 positions/s
+[rl-experiment 19:22:12]   ... 0/768 games done, 8,814,189 positions this block, 24,323 positions/s
+[rl-experiment 19:23:12]   ... 0/768 games done, 10,229,229 positions this block, 24,218 positions/s
+[rl-experiment 19:24:13]   ... 0/768 games done, 11,577,836 positions this block, 23,979 positions/s
+[rl-experiment 19:25:13]   ... 0/768 games done, 12,867,432 positions this block, 23,689 positions/s
+[rl-experiment 19:26:13]   ... 15/768 games done, 14,197,688 positions this block, 23,533 positions/s
+[rl-experiment 19:27:13]   ... 66/768 games done, 15,515,426 positions this block, 23,389 positions/s
+[rl-experiment 19:28:13]   ... 192/768 games done, 16,807,800 positions this block, 23,234 positions/s
+[rl-experiment 19:29:13]   ... 422/768 games done, 18,024,441 positions this block, 23,001 positions/s
+[rl-experiment 19:30:14]   ... 635/768 games done, 19,010,637 positions this block, 22,529 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.14MB, 51.8kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.14MB, 51.8kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.14MB            [A[AProcessing Files (0 / 1)      :  33%|███▎      | 1.05MB / 3.14MB,  101kB/s  
+New Data Upload               :  33%|███▎      | 1.05MB / 3.14MB,  101kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.14MB / 3.14MB,  304kB/s  
+New Data Upload               : 100%|█████████▉| 3.14MB / 3.14MB,  304kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.14MB / 3.14MB,  295kB/s  
+New Data Upload               : 100%|██████████| 3.14MB / 3.14MB,  295kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.14MB / 3.14MB,  290kB/s  
+New Data Upload               : 100%|██████████| 3.14MB / 3.14MB,  290kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.14MB / 3.14MB            
+[rl-experiment 19:31:15] block 4: 768 games, 41204 positions, 21,523 evals/s, 51.1 games/min, v1; total 3840 games in 72.9 min
+[rl-experiment 19:32:16]   ... 0/768 games done, 1,380,303 positions this block, 22,832 positions/s
+[rl-experiment 19:33:16]   ... 0/768 games done, 2,361,039 positions this block, 19,515 positions/s
+[rl-experiment 19:34:16]   ... 0/768 games done, 3,009,999 positions this block, 16,630 positions/s
+[rl-experiment 19:35:16]   ... 0/768 games done, 3,683,663 positions this block, 15,279 positions/s
+[rl-experiment 19:36:17]   ... 0/768 games done, 4,303,823 positions this block, 14,285 positions/s
+[rl-experiment 19:37:17]   ... 0/768 games done, 4,948,431 positions this block, 13,696 positions/s
+[rl-experiment 19:38:17]   ... 0/768 games done, 5,599,567 positions this block, 13,289 positions/s
+[rl-experiment 19:39:17]   ... 0/768 games done, 6,269,903 positions this block, 13,013 positions/s
+[rl-experiment 19:40:18]   ... 0/768 games done, 6,904,143 positions this block, 12,730 positions/s
+[rl-experiment 19:41:18]   ... 0/768 games done, 7,557,327 positions this block, 12,546 positions/s
+[rl-experiment 19:42:18]   ... 0/768 games done, 8,189,647 positions this block, 12,358 positions/s
+[rl-experiment 19:43:18]   ... 0/768 games done, 8,836,815 positions this block, 12,220 positions/s
+[rl-experiment 19:44:19]   ... 0/768 games done, 9,484,367 positions this block, 12,106 positions/s
+[rl-experiment 19:45:19]   ... 0/768 games done, 10,159,567 positions this block, 12,040 positions/s
+[rl-experiment 19:46:19]   ... 0/768 games done, 11,088,463 positions this block, 12,266 positions/s
+[rl-experiment 19:47:20]   ... 1/768 games done, 12,468,290 positions this block, 12,929 positions/s
+[rl-experiment 19:48:20]   ... 11/768 games done, 13,888,490 positions this block, 13,556 positions/s
+[rl-experiment 19:49:20]   ... 59/768 games done, 15,266,794 positions this block, 14,075 positions/s
+[rl-experiment 19:50:20]   ... 187/768 games done, 16,622,650 positions this block, 14,520 positions/s
+[rl-experiment 19:51:20]   ... 366/768 games done, 17,834,744 positions this block, 14,802 positions/s
+[rl-experiment 19:52:20]   ... 561/768 games done, 18,792,529 positions this block, 14,857 positions/s
+[rl-experiment 19:53:20]   ... 731/768 games done, 19,377,283 positions this block, 14,623 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.13MB, 51.8kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.13MB, 51.8kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  34%|███▎      | 1.05MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  34%|███▎      | 1.05MB / 3.13MB,  101kB/s  
+New Data Upload               :  34%|███▎      | 1.05MB / 3.13MB,  101kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  50%|█████     | 1.57MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  50%|█████     | 1.57MB / 3.13MB,  151kB/s  
+New Data Upload               :  50%|█████     | 1.57MB / 3.13MB,  151kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.13MB / 3.13MB,  301kB/s  
+New Data Upload               : 100%|█████████▉| 3.13MB / 3.13MB,  301kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  295kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  295kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  291kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  291kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            
+[rl-experiment 19:54:17] block 5: 768 games, 41009 positions, 14,133 evals/s, 33.4 games/min, v1; total 4608 games in 96.0 min
+[rl-experiment 19:55:18]   ... 0/768 games done, 1,270,784 positions this block, 21,025 positions/s
+[rl-experiment 19:56:18]   ... 0/768 games done, 2,524,672 positions this block, 20,902 positions/s
+[rl-experiment 19:57:18]   ... 0/768 games done, 3,771,776 positions this block, 20,859 positions/s
+[rl-experiment 19:58:19]   ... 0/768 games done, 4,982,912 positions this block, 20,671 positions/s
+[rl-experiment 19:59:19]   ... 0/768 games done, 6,219,008 positions this block, 20,645 positions/s
+[rl-experiment 20:00:19]   ... 0/768 games done, 7,439,616 positions this block, 20,594 positions/s
+[rl-experiment 20:01:19]   ... 0/768 games done, 8,666,880 positions this block, 20,567 positions/s
+[rl-experiment 20:02:19]   ... 0/768 games done, 9,895,808 positions this block, 20,553 positions/s
+[rl-experiment 20:03:19]   ... 0/768 games done, 11,121,664 positions this block, 20,535 positions/s
+[rl-experiment 20:04:19]   ... 0/768 games done, 12,361,854 positions this block, 20,544 positions/s
+[rl-experiment 20:05:19]   ... 2/768 games done, 13,598,537 positions this block, 20,548 positions/s
+[rl-experiment 20:06:19]   ... 27/768 games done, 14,821,080 positions this block, 20,533 positions/s
+[rl-experiment 20:07:19]   ... 126/768 games done, 16,010,048 positions this block, 20,476 positions/s
+[rl-experiment 20:08:19]   ... 283/768 games done, 17,163,301 positions this block, 20,384 positions/s
+[rl-experiment 20:09:20]   ... 476/768 games done, 18,226,104 positions this block, 20,206 positions/s
+[rl-experiment 20:10:20]   ... 653/768 games done, 19,021,558 positions this block, 19,768 positions/s
+[rl-experiment 20:11:20]   ... 762/768 games done, 19,359,265 positions this block, 18,924 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  525kB / 3.13MB, 51.6kB/s  
+New Data Upload               :  17%|█▋        |  525kB / 3.13MB, 51.6kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  525kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  33%|███▎      | 1.05MB / 3.13MB,  102kB/s  
+New Data Upload               :  33%|███▎      | 1.05MB / 3.13MB,  102kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  33%|███▎      | 1.05MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  67%|██████▋   | 2.10MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  67%|██████▋   | 2.10MB / 3.13MB,  202kB/s  
+New Data Upload               :  67%|██████▋   | 2.10MB / 3.13MB,  202kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.13MB / 3.13MB,  300kB/s  
+New Data Upload               : 100%|█████████▉| 3.13MB / 3.13MB,  300kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  291kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  291kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  284kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  284kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            
+[rl-experiment 20:11:45] block 6: 768 games, 41087 positions, 18,556 evals/s, 44.1 games/min, v1; total 5376 games in 113.4 min
+[rl-experiment 20:12:46]   ... 0/768 games done, 1,281,287 positions this block, 21,142 positions/s
+[rl-experiment 20:13:46]   ... 0/768 games done, 2,544,007 positions this block, 21,047 positions/s
+[rl-experiment 20:14:46]   ... 0/768 games done, 3,792,775 positions this block, 20,964 positions/s
+[rl-experiment 20:15:46]   ... 0/768 games done, 5,021,959 positions this block, 20,825 positions/s
+[rl-experiment 20:16:47]   ... 0/768 games done, 6,235,015 positions this block, 20,685 positions/s
+[rl-experiment 20:17:47]   ... 0/768 games done, 7,468,167 positions this block, 20,663 positions/s
+[rl-experiment 20:18:47]   ... 0/768 games done, 8,723,719 positions this block, 20,697 positions/s
+[rl-experiment 20:19:47]   ... 0/768 games done, 9,579,399 positions this block, 19,879 positions/s
+[rl-experiment 20:20:47]   ... 0/768 games done, 10,189,831 positions this block, 18,804 positions/s
+[rl-experiment 20:21:47]   ... 0/768 games done, 10,791,815 positions this block, 17,925 positions/s
+[rl-experiment 20:22:48]   ... 0/768 games done, 11,424,007 positions this block, 17,249 positions/s
+[rl-experiment 20:23:48]   ... 0/768 games done, 12,040,967 positions this block, 16,663 positions/s
+[rl-experiment 20:24:48]   ... 0/768 games done, 12,675,207 positions this block, 16,195 positions/s
+[rl-experiment 20:25:48]   ... 2/768 games done, 13,303,743 positions this block, 15,783 positions/s
+[rl-experiment 20:26:48]   ... 5/768 games done, 13,927,037 positions this block, 15,420 positions/s
+[rl-experiment 20:27:49]   ... 21/768 games done, 14,555,272 positions this block, 15,103 positions/s
+[rl-experiment 20:28:49]   ... 42/768 games done, 15,166,519 positions this block, 14,810 positions/s
+[rl-experiment 20:29:49]   ... 87/768 games done, 15,772,830 positions this block, 14,549 positions/s
+[rl-experiment 20:30:49]   ... 138/768 games done, 16,358,142 positions this block, 14,296 positions/s
+[rl-experiment 20:31:50]   ... 207/768 games done, 16,915,075 positions this block, 14,044 positions/s
+[rl-experiment 20:32:50]   ... 295/768 games done, 17,447,385 positions this block, 13,798 positions/s
+[rl-experiment 20:33:50]   ... 428/768 games done, 18,111,296 positions this block, 13,673 positions/s
+[rl-experiment 20:34:50]   ... 669/768 games done, 19,077,257 positions this block, 13,774 positions/s
+[rl-experiment 20:35:51]   ... 767/768 games done, 19,412,882 positions this block, 13,431 positions/s
+Processing Files (0 / 0)      : |          |  0.00B /  0.00B            
+New Data Upload               : |          |  0.00B /  0.00B            [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[AProcessing Files (0 / 1)      :  17%|█▋        |  524kB / 3.13MB, 51.6kB/s  
+New Data Upload               :  17%|█▋        |  524kB / 3.13MB, 51.6kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  17%|█▋        |  524kB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  34%|███▎      | 1.05MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  34%|███▎      | 1.05MB / 3.13MB,  102kB/s  
+New Data Upload               :  34%|███▎      | 1.05MB / 3.13MB,  102kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  50%|█████     | 1.57MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  50%|█████     | 1.57MB / 3.13MB,  152kB/s  
+New Data Upload               :  50%|█████     | 1.57MB / 3.13MB,  152kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz:  84%|████████▍ | 2.62MB / 3.13MB            [A[AProcessing Files (0 / 1)      :  84%|████████▍ | 2.62MB / 3.13MB,  252kB/s  
+New Data Upload               :  84%|████████▍ | 2.62MB / 3.13MB,  252kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[AProcessing Files (0 / 1)      : 100%|█████████▉| 3.13MB / 3.13MB,  298kB/s  
+New Data Upload               : 100%|█████████▉| 3.13MB / 3.13MB,  298kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|█████████▉| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  292kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  292kB/s  [A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[A
+
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            [A[AProcessing Files (1 / 1)      : 100%|██████████| 3.13MB / 3.13MB,  289kB/s  
+New Data Upload               : 100%|██████████| 3.13MB / 3.13MB,  289kB/s  
+  ...n/T/tmpglyk8_wj/shard.npz: 100%|██████████| 3.13MB / 3.13MB            
+[rl-experiment 20:35:56] block 7: 768 games, 40979 positions, 13,408 evals/s, 31.8 games/min, v1; total 6144 games in 137.6 min
+[rl-experiment 20:36:57]   ... 0/768 games done, 1,458,830 positions this block, 24,134 positions/s
+[rl-experiment 20:37:57]   ... 0/768 games done, 2,893,070 positions this block, 23,945 positions/s
+/Users/remi/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 21 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

@@ -13,3 +13,10 @@ media/
 
 # Rust build output
 rust/target/
+
+# large local data: BGA raw replays (private HF mirror RemiFabre/azul-elite-replays),
+# cloud self-play corpora, Faïence game logs (HF dataset faience-games), run buffers
+data/human/
+data/cloud/
+data/faience/
+runs/**/*.npz

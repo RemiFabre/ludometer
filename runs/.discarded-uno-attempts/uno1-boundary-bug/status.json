@@ -1,0 +1,11 @@
+{
+  "run": "uno1",
+  "state": "running",
+  "started": "2026-08-18T18:57:04Z",
+  "updated": "2026-08-18T19:13:26Z",
+  "ended": null,
+  "error": null,
+  "games": 8192,
+  "steps": 1509,
+  "note": "iter 9: self-play 971/1024 games"
+}

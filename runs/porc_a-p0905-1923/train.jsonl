@@ -1,0 +1,3 @@
+{"phase": "pretrain", "t": 231.9, "games": 0, "steps": 0, "epoch": 1, "pretrain_steps": 4860, "loss": 2.3488, "loss_p": 1.8541, "loss_v": 0.3012, "loss_m": 0.1935, "loss_a": 0.0, "buffer": 1244269, "lr": 0.001}
+{"phase": "pretrain", "t": 389.7, "games": 0, "steps": 0, "epoch": 2, "pretrain_steps": 9720, "loss": 2.1403, "loss_p": 1.7017, "loss_v": 0.2592, "loss_m": 0.1794, "loss_a": 0.0, "buffer": 1244269, "lr": 0.001}
+{"phase": "pretrain", "t": 517.5, "games": 0, "steps": 0, "epoch": 3, "pretrain_steps": 14580, "loss": 2.0957, "loss_p": 1.6713, "loss_v": 0.2484, "loss_m": 0.176, "loss_a": 0.0, "buffer": 1244269, "lr": 0.001}

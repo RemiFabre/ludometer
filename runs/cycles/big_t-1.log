@@ -1,0 +1,8 @@
+[corpus] rlx_teacher: 251 had, 84 new, 335 on the hub
+[corpus] rlx_bga: 238 had, 0 new, 238 on the hub
+[corpus] wrote data/cloud/corpus1_full.npz: 4,000,000 positions from 154,211 games (3,882,347 with a search value, 4,000,000 policy targets)
+pretrain epoch 1/4: loss 2.1787 (p 1.7292 v 0.2659 m 0.1836) in 2591s
+pretrain epoch 2/4: loss 2.0197 (p 1.6207 v 0.2282 m 0.1708) in 5436s
+pretrain epoch 3/4: loss 1.9716 (p 1.5884 v 0.2163 m 0.1669) in 8106s
+pretrain epoch 4/4: loss 1.9390 (p 1.5672 v 0.2077 m 0.1641) in 10638s
+eval ckpt-000000: elo +2500.4 +/- 39.3 over 280 games in 2439s | random 1.00 greedy 1.00 heuristic 0.94 mcts:runs/run1/checkpoints/ckpt-024064.pt?sims=100 0.93 

@@ -1,0 +1,11 @@
+{
+  "run": "hp1",
+  "state": "done",
+  "started": "2026-08-20T19:37:13Z",
+  "updated": "2026-08-20T20:55:30Z",
+  "ended": "2026-08-20T20:55:29Z",
+  "error": null,
+  "games": 1536,
+  "steps": 481,
+  "note": "stopped (SIGTERM)"
+}

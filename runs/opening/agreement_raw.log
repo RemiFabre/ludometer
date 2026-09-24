@@ -1,0 +1,8 @@
+data/human/replay.npz: 114,885 policy rows (quartile spans: yes)
+       net    top1    top3     nll q0-top1 q1-top1 q2-top1 q3-top1
+    cobalt   0.408   0.688   2.153   0.358   0.394   0.401   0.487
+ porcelain   0.485   0.765   1.667   0.452   0.473   0.475   0.543
+     lapis   0.503   0.782   1.592   0.496   0.489   0.490   0.539
+ teacher7m   0.484   0.769   1.611   0.467   0.469   0.467   0.536
+      bigt   0.494   0.771   1.634   0.463   0.482   0.484   0.551
+wrote data/cloud/opening/agreement_raw_2026-09-06.json

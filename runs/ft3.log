@@ -1,0 +1,4 @@
+base runs/run4/checkpoints/ckpt-037888.pt on cpu; human rows 46,232 (24,262 policy), rehearsal rows 500,000; batch 64+192, lr 0.0001
+saved ft-001000: {'step': 1000, 'loss_p': 1.6077, 'loss_v': 0.6191, 'loss_m': 0.1869, 'loss_a': 0.0, 't': 182.7}
+saved ft-002000: {'step': 2000, 'loss_p': 1.588, 'loss_v': 0.5945, 'loss_m': 0.1736, 'loss_a': 0.0, 't': 330.7}
+saved ft-004000: {'step': 4000, 'loss_p': 1.5804, 'loss_v': 0.5796, 'loss_m': 0.1667, 'loss_a': 0.0, 't': 618.0}
