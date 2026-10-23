@@ -114,9 +114,9 @@ class Node {
     this.pending = false; // already queued for evaluation in the current batch
     this.nVisits = 0;
     this.terminalV0 = state.isTerminal ? state.outcome() || 0 : 0;
-    // The margin of a finished game is the real score gap, in player 0's frame,
-    // on the same scale the head is trained on (points).
-    this.terminalMargin0 = state.isTerminal ? state.scores[0] - state.scores[1] : 0;
+    // Normalize to the margin head's training scale, in player 0's frame.
+    this.terminalMargin0 = state.isTerminal
+      ? Math.tanh((state.scores[0] - state.scores[1]) / 20) : 0;
   }
 
   get isTerminal() {
